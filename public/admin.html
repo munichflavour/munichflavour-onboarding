@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>Munich Flavour – Admin</title>
+  <meta name="theme-color" content="#000000">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black">
+  <meta name="apple-mobile-web-app-title" content="MF Onboarding">
+  <link rel="manifest" href="/manifest.json">
+  <link rel="apple-touch-icon" href="/assets/logo.jpg">
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+  <header>
+    <img src="/assets/logo.jpg" alt="Munich Flavour" onerror="this.style.display='none'">
+    <div class="header-title">
+      <h1>Admin</h1>
+      <div class="header-sub">Munich Flavour Onboarding</div>
+    </div>
+    <button class="logout-btn" onclick="logout()">Abmelden</button>
+  </header>
+
+  <main>
+    <!-- Tabs -->
+    <div class="tabs">
+      <button class="tab-btn active" onclick="showTab('employees')" id="tab-employees">Mitarbeiter</button>
+      <button class="tab-btn" onclick="showTab('checklist')" id="tab-checklist">Checkliste</button>
+    </div>
+
+    <!-- ===== EMPLOYEES TAB ===== -->
+    <div id="view-employees">
+
+      <!-- Employee list -->
+      <div id="empListView">
+        <div class="card-header" style="margin-bottom:12px;">
+          <span class="section-title" style="margin:0;">Alle Mitarbeiter</span>
+          <button class="btn btn-primary btn-sm" onclick="openNewEmployeeModal()">+ Neu</button>
+        </div>
+        <div class="card" style="padding:0;overflow:hidden;" id="employeeListCard">
+          <div style="padding:40px;text-align:center;" id="empLoading">
+            <span class="spinner" style="border-color:rgba(0,0,0,0.2);border-top-color:#000;"></span>
+          </div>
+          <div id="employeeList"></div>
+        </div>
+      </div>
+
+      <!-- Employee detail -->
+      <div id="empDetailView" class="hidden">
+        <button class="back-btn" onclick="showEmployeeList()">← Zurück</button>
+        <div id="empDetailContent"></div>
+      </div>
+    </div>
+
+    <!-- ===== CHECKLIST TAB ===== -->
+    <div id="view-checklist" class="hidden">
+      <div class="card-header" style="margin-bottom:12px;">
+        <span class="section-title" style="margin:0;">Onboarding-Aufgaben</span>
+        <button class="btn btn-primary btn-sm" onclick="openItemModal()">+ Neu</button>
+      </div>
+      <div id="checklistEditorList"></div>
+      <p style="font-size:13px;color:#888;margin-top:8px;">Aufgaben per Drag &amp; Drop sortieren.</p>
+    </div>
+  </main>
+
+  <!-- New Employee Modal -->
+  <div id="newEmpModal" class="modal-overlay hidden">
+    <div class="modal">
+      <div class="modal-title">Neuer Mitarbeiter</div>
+      <div class="form-group">
+        <label for="newName">Vollständiger Name</label>
+        <input type="text" id="newName" autocomplete="off">
+      </div>
+      <div class="form-group">
+        <label for="newUsername">Benutzername</label>
+        <input type="text" id="newUsername" autocomplete="off" autocapitalize="none">
+      </div>
+      <div class="form-group">
+        <label for="newPassword">Passwort</label>
+        <input type="password" id="newPassword" autocomplete="new-password">
+      </div>
+      <div class="form-group">
+        <label for="newStartDate">Startdatum</label>
+        <input type="date" id="newStartDate">
+      </div>
+      <div id="newEmpError" class="alert alert-error hidden"></div>
+      <div class="modal-actions">
+        <button class="btn btn-secondary" style="flex:1" onclick="closeNewEmployeeModal()">Abbrechen</button>
+        <button class="btn btn-primary" style="flex:1" onclick="createEmployee()">Erstellen</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Checklist Item Modal -->
+  <div id="itemModal" class="modal-overlay hidden">
+    <div class="modal">
+      <div class="modal-title" id="itemModalTitle">Aufgabe hinzufügen</div>
+      <div class="form-group">
+        <label for="itemTitle">Titel</label>
+        <input type="text" id="itemTitle" autocomplete="off">
+      </div>
+      <div class="form-group">
+        <label for="itemDesc">Beschreibung (optional)</label>
+        <textarea id="itemDesc" rows="3"></textarea>
+      </div>
+      <div id="itemError" class="alert alert-error hidden"></div>
+      <div class="modal-actions">
+        <button class="btn btn-secondary" style="flex:1" onclick="closeItemModal()">Abbrechen</button>
+        <button class="btn btn-primary" style="flex:1" onclick="saveItem()">Speichern</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="/js/admin.js"></script>
+</body>
+</html>

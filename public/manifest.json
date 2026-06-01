@@ -1,0 +1,22 @@
+{
+  "name": "Munich Flavour Onboarding",
+  "short_name": "MF Onboarding",
+  "description": "Mitarbeiter-Onboarding für Munich Flavour",
+  "start_url": "/login.html",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#000000",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "/assets/logo.jpg",
+      "sizes": "192x192",
+      "type": "image/jpeg"
+    },
+    {
+      "src": "/assets/logo.jpg",
+      "sizes": "512x512",
+      "type": "image/jpeg"
+    }
+  ]
+}

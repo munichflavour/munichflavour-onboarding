@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>Munich Flavour Onboarding</title>
+  <meta name="theme-color" content="#000000">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black">
+  <meta name="apple-mobile-web-app-title" content="MF Onboarding">
+  <link rel="manifest" href="/manifest.json">
+  <link rel="apple-touch-icon" href="/assets/logo.jpg">
+  <link rel="stylesheet" href="/css/style.css">
+  <script src="https://cdn.jsdelivr.net/npm/signature_pad@4.1.7/dist/signature_pad.umd.min.js"></script>
+</head>
+<body>
+  <header>
+    <img src="/assets/logo.jpg" alt="Munich Flavour" onerror="this.style.display='none'">
+    <div class="header-title">
+      <h1>Mein Onboarding</h1>
+      <div class="header-sub" id="headerSub">Munich Flavour</div>
+    </div>
+    <button class="logout-btn" onclick="logout()">Abmelden</button>
+  </header>
+
+  <main>
+    <div id="loadingState" class="card" style="text-align:center;padding:40px;">
+      <span class="spinner" style="border-color:rgba(0,0,0,0.2);border-top-color:#000;"></span>
+    </div>
+
+    <div id="completionBanner" class="completion-banner hidden">
+      <h2>🎉 Onboarding abgeschlossen!</h2>
+      <p>Alle Aufgaben wurden erfolgreich abgehakt und gegengezeichnet.</p>
+      <button class="btn" style="background:#fff;color:#000;min-width:200px;" onclick="downloadPDF()">
+        PDF herunterladen
+      </button>
+    </div>
+
+    <div id="progressCard" class="card hidden">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+        <span style="font-weight:600;font-size:15px;">Fortschritt</span>
+        <span id="progressFraction" style="font-weight:700;font-size:15px;">0/0</span>
+      </div>
+      <div class="progress-bar-wrap">
+        <div class="progress-bar-fill" id="progressFill" style="width:0%"></div>
+      </div>
+    </div>
+
+    <div id="checklistContainer"></div>
+
+    <!-- Sign modal -->
+    <div id="signModal" class="modal-overlay hidden">
+      <div class="modal">
+        <div class="modal-title">Aufgabe gegenzeichnen</div>
+        <p style="font-size:14px;color:#666;margin-bottom:16px;" id="signItemTitle"></p>
+
+        <div class="form-group">
+          <label for="supervisorName">Name des Vorgesetzten</label>
+          <input type="text" id="supervisorName" placeholder="Vollständiger Name" autocomplete="off">
+        </div>
+
+        <div class="form-group">
+          <label>Unterschrift des Vorgesetzten</label>
+          <div class="signature-canvas-wrap">
+            <canvas id="sigCanvas"></canvas>
+            <span class="sig-hint" id="sigHint">Hier unterschreiben</span>
+          </div>
+          <div class="sig-actions">
+            <button class="btn btn-secondary btn-sm" onclick="clearSig()">Löschen</button>
+          </div>
+        </div>
+
+        <div id="signError" class="alert alert-error hidden"></div>
+
+        <div class="modal-actions">
+          <button class="btn btn-secondary" style="flex:1" onclick="closeSignModal()">Abbrechen</button>
+          <button class="btn btn-primary" style="flex:1" id="confirmSignBtn" onclick="confirmSign()">Bestätigen</button>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <script src="/js/employee.js"></script>
+</body>
+</html>
