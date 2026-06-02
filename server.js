@@ -3,7 +3,7 @@ const session = require('express-session');
 const SQLiteStore = require('connect-sqlite3')(session);
 const bcrypt = require('bcryptjs');
 const Database = require('better-sqlite3');
-const puppeteer = require('puppeteer');
+const PDFDocument = require('pdfkit');
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
@@ -186,7 +186,7 @@ app.post('/api/employee/checklist/:itemId/uncomplete', requireAuth, (req, res) =
 });
 
 // ===== EMPLOYEE: PDF =====
-app.get('/api/employee/report/pdf', requireAuth, async (req, res) => {
+app.get('/api/employee/report/pdf', requireAuth, (req, res) => {
   const user = db.prepare('SELECT * FROM users WHERE id = ?').get(req.session.userId);
   const items = db.prepare('SELECT * FROM checklist_items ORDER BY order_index ASC').all();
   const progress = db.prepare('SELECT * FROM checklist_progress WHERE user_id = ?').all(req.session.userId);
@@ -195,47 +195,91 @@ app.get('/api/employee/report/pdf', requireAuth, async (req, res) => {
   const allDone = items.every(item => progressMap[item.id]?.confirmed_at);
   if (!allDone) return res.status(400).json({ error: 'Nicht alle Aufgaben vom Admin bestätigt' });
 
-  const logoPath = path.join(__dirname, 'assets', 'logo.jpg');
-  let logoBase64 = '';
-  if (fs.existsSync(logoPath)) logoBase64 = 'data:image/jpeg;base64,' + fs.readFileSync(logoPath).toString('base64');
-
-  const rows = items.map(item => {
-    const p = progressMap[item.id];
-    const doneDate = p?.completed_at ? new Date(p.completed_at + 'Z').toLocaleString('de-DE') : '-';
-    const confirmDate = p?.confirmed_at ? new Date(p.confirmed_at + 'Z').toLocaleString('de-DE') : '-';
-    return `<tr><td>${item.title}</td><td>${doneDate}</td><td>${confirmDate}</td><td>${p?.confirmed_by || '-'}</td></tr>`;
-  }).join('');
-
-  const html = `<!DOCTYPE html><html lang="de"><head><meta charset="UTF-8"><style>
-    body{font-family:Arial,sans-serif;margin:40px;color:#000}
-    .header{text-align:center;margin-bottom:30px}
-    .header img{height:80px;margin-bottom:10px}
-    h1{font-size:22px;margin:8px 0}
-    .info{margin-bottom:24px;font-size:14px}
-    table{width:100%;border-collapse:collapse;font-size:13px}
-    th{background:#000;color:#fff;padding:8px;text-align:left}
-    td{padding:8px;border-bottom:1px solid #ccc;vertical-align:middle}
-    tr:nth-child(even) td{background:#f5f5f5}
-    .footer{margin-top:40px;text-align:center;font-size:12px;color:#666;border-top:1px solid #ccc;padding-top:12px}
-  </style></head><body>
-    <div class="header">${logoBase64 ? `<img src="${logoBase64}" alt="Logo">` : ''}<h1>Munich Flavour Onboarding Report</h1></div>
-    <div class="info"><strong>Mitarbeiter:</strong> ${user.full_name}<br><strong>Startdatum:</strong> ${user.start_date ? new Date(user.start_date).toLocaleDateString('de-DE') : '-'}<br><strong>Berichtsdatum:</strong> ${new Date().toLocaleDateString('de-DE')}</div>
-    <table><thead><tr><th>Aufgabe</th><th>Erledigt am</th><th>Bestätigt am</th><th>Bestätigt von</th></tr></thead><tbody>${rows}</tbody></table>
-    <div class="footer">Munich Flavour Onboarding Report</div>
-  </body></html>`;
-
   try {
-    const browser = await puppeteer.launch({ args: ['--no-sandbox', '--disable-setuid-sandbox'] });
-    const page = await browser.newPage();
-    await page.setContent(html, { waitUntil: 'networkidle0' });
-    const pdf = await page.pdf({ format: 'A4', margin: { top: '20px', bottom: '20px', left: '20px', right: '20px' } });
-    await browser.close();
+    const doc = new PDFDocument({ margin: 50, size: 'A4' });
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `attachment; filename="onboarding-${user.username}.pdf"`);
-    res.send(pdf);
+    doc.pipe(res);
+
+    // Logo
+    const logoPath = path.join(__dirname, 'assets', 'logo.jpg');
+    if (fs.existsSync(logoPath)) {
+      doc.image(logoPath, 50, 40, { width: 60 });
+    }
+
+    // Title
+    doc.fontSize(20).font('Helvetica-Bold')
+       .text('Munich Flavour Onboarding Report', 0, 50, { align: 'center' });
+
+    doc.moveDown(0.5);
+    doc.moveTo(50, doc.y).lineTo(545, doc.y).strokeColor('#000').stroke();
+    doc.moveDown(0.5);
+
+    // Info block
+    doc.fontSize(11).font('Helvetica');
+    const startDate = user.start_date ? new Date(user.start_date).toLocaleDateString('de-DE') : '-';
+    const reportDate = new Date().toLocaleDateString('de-DE');
+    doc.text(`Mitarbeiter: `, { continued: true }).font('Helvetica-Bold').text(user.full_name);
+    doc.font('Helvetica').text(`Startdatum: `, { continued: true }).font('Helvetica-Bold').text(startDate);
+    doc.font('Helvetica').text(`Berichtsdatum: `, { continued: true }).font('Helvetica-Bold').text(reportDate);
+    doc.moveDown(1);
+
+    // Table header
+    const colX = [50, 230, 350, 460];
+    const colW = [175, 115, 105, 85];
+    const rowH = 22;
+
+    const drawTableHeader = () => {
+      doc.rect(50, doc.y, 495, rowH).fill('#000');
+      const y = doc.y + 6;
+      doc.fillColor('#fff').fontSize(9).font('Helvetica-Bold');
+      ['Aufgabe', 'Erledigt am', 'Bestätigt am', 'Bestätigt von'].forEach((h, i) => {
+        doc.text(h, colX[i] + 4, y, { width: colW[i] - 8, lineBreak: false });
+      });
+      doc.moveDown(0).y += rowH;
+      doc.fillColor('#000');
+    };
+
+    drawTableHeader();
+
+    // Table rows
+    doc.font('Helvetica').fontSize(9);
+    items.forEach((item, idx) => {
+      const p = progressMap[item.id];
+      const doneDate = p?.completed_at ? new Date(p.completed_at + 'Z').toLocaleString('de-DE', { dateStyle: 'short', timeStyle: 'short' }) : '-';
+      const confirmDate = p?.confirmed_at ? new Date(p.confirmed_at + 'Z').toLocaleString('de-DE', { dateStyle: 'short', timeStyle: 'short' }) : '-';
+      const confirmedBy = p?.confirmed_by || '-';
+
+      const rowY = doc.y;
+      if (idx % 2 === 1) doc.rect(50, rowY, 495, rowH).fill('#f5f5f5');
+      doc.fillColor('#000');
+
+      const cellY = rowY + 6;
+      doc.text(item.title, colX[0] + 4, cellY, { width: colW[0] - 8, lineBreak: false });
+      doc.text(doneDate, colX[1] + 4, cellY, { width: colW[1] - 8, lineBreak: false });
+      doc.text(confirmDate, colX[2] + 4, cellY, { width: colW[2] - 8, lineBreak: false });
+      doc.text(confirmedBy, colX[3] + 4, cellY, { width: colW[3] - 8, lineBreak: false });
+
+      doc.moveTo(50, rowY + rowH).lineTo(545, rowY + rowH).strokeColor('#ddd').stroke();
+      doc.y = rowY + rowH;
+
+      // New page if needed
+      if (doc.y > 750) {
+        doc.addPage();
+        drawTableHeader();
+      }
+    });
+
+    doc.moveDown(2);
+    doc.moveTo(50, doc.y).lineTo(545, doc.y).strokeColor('#000').stroke();
+    doc.moveDown(0.5);
+    doc.fontSize(10).fillColor('#666').font('Helvetica')
+       .text('Munich Flavour Onboarding Report', { align: 'center' });
+
+    doc.end();
   } catch (err) {
     console.error('PDF error:', err);
-    res.status(500).json({ error: 'PDF-Erstellung fehlgeschlagen' });
+    if (!res.headersSent) res.status(500).json({ error: 'PDF-Erstellung fehlgeschlagen' });
   }
 });
 
