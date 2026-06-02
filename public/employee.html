@@ -12,6 +12,29 @@
   <link rel="apple-touch-icon" href="/assets/logo.jpg">
   <link rel="stylesheet" href="/css/style.css">
   <script src="https://cdn.jsdelivr.net/npm/signature_pad@4.1.7/dist/signature_pad.umd.min.js"></script>
+  <style>
+    .doc-row {
+      display: flex; align-items: center; gap: 10px;
+      padding: 12px 16px; border-bottom: 1px solid var(--gray-mid);
+    }
+    .doc-row:last-child { border-bottom: none; }
+    .doc-row-icon { font-size: 20px; flex-shrink: 0; }
+    .doc-row-name { flex: 1; font-size: 14px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .doc-row-date { font-size: 12px; color: var(--gray-dark); flex-shrink: 0; }
+    .folder-section { margin-bottom: 16px; }
+    .folder-label {
+      display: flex; align-items: center; gap: 8px;
+      font-weight: 700; font-size: 14px; padding: 10px 0 6px;
+      cursor: pointer; user-select: none;
+    }
+    .upload-zone-emp {
+      border: 2px dashed var(--gray-mid); border-radius: 8px;
+      padding: 20px; text-align: center; cursor: pointer;
+      transition: border-color 0.2s;
+    }
+    .upload-zone-emp:hover, .upload-zone-emp.dragover { border-color: var(--black); }
+    .upload-zone-emp p { color: var(--gray-dark); font-size: 14px; margin-top: 6px; }
+  </style>
 </head>
 <body>
   <header>
@@ -24,61 +47,93 @@
   </header>
 
   <main>
-    <div id="loadingState" class="card" style="text-align:center;padding:40px;">
-      <span class="spinner" style="border-color:rgba(0,0,0,0.2);border-top-color:#000;"></span>
+    <!-- Tabs -->
+    <div class="tabs">
+      <button class="tab-btn active" onclick="showTab('checklist')" id="tab-checklist">Checkliste</button>
+      <button class="tab-btn" onclick="showTab('documents')" id="tab-documents">Dokumente</button>
     </div>
 
-    <div id="completionBanner" class="completion-banner hidden">
-      <h2>🎉 Onboarding abgeschlossen!</h2>
-      <p>Alle Aufgaben wurden erfolgreich abgehakt und gegengezeichnet.</p>
-      <button class="btn" style="background:#fff;color:#000;min-width:200px;" onclick="downloadPDF()">
-        PDF herunterladen
-      </button>
-    </div>
-
-    <div id="progressCard" class="card hidden">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
-        <span style="font-weight:600;font-size:15px;">Fortschritt</span>
-        <span id="progressFraction" style="font-weight:700;font-size:15px;">0/0</span>
+    <!-- ===== CHECKLISTE TAB ===== -->
+    <div id="view-checklist">
+      <div id="loadingState" class="card" style="text-align:center;padding:40px;">
+        <span class="spinner" style="border-color:rgba(0,0,0,0.2);border-top-color:#000;"></span>
       </div>
-      <div class="progress-bar-wrap">
-        <div class="progress-bar-fill" id="progressFill" style="width:0%"></div>
+
+      <div id="completionBanner" class="completion-banner hidden">
+        <h2>🎉 Onboarding abgeschlossen!</h2>
+        <p>Alle Aufgaben wurden erfolgreich abgehakt und gegengezeichnet.</p>
+        <button class="btn" style="background:#fff;color:#000;min-width:200px;" onclick="downloadPDF(event)">
+          PDF herunterladen
+        </button>
       </div>
+
+      <div id="progressCard" class="card hidden">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+          <span style="font-weight:600;font-size:15px;">Fortschritt</span>
+          <span id="progressFraction" style="font-weight:700;font-size:15px;">0/0</span>
+        </div>
+        <div class="progress-bar-wrap">
+          <div class="progress-bar-fill" id="progressFill" style="width:0%"></div>
+        </div>
+      </div>
+
+      <div id="checklistContainer"></div>
     </div>
 
-    <div id="checklistContainer"></div>
-
-    <!-- Sign modal -->
-    <div id="signModal" class="modal-overlay hidden">
-      <div class="modal">
-        <div class="modal-title">Aufgabe gegenzeichnen</div>
-        <p style="font-size:14px;color:#666;margin-bottom:16px;" id="signItemTitle"></p>
-
-        <div class="form-group">
-          <label for="supervisorName">Name des Vorgesetzten</label>
-          <input type="text" id="supervisorName" placeholder="Vollständiger Name" autocomplete="off">
+    <!-- ===== DOKUMENTE TAB ===== -->
+    <div id="view-documents" class="hidden">
+      <!-- Admin-Dokumente -->
+      <div class="section-title">Bereitgestellte Dokumente</div>
+      <div id="adminDocsContainer" class="card" style="padding:0;overflow:hidden;">
+        <div style="padding:24px;text-align:center;">
+          <span class="spinner" style="border-color:rgba(0,0,0,0.2);border-top-color:#000;"></span>
         </div>
+      </div>
 
-        <div class="form-group">
-          <label>Unterschrift des Vorgesetzten</label>
-          <div class="signature-canvas-wrap">
-            <canvas id="sigCanvas"></canvas>
-            <span class="sig-hint" id="sigHint">Hier unterschreiben</span>
-          </div>
-          <div class="sig-actions">
-            <button class="btn btn-secondary btn-sm" onclick="clearSig()">Löschen</button>
-          </div>
+      <!-- Meine Uploads -->
+      <div class="section-title" style="margin-top:24px;">Meine Uploads</div>
+      <div class="card" style="margin-bottom:12px;">
+        <div class="upload-zone-emp" id="empUploadZone" onclick="document.getElementById('empFileInput').click()">
+          <div style="font-size:32px;">📤</div>
+          <p>Ausgefülltes Dokument hochladen</p>
+          <p id="empFileName" style="font-weight:600;color:#000;margin-top:4px;"></p>
         </div>
-
-        <div id="signError" class="alert alert-error hidden"></div>
-
-        <div class="modal-actions">
-          <button class="btn btn-secondary" style="flex:1" onclick="closeSignModal()">Abbrechen</button>
-          <button class="btn btn-primary" style="flex:1" id="confirmSignBtn" onclick="confirmSign()">Bestätigen</button>
-        </div>
+        <input type="file" id="empFileInput" style="display:none" onchange="onEmpFileSelected(this)">
+        <div id="empUploadError" class="alert alert-error hidden" style="margin-top:10px;"></div>
+        <button class="btn btn-primary btn-full" style="margin-top:12px;" id="empUploadBtn" onclick="uploadEmpFile()" disabled>Hochladen</button>
+      </div>
+      <div id="myUploadsContainer" class="card" style="padding:0;overflow:hidden;">
+        <div style="padding:16px;text-align:center;color:#888;font-size:14px;">Noch keine Uploads.</div>
       </div>
     </div>
   </main>
+
+  <!-- Sign modal -->
+  <div id="signModal" class="modal-overlay hidden">
+    <div class="modal">
+      <div class="modal-title">Aufgabe gegenzeichnen</div>
+      <p style="font-size:14px;color:#666;margin-bottom:16px;" id="signItemTitle"></p>
+      <div class="form-group">
+        <label for="supervisorName">Name des Vorgesetzten</label>
+        <input type="text" id="supervisorName" placeholder="Vollständiger Name" autocomplete="off">
+      </div>
+      <div class="form-group">
+        <label>Unterschrift des Vorgesetzten</label>
+        <div class="signature-canvas-wrap">
+          <canvas id="sigCanvas"></canvas>
+          <span class="sig-hint" id="sigHint">Hier unterschreiben</span>
+        </div>
+        <div class="sig-actions">
+          <button class="btn btn-secondary btn-sm" onclick="clearSig()">Löschen</button>
+        </div>
+      </div>
+      <div id="signError" class="alert alert-error hidden"></div>
+      <div class="modal-actions">
+        <button class="btn btn-secondary" style="flex:1" onclick="closeSignModal()">Abbrechen</button>
+        <button class="btn btn-primary" style="flex:1" id="confirmSignBtn" onclick="confirmSign()">Bestätigen</button>
+      </div>
+    </div>
+  </div>
 
   <script src="/js/employee.js"></script>
 </body>

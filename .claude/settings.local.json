@@ -5,7 +5,11 @@
       "Bash(find /Users/willy.giesecke -name \"node\" -type f 2>/dev/null | head -5; find /usr -name \"node\" -type f 2>/dev/null | head -3; ls ~/.nvm/versions/node/ 2>/dev/null | tail -3)",
       "Bash(ls ~/.nvm/versions/node/ 2>/dev/null; ls /opt/homebrew/Cellar/node* 2>/dev/null | head -5)",
       "Bash(node server.js)",
-      "Bash(curl -s http://localhost:3000/login.html)"
+      "Bash(curl -s http://localhost:3000/login.html)",
+      "Bash(git rm *)",
+      "Bash(git add *)",
+      "Bash(git commit *)",
+      "Bash(git push *)"
     ]
   }
 }
