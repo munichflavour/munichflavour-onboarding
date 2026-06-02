@@ -115,9 +115,9 @@ async function showEmployeeDetail(id) {
       actionHtml = `
         <div style="padding:12px 16px;border-top:1px solid var(--gray-mid);background:#fffbea;">
           <div style="font-size:13px;color:#666;margin-bottom:8px;">⏳ Erledigt am ${new Date(p.completed_at+'Z').toLocaleString('de-DE',{dateStyle:'short',timeStyle:'short'})} – Bestätigung ausstehend</div>
-          <div style="display:flex;gap:8px;align-items:center;">
-            <input type="text" id="confirmName-${item.id}" placeholder="Dein Name" style="flex:1;padding:10px;border:1.5px solid #ccc;border-radius:6px;font-size:15px;">
-            <button class="btn btn-primary btn-sm" onclick="confirmItem(${empId}, ${item.id})">Bestätigen</button>
+          <div style="display:flex;flex-direction:column;gap:8px;">
+            <input type="text" id="confirmName-${item.id}" placeholder="Dein Name" style="width:100%;padding:12px;border:1.5px solid #ccc;border-radius:6px;font-size:16px;">
+            <button class="btn btn-primary btn-full" onclick="confirmItem(${empId}, ${item.id})">Bestätigen</button>
           </div>
         </div>`;
     } else if (isConfirmed) {
