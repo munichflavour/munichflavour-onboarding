@@ -1,4 +1,4 @@
-const CACHE_NAME = 'mf-onboarding-v1';
+const CACHE_NAME = 'mf-onboarding-v2';
 const STATIC_ASSETS = [
   '/login.html',
   '/employee.html',
