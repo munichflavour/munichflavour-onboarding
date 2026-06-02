@@ -1,6 +1,4 @@
 let checklist = [];
-let sigPad = null;
-let activeItemId = null;
 let selectedEmpFile = null;
 
 if ('serviceWorker' in navigator) {
@@ -33,12 +31,14 @@ async function loadChecklist() {
   document.getElementById('loadingState').classList.add('hidden');
   document.getElementById('progressCard').classList.remove('hidden');
 
-  const done = items.filter(i => i.progress?.completed_at).length;
+  const confirmed = items.filter(i => i.progress?.confirmed_at).length;
+  const completed = items.filter(i => i.progress?.completed_at).length;
   const total = items.length;
-  document.getElementById('progressFraction').textContent = `${done}/${total}`;
-  document.getElementById('progressFill').style.width = total ? `${Math.round(done / total * 100)}%` : '0%';
 
-  if (done === total && total > 0) {
+  document.getElementById('progressFraction').textContent = `${confirmed}/${total} bestätigt`;
+  document.getElementById('progressFill').style.width = total ? `${Math.round(confirmed / total * 100)}%` : '0%';
+
+  if (confirmed === total && total > 0) {
     document.getElementById('completionBanner').classList.remove('hidden');
   } else {
     document.getElementById('completionBanner').classList.add('hidden');
@@ -50,91 +50,75 @@ async function loadChecklist() {
 function renderChecklist(items) {
   const container = document.getElementById('checklistContainer');
   container.innerHTML = '';
-  items.forEach(item => {
-    const done = !!item.progress?.completed_at;
-    const el = document.createElement('div');
-    el.className = 'checklist-item' + (done ? ' completed' : '');
 
-    const dateStr = done
-      ? new Date(item.progress.completed_at + 'Z').toLocaleString('de-DE', { dateStyle: 'short', timeStyle: 'short' })
-      : '';
+  items.forEach(item => {
+    const p = item.progress;
+    const isConfirmed = !!p?.confirmed_at;
+    const isCompleted = !!p?.completed_at;
+
+    const el = document.createElement('div');
+    el.className = 'checklist-item' + (isConfirmed ? ' completed' : '');
+
+    let statusIcon = '';
+    let statusColor = '';
+    if (isConfirmed) { statusIcon = '✓'; statusColor = ''; }
+    else if (isCompleted) { statusIcon = '⏳'; statusColor = 'color:#b8860b;border-color:#b8860b;'; }
+
+    let actionBtn = '';
+    if (isConfirmed) {
+      actionBtn = ''; // nothing
+    } else if (isCompleted) {
+      actionBtn = `<button class="btn btn-secondary btn-sm" onclick="uncompleteItem(${item.id})" style="font-size:12px;">Rückgängig</button>`;
+    } else {
+      actionBtn = `<button class="btn btn-secondary btn-sm" onclick="completeItem(${item.id})">Abhaken</button>`;
+    }
+
+    let metaHtml = '';
+    if (isConfirmed) {
+      const confirmDate = new Date(p.confirmed_at + 'Z').toLocaleString('de-DE', { dateStyle: 'short', timeStyle: 'short' });
+      const doneDate = new Date(p.completed_at + 'Z').toLocaleString('de-DE', { dateStyle: 'short', timeStyle: 'short' });
+      metaHtml = `
+        <div class="item-meta">
+          <span class="meta-badge">✓ Erledigt: ${doneDate}</span>
+          <span class="meta-badge" style="background:#000;color:#fff;">✓ Bestätigt: ${confirmDate} von ${escHtml(p.confirmed_by)}</span>
+        </div>`;
+    } else if (isCompleted) {
+      const doneDate = new Date(p.completed_at + 'Z').toLocaleString('de-DE', { dateStyle: 'short', timeStyle: 'short' });
+      metaHtml = `
+        <div class="item-meta">
+          <span class="meta-badge" style="background:#fff8e1;border:1px solid #f0c040;">⏳ Erledigt am ${doneDate} – wartet auf Bestätigung</span>
+        </div>`;
+    }
 
     el.innerHTML = `
       <div class="checklist-item-header">
-        <div class="status-icon">${done ? '✓' : ''}</div>
+        <div class="status-icon" style="${statusColor}">${statusIcon}</div>
         <div style="flex:1;min-width:0;">
           <div class="item-title">${escHtml(item.title)}</div>
           ${item.description ? `<div class="item-desc">${escHtml(item.description)}</div>` : ''}
         </div>
-        ${!done ? `<button class="btn btn-secondary btn-sm" onclick="openSignModal(${item.id})">Abhaken</button>` : ''}
+        ${actionBtn}
       </div>
-      ${done ? `
-        <div class="item-meta">
-          <span class="meta-badge">✓ ${dateStr}</span>
-          <span class="meta-badge">👤 ${escHtml(item.progress.countersigned_by)}</span>
-          ${item.progress.signature_data_url ? `<span class="sig-preview"><img src="${item.progress.signature_data_url}" alt="Unterschrift"></span>` : ''}
-        </div>` : ''}`;
+      ${metaHtml}`;
+
     container.appendChild(el);
   });
 }
 
-// ===== Sign modal =====
-function openSignModal(itemId) {
-  activeItemId = itemId;
-  const item = checklist.find(i => i.id === itemId);
-  document.getElementById('signItemTitle').textContent = item?.title || '';
-  document.getElementById('supervisorName').value = '';
-  document.getElementById('signError').classList.add('hidden');
-  document.getElementById('signModal').classList.remove('hidden');
-  document.body.style.overflow = 'hidden';
-
-  setTimeout(() => {
-    const canvas = document.getElementById('sigCanvas');
-    const wrap = canvas.parentElement;
-    canvas.width = wrap.clientWidth;
-    canvas.height = 180;
-    if (sigPad) sigPad.off();
-    sigPad = new SignaturePad(canvas, { penColor: '#000000' });
-    sigPad.addEventListener('beginStroke', () => {
-      document.getElementById('sigHint').style.display = 'none';
-    });
-  }, 50);
-}
-
-function closeSignModal() {
-  document.getElementById('signModal').classList.add('hidden');
-  document.body.style.overflow = '';
-  activeItemId = null;
-  if (sigPad) { sigPad.off(); sigPad = null; }
-}
-
-function clearSig() {
-  if (sigPad) { sigPad.clear(); document.getElementById('sigHint').style.display = ''; }
-}
-
-async function confirmSign() {
-  const errEl = document.getElementById('signError');
-  errEl.classList.add('hidden');
-  const name = document.getElementById('supervisorName').value.trim();
-  if (!name) { errEl.textContent = 'Bitte den Namen des Vorgesetzten eintragen.'; errEl.classList.remove('hidden'); return; }
-  if (!sigPad || sigPad.isEmpty()) { errEl.textContent = 'Bitte eine Unterschrift zeichnen.'; errEl.classList.remove('hidden'); return; }
-
-  const sigDataUrl = sigPad.toDataURL('image/png');
-  const btn = document.getElementById('confirmSignBtn');
+async function completeItem(itemId) {
+  const btn = event.target;
   btn.disabled = true;
-  btn.innerHTML = '<span class="spinner"></span>';
-
-  const res = await fetch(`/api/employee/checklist/${activeItemId}/complete`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ countersigned_by: name, signature_data_url: sigDataUrl })
-  });
-
+  const res = await fetch(`/api/employee/checklist/${itemId}/complete`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
   btn.disabled = false;
-  btn.textContent = 'Bestätigen';
+  if (res.ok) await loadChecklist();
+  else { const d = await res.json(); alert(d.error || 'Fehler'); }
+}
 
-  if (res.ok) { closeSignModal(); await loadChecklist(); }
-  else { const d = await res.json(); errEl.textContent = d.error || 'Fehler.'; errEl.classList.remove('hidden'); }
+async function uncompleteItem(itemId) {
+  if (!confirm('Abhakung rückgängig machen?')) return;
+  const res = await fetch(`/api/employee/checklist/${itemId}/uncomplete`, { method: 'POST' });
+  if (res.ok) await loadChecklist();
+  else { const d = await res.json(); alert(d.error || 'Fehler'); }
 }
 
 // ===== PDF =====
@@ -162,7 +146,6 @@ async function loadDocuments() {
     fetch('/api/documents').then(r => r.json()),
     fetch('/api/employee/uploads').then(r => r.json())
   ]);
-
   renderAdminDocs(docsRes);
   renderMyUploads(uploadsRes);
 }
@@ -181,16 +164,13 @@ function renderAdminDocs(data) {
   const renderFolder = (folder) => {
     const children = folders.filter(f => f.parent_id === folder.id);
     const docs = documents.filter(d => d.folder_id === folder.id);
-
     const section = document.createElement('div');
     section.className = 'folder-section';
     section.style.borderBottom = '1px solid var(--gray-mid)';
     section.style.padding = '0 16px';
-
     const label = document.createElement('div');
     label.className = 'folder-label';
     label.innerHTML = `<span>📁</span><span>${escHtml(folder.name)}</span>`;
-
     const content = document.createElement('div');
     content.style.paddingLeft = '12px';
     let collapsed = false;
@@ -199,17 +179,14 @@ function renderAdminDocs(data) {
       content.style.display = collapsed ? 'none' : '';
       label.querySelector('span').textContent = collapsed ? '📁' : '📂';
     });
-
     children.forEach(child => content.appendChild(renderFolder(child)));
     docs.forEach(doc => content.appendChild(renderDocRow(doc)));
-
     if (children.length === 0 && docs.length === 0) {
       const empty = document.createElement('div');
       empty.style.cssText = 'padding:8px 0 12px;font-size:13px;color:#aaa;';
       empty.textContent = 'Leer';
       content.appendChild(empty);
     }
-
     section.appendChild(label);
     section.appendChild(content);
     return section;
@@ -227,10 +204,7 @@ function renderAdminDocs(data) {
     return el;
   };
 
-  // Root folders
   folders.filter(f => !f.parent_id).forEach(f => container.appendChild(renderFolder(f)));
-
-  // Root docs
   documents.filter(d => !d.folder_id).forEach(doc => container.appendChild(renderDocRow(doc)));
 }
 
@@ -250,7 +224,6 @@ function renderMyUploads(uploads) {
     </div>`).join('');
 }
 
-// Employee file upload
 function onEmpFileSelected(input) {
   selectedEmpFile = input.files[0];
   document.getElementById('empFileName').textContent = selectedEmpFile ? selectedEmpFile.name : '';
@@ -261,18 +234,14 @@ async function uploadEmpFile() {
   const errEl = document.getElementById('empUploadError');
   errEl.classList.add('hidden');
   if (!selectedEmpFile) return;
-
   const btn = document.getElementById('empUploadBtn');
   btn.disabled = true;
   btn.innerHTML = '<span class="spinner"></span>';
-
   const formData = new FormData();
   formData.append('file', selectedEmpFile);
-
   const res = await fetch('/api/employee/uploads', { method: 'POST', body: formData });
   btn.disabled = false;
   btn.textContent = 'Hochladen';
-
   if (res.ok) {
     selectedEmpFile = null;
     document.getElementById('empFileName').textContent = '';
@@ -292,7 +261,6 @@ async function deleteMyUpload(id) {
   if (res.ok) loadDocuments();
 }
 
-// Drag & drop upload zone
 const empUploadZone = document.getElementById('empUploadZone');
 empUploadZone.addEventListener('dragover', e => { e.preventDefault(); empUploadZone.classList.add('dragover'); });
 empUploadZone.addEventListener('dragleave', () => empUploadZone.classList.remove('dragover'));
@@ -307,7 +275,6 @@ empUploadZone.addEventListener('drop', e => {
   }
 });
 
-// ===== Helpers =====
 async function logout() {
   await fetch('/api/logout', { method: 'POST' });
   window.location.href = '/login.html';
@@ -322,9 +289,5 @@ async function apiFetch(url) {
 function escHtml(str) {
   return String(str || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
-
-document.getElementById('signModal').addEventListener('click', e => {
-  if (e.target === document.getElementById('signModal')) closeSignModal();
-});
 
 init();

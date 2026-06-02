@@ -100,24 +100,45 @@ async function showEmployeeDetail(id) {
 
     <div class="section-title">Onboarding-Aufgaben</div>`;
 
+  const empId = user.id;
   checklist.forEach(item => {
     const p = item.progress;
-    const isDone = !!p?.completed_at;
+    const isConfirmed = !!p?.confirmed_at;
+    const isCompleted = !!p?.completed_at;
+
+    let statusIcon = '', borderStyle = 'border-color:var(--gray-mid)';
+    if (isConfirmed) { statusIcon = '✓'; borderStyle = 'border-color:#000'; }
+    else if (isCompleted) { statusIcon = '⏳'; borderStyle = 'border-color:#f0c040'; }
+
+    let actionHtml = '';
+    if (isCompleted && !isConfirmed) {
+      actionHtml = `
+        <div style="padding:12px 16px;border-top:1px solid var(--gray-mid);background:#fffbea;">
+          <div style="font-size:13px;color:#666;margin-bottom:8px;">⏳ Erledigt am ${new Date(p.completed_at+'Z').toLocaleString('de-DE',{dateStyle:'short',timeStyle:'short'})} – Bestätigung ausstehend</div>
+          <div style="display:flex;gap:8px;align-items:center;">
+            <input type="text" id="confirmName-${item.id}" placeholder="Dein Name" style="flex:1;padding:10px;border:1.5px solid #ccc;border-radius:6px;font-size:15px;">
+            <button class="btn btn-primary btn-sm" onclick="confirmItem(${empId}, ${item.id})">Bestätigen</button>
+          </div>
+        </div>`;
+    } else if (isConfirmed) {
+      actionHtml = `
+        <div style="padding:10px 16px;border-top:1px solid var(--gray-mid);display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-size:13px;color:#666;">
+          <span>✓ Erledigt: ${new Date(p.completed_at+'Z').toLocaleString('de-DE',{dateStyle:'short',timeStyle:'short'})}</span>
+          <span style="background:#000;color:#fff;border-radius:4px;padding:2px 8px;">✓ Bestätigt: ${new Date(p.confirmed_at+'Z').toLocaleString('de-DE',{dateStyle:'short',timeStyle:'short'})} von ${escHtml(p.confirmed_by)}</span>
+          <button class="btn btn-secondary btn-sm" onclick="unconfirmItem(${empId}, ${item.id})">Zurücksetzen</button>
+        </div>`;
+    }
+
     html += `
-      <div class="admin-checklist-item ${isDone ? 'done' : ''}">
+      <div class="admin-checklist-item" style="${borderStyle}">
         <div class="admin-item-header">
-          <div class="status-icon">${isDone ? '✓' : ''}</div>
+          <div class="status-icon" style="${isConfirmed ? 'background:#000;border-color:#000;color:#fff;' : isCompleted ? 'border-color:#f0c040;color:#b8860b;' : ''}">${statusIcon}</div>
           <div style="flex:1;min-width:0;">
-            <div style="font-weight:600;font-size:15px;">${escHtml(item.title)}</div>
+            <div style="font-weight:600;font-size:15px;${isConfirmed ? 'text-decoration:line-through;color:#666;' : ''}">${escHtml(item.title)}</div>
             ${item.description ? `<div style="font-size:13px;color:#666;margin-top:2px;">${escHtml(item.description)}</div>` : ''}
           </div>
         </div>
-        ${isDone ? `
-        <div class="admin-item-details">
-          <span>✓ ${new Date(p.completed_at + 'Z').toLocaleString('de-DE', {dateStyle:'short',timeStyle:'short'})}</span>
-          <span>👤 ${escHtml(p.countersigned_by)}</span>
-          ${p.signature_data_url ? `<span class="sig-thumb"><img src="${p.signature_data_url}" alt="Unterschrift"></span>` : ''}
-        </div>` : ''}
+        ${actionHtml}
       </div>`;
   });
 
@@ -139,6 +160,24 @@ async function showEmployeeDetail(id) {
   }
 
   document.getElementById('empDetailContent').innerHTML = html;
+}
+
+async function confirmItem(userId, itemId) {
+  const input = document.getElementById(`confirmName-${itemId}`);
+  const name = input?.value.trim();
+  if (!name) { input.style.borderColor = 'red'; input.focus(); return; }
+  const r = await apiFetch(`/api/admin/employees/${userId}/checklist/${itemId}/confirm`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ confirmed_by: name })
+  });
+  if (r?.ok) showEmployeeDetail(userId);
+  else alert(r?.data?.error || 'Fehler');
+}
+
+async function unconfirmItem(userId, itemId) {
+  if (!confirm('Bestätigung wirklich zurücksetzen?')) return;
+  const r = await apiFetch(`/api/admin/employees/${userId}/checklist/${itemId}/unconfirm`, { method: 'POST' });
+  if (r?.ok) showEmployeeDetail(userId);
 }
 
 function showEmployeeList() {

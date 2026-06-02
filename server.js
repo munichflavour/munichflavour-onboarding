@@ -45,8 +45,8 @@ db.exec(`
     user_id INTEGER NOT NULL,
     checklist_item_id INTEGER NOT NULL,
     completed_at TEXT,
-    countersigned_by TEXT,
-    signature_data_url TEXT,
+    confirmed_at TEXT,
+    confirmed_by TEXT,
     FOREIGN KEY (user_id) REFERENCES users(id),
     FOREIGN KEY (checklist_item_id) REFERENCES checklist_items(id),
     UNIQUE(user_id, checklist_item_id)
@@ -99,6 +99,14 @@ const employeeStorage = multer.diskStorage({
   }
 });
 const employeeUpload = multer({ storage: employeeStorage, limits: { fileSize: 20 * 1024 * 1024 } });
+
+// Migrate existing DB: add new columns if missing
+try {
+  db.exec(`ALTER TABLE checklist_progress ADD COLUMN confirmed_at TEXT`);
+} catch(e) {}
+try {
+  db.exec(`ALTER TABLE checklist_progress ADD COLUMN confirmed_by TEXT`);
+} catch(e) {}
 
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
@@ -156,18 +164,24 @@ app.get('/api/employee/checklist', requireAuth, (req, res) => {
   res.json(items.map(item => ({ ...item, progress: progressMap[item.id] || null })));
 });
 
+// Employee: mark item as done (no signature needed)
 app.post('/api/employee/checklist/:itemId/complete', requireAuth, (req, res) => {
   const { itemId } = req.params;
-  const { countersigned_by, signature_data_url } = req.body;
-  if (!countersigned_by || !signature_data_url) return res.status(400).json({ error: 'Vorgesetztenname und Unterschrift erforderlich' });
   const item = db.prepare('SELECT * FROM checklist_items WHERE id = ?').get(itemId);
   if (!item) return res.status(404).json({ error: 'Aufgabe nicht gefunden' });
   db.prepare(`
-    INSERT INTO checklist_progress (user_id, checklist_item_id, completed_at, countersigned_by, signature_data_url)
-    VALUES (?, ?, datetime('now'), ?, ?)
-    ON CONFLICT(user_id, checklist_item_id) DO UPDATE SET
-      completed_at = datetime('now'), countersigned_by = excluded.countersigned_by, signature_data_url = excluded.signature_data_url
-  `).run(req.session.userId, itemId, countersigned_by, signature_data_url);
+    INSERT INTO checklist_progress (user_id, checklist_item_id, completed_at)
+    VALUES (?, ?, datetime('now'))
+    ON CONFLICT(user_id, checklist_item_id) DO UPDATE SET completed_at = datetime('now')
+  `).run(req.session.userId, itemId);
+  res.json({ ok: true });
+});
+
+// Employee: uncheck item (only if not yet confirmed by admin)
+app.post('/api/employee/checklist/:itemId/uncomplete', requireAuth, (req, res) => {
+  const progress = db.prepare('SELECT * FROM checklist_progress WHERE user_id = ? AND checklist_item_id = ?').get(req.session.userId, req.params.itemId);
+  if (progress?.confirmed_at) return res.status(400).json({ error: 'Bereits vom Admin bestätigt – kann nicht rückgängig gemacht werden' });
+  db.prepare('DELETE FROM checklist_progress WHERE user_id = ? AND checklist_item_id = ?').run(req.session.userId, req.params.itemId);
   res.json({ ok: true });
 });
 
@@ -178,8 +192,8 @@ app.get('/api/employee/report/pdf', requireAuth, async (req, res) => {
   const progress = db.prepare('SELECT * FROM checklist_progress WHERE user_id = ?').all(req.session.userId);
   const progressMap = {};
   progress.forEach(p => { progressMap[p.checklist_item_id] = p; });
-  const allDone = items.every(item => progressMap[item.id]?.completed_at);
-  if (!allDone) return res.status(400).json({ error: 'Nicht alle Aufgaben abgeschlossen' });
+  const allDone = items.every(item => progressMap[item.id]?.confirmed_at);
+  if (!allDone) return res.status(400).json({ error: 'Nicht alle Aufgaben vom Admin bestätigt' });
 
   const logoPath = path.join(__dirname, 'assets', 'logo.jpg');
   let logoBase64 = '';
@@ -187,9 +201,9 @@ app.get('/api/employee/report/pdf', requireAuth, async (req, res) => {
 
   const rows = items.map(item => {
     const p = progressMap[item.id];
-    const date = p?.completed_at ? new Date(p.completed_at + 'Z').toLocaleString('de-DE') : '-';
-    const sig = p?.signature_data_url ? `<img src="${p.signature_data_url}" style="height:40px;">` : '-';
-    return `<tr><td>${item.title}</td><td>${date}</td><td>${p?.countersigned_by || '-'}</td><td>${sig}</td></tr>`;
+    const doneDate = p?.completed_at ? new Date(p.completed_at + 'Z').toLocaleString('de-DE') : '-';
+    const confirmDate = p?.confirmed_at ? new Date(p.confirmed_at + 'Z').toLocaleString('de-DE') : '-';
+    return `<tr><td>${item.title}</td><td>${doneDate}</td><td>${confirmDate}</td><td>${p?.confirmed_by || '-'}</td></tr>`;
   }).join('');
 
   const html = `<!DOCTYPE html><html lang="de"><head><meta charset="UTF-8"><style>
@@ -206,7 +220,7 @@ app.get('/api/employee/report/pdf', requireAuth, async (req, res) => {
   </style></head><body>
     <div class="header">${logoBase64 ? `<img src="${logoBase64}" alt="Logo">` : ''}<h1>Munich Flavour Onboarding Report</h1></div>
     <div class="info"><strong>Mitarbeiter:</strong> ${user.full_name}<br><strong>Startdatum:</strong> ${user.start_date ? new Date(user.start_date).toLocaleDateString('de-DE') : '-'}<br><strong>Berichtsdatum:</strong> ${new Date().toLocaleDateString('de-DE')}</div>
-    <table><thead><tr><th>Aufgabe</th><th>Abgeschlossen am</th><th>Gegengezeichnet von</th><th>Unterschrift</th></tr></thead><tbody>${rows}</tbody></table>
+    <table><thead><tr><th>Aufgabe</th><th>Erledigt am</th><th>Bestätigt am</th><th>Bestätigt von</th></tr></thead><tbody>${rows}</tbody></table>
     <div class="footer">Munich Flavour Onboarding Report</div>
   </body></html>`;
 
@@ -270,6 +284,24 @@ app.post('/api/admin/employees', requireAdmin, (req, res) => {
   const hash = bcrypt.hashSync(password, 10);
   const result = db.prepare(`INSERT INTO users (username, password_hash, full_name, role, start_date) VALUES (?, ?, ?, 'employee', ?)`).run(username, hash, full_name, start_date || null);
   res.json({ id: result.lastInsertRowid, username, full_name, start_date });
+});
+
+// Admin: confirm a checklist item for an employee
+app.post('/api/admin/employees/:userId/checklist/:itemId/confirm', requireAdmin, (req, res) => {
+  const { userId, itemId } = req.params;
+  const { confirmed_by } = req.body;
+  if (!confirmed_by) return res.status(400).json({ error: 'Name erforderlich' });
+  const progress = db.prepare('SELECT * FROM checklist_progress WHERE user_id = ? AND checklist_item_id = ?').get(userId, itemId);
+  if (!progress) return res.status(400).json({ error: 'Mitarbeiter hat diesen Punkt noch nicht abgehakt' });
+  db.prepare(`UPDATE checklist_progress SET confirmed_at = datetime('now'), confirmed_by = ? WHERE user_id = ? AND checklist_item_id = ?`).run(confirmed_by, userId, itemId);
+  res.json({ ok: true });
+});
+
+// Admin: revoke confirmation
+app.post('/api/admin/employees/:userId/checklist/:itemId/unconfirm', requireAdmin, (req, res) => {
+  const { userId, itemId } = req.params;
+  db.prepare('UPDATE checklist_progress SET confirmed_at = NULL, confirmed_by = NULL WHERE user_id = ? AND checklist_item_id = ?').run(userId, itemId);
+  res.json({ ok: true });
 });
 
 app.delete('/api/admin/employees/:id', requireAdmin, (req, res) => {
