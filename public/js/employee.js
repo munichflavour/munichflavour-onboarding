@@ -198,9 +198,9 @@ function renderAdminDocs(data) {
         <div style="font-size:14px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escHtml(doc.original_name)}</div>
         <div style="font-size:12px;color:#888;margin-top:2px;">${new Date(doc.uploaded_at+'Z').toLocaleDateString('de-DE')}</div>
       </div>
-      <div style="display:flex;flex-direction:column;gap:6px;flex-shrink:0;">
-        <a href="/api/documents/${doc.id}/view" target="_blank" class="btn btn-primary btn-sm" style="font-size:13px;padding:8px 12px;">Anzeigen</a>
-        <a href="/api/documents/${doc.id}/download" class="btn btn-secondary btn-sm" style="font-size:13px;padding:8px 12px;">⬇ Download</a>
+      <div style="display:flex;gap:8px;flex-shrink:0;">
+        <a href="/api/documents/${doc.id}/view" target="_blank" title="Anzeigen" style="width:40px;height:40px;display:flex;align-items:center;justify-content:center;background:#000;color:#fff;border-radius:8px;font-size:18px;text-decoration:none;">👁</a>
+        <a href="/api/documents/${doc.id}/download" title="Herunterladen" style="width:40px;height:40px;display:flex;align-items:center;justify-content:center;background:#f0f0f0;color:#000;border-radius:8px;font-size:18px;text-decoration:none;">⬇</a>
       </div>`;
     return el;
   };
