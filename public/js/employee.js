@@ -183,7 +183,9 @@ function renderAdminDocs(data) {
     const label = document.createElement('div'); label.className='folder-label';
     label.innerHTML=`<span>📁</span><span>${escHtml(folder.name)}</span>`;
     const content = document.createElement('div'); content.style.paddingLeft='12px';
-    let collapsed=false;
+    content.style.display='none';
+    let collapsed=true;
+    label.querySelector('span').textContent='📁';
     label.addEventListener('click',()=>{ collapsed=!collapsed; content.style.display=collapsed?'none':''; label.querySelector('span').textContent=collapsed?'📁':'📂'; });
     children.forEach(c=>content.appendChild(renderFolder(c)));
     docs.forEach(d=>content.appendChild(renderDocRow(d)));
