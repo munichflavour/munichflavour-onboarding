@@ -192,9 +192,16 @@ function renderAdminDocs(data) {
   };
   const renderDocRow = (doc) => {
     const el=document.createElement('div'); el.className='doc-row';
-    el.innerHTML=`<span class="doc-row-icon">📄</span><span class="doc-row-name">${escHtml(doc.original_name)}</span><span class="doc-row-date">${new Date(doc.uploaded_at+'Z').toLocaleDateString('de-DE')}</span>
-      <a href="/api/documents/${doc.id}/view" target="_blank" class="btn btn-primary btn-sm">Anzeigen</a>
-      <a href="/api/documents/${doc.id}/download" class="btn btn-secondary btn-sm">⬇</a>`;
+    el.innerHTML=`
+      <span class="doc-row-icon">📄</span>
+      <div style="flex:1;min-width:0;">
+        <div style="font-size:14px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escHtml(doc.original_name)}</div>
+        <div style="font-size:12px;color:#888;margin-top:2px;">${new Date(doc.uploaded_at+'Z').toLocaleDateString('de-DE')}</div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:6px;flex-shrink:0;">
+        <a href="/api/documents/${doc.id}/view" target="_blank" class="btn btn-primary btn-sm" style="font-size:13px;padding:8px 12px;">Anzeigen</a>
+        <a href="/api/documents/${doc.id}/download" class="btn btn-secondary btn-sm" style="font-size:13px;padding:8px 12px;">⬇ Download</a>
+      </div>`;
     return el;
   };
   folders.filter(f=>!f.parent_id).forEach(f=>container.appendChild(renderFolder(f)));
