@@ -57,6 +57,7 @@ async function loadEmployees() {
         <div class="employee-progress" onclick="showEmployeeDetail(${emp.id})" style="cursor:pointer;">
           <div class="progress-fraction">${emp.completed}/${emp.total}</div>
           <div class="progress-bar-wrap progress-mini-bar" style="margin-top:4px;"><div class="progress-bar-fill" style="width:${pct}%"></div></div>
+          ${emp.pending > 0 ? `<div style="margin-top:4px;background:#f0c040;color:#000;border-radius:4px;padding:2px 6px;font-size:11px;font-weight:700;text-align:center;">⏳ ${emp.pending} ausstehend</div>` : ''}
         </div>
         <button class="btn btn-danger btn-sm" style="flex-shrink:0;" onclick="deleteEmployee(${emp.id},'${escHtml(emp.full_name)}')">🗑</button>
       </div>`;

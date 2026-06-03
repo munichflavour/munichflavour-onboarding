@@ -365,8 +365,10 @@ app.get('/api/admin/employees', requireAdmin, (req, res) => {
       items = db.prepare('SELECT id FROM checklist_items').all();
     }
     const total = items.length;
-    const done = items.length > 0 ? db.prepare(`SELECT COUNT(*) as cnt FROM checklist_progress WHERE user_id = ? AND checklist_item_id IN (${items.map(()=>'?').join(',')}) AND confirmed_at IS NOT NULL`).get(emp.id, ...items.map(i=>i.id)).cnt : 0;
-    return { ...emp, completed: done, total };
+    const itemIds = items.map(i => i.id);
+    const done = itemIds.length > 0 ? db.prepare(`SELECT COUNT(*) as cnt FROM checklist_progress WHERE user_id = ? AND checklist_item_id IN (${itemIds.map(()=>'?').join(',')}) AND confirmed_at IS NOT NULL`).get(emp.id, ...itemIds).cnt : 0;
+    const pending = itemIds.length > 0 ? db.prepare(`SELECT COUNT(*) as cnt FROM checklist_progress WHERE user_id = ? AND checklist_item_id IN (${itemIds.map(()=>'?').join(',')}) AND completed_at IS NOT NULL AND confirmed_at IS NULL`).get(emp.id, ...itemIds).cnt : 0;
+    return { ...emp, completed: done, total, pending };
   });
   res.json(result);
 });
