@@ -192,7 +192,9 @@ function renderAdminDocs(data) {
   };
   const renderDocRow = (doc) => {
     const el=document.createElement('div'); el.className='doc-row';
-    el.innerHTML=`<span class="doc-row-icon">📄</span><span class="doc-row-name">${escHtml(doc.original_name)}</span><span class="doc-row-date">${new Date(doc.uploaded_at+'Z').toLocaleDateString('de-DE')}</span><a href="/api/documents/${doc.id}/download" class="btn btn-secondary btn-sm">⬇</a>`;
+    el.innerHTML=`<span class="doc-row-icon">📄</span><span class="doc-row-name">${escHtml(doc.original_name)}</span><span class="doc-row-date">${new Date(doc.uploaded_at+'Z').toLocaleDateString('de-DE')}</span>
+      <a href="/api/documents/${doc.id}/view" target="_blank" class="btn btn-primary btn-sm">Anzeigen</a>
+      <a href="/api/documents/${doc.id}/download" class="btn btn-secondary btn-sm">⬇</a>`;
     return el;
   };
   folders.filter(f=>!f.parent_id).forEach(f=>container.appendChild(renderFolder(f)));

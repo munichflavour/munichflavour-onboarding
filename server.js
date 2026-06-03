@@ -354,6 +354,15 @@ app.get('/api/documents/:id/download', requireAuth, (req, res) => {
   res.download(fp, doc.original_name);
 });
 
+app.get('/api/documents/:id/view', requireAuth, (req, res) => {
+  const doc = db.prepare('SELECT * FROM documents WHERE id = ?').get(req.params.id);
+  if (!doc) return res.status(404).json({ error: 'Nicht gefunden' });
+  const fp = path.join(uploadsAdminDir, doc.stored_name);
+  if (!fs.existsSync(fp)) return res.status(404).json({ error: 'Datei nicht gefunden' });
+  res.setHeader('Content-Disposition', `inline; filename="${doc.original_name}"`);
+  res.sendFile(fp);
+});
+
 // ===== ADMIN: EMPLOYEES =====
 app.get('/api/admin/employees', requireAdmin, (req, res) => {
   const employees = db.prepare(`SELECT u.*, p.name as profile_name FROM users u LEFT JOIN profiles p ON p.id = u.profile_id WHERE u.role = 'employee' ORDER BY u.created_at DESC`).all();
