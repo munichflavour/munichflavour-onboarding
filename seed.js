@@ -73,10 +73,12 @@ db.exec(`
 const adminHash = bcrypt.hashSync('admin123', 10);
 db.prepare(`INSERT OR IGNORE INTO users (username, password_hash, full_name, role) VALUES (?, ?, ?, 'admin')`).run('admin', adminHash, 'Administrator');
 
-// Clear and re-insert checklist items (delete in correct order)
-db.prepare('DELETE FROM profile_checklist_items').run();
-db.prepare('DELETE FROM checklist_progress').run();
-db.prepare('DELETE FROM checklist_items').run();
+// Insert checklist items only if table is empty
+const existingItems = db.prepare('SELECT COUNT(*) as cnt FROM checklist_items').get().cnt;
+if (existingItems > 0) {
+  console.log('✓ Checklistenpunkte bereits vorhanden – überspringe.');
+  process.exit(0);
+}
 
 const items = [
   {
@@ -121,7 +123,7 @@ const items = [
   },
 ];
 
-const insertItem = db.prepare('INSERT INTO checklist_items (title, description, order_index) VALUES (?, ?, ?)');
+const insertItem = db.prepare('INSERT OR IGNORE INTO checklist_items (title, description, order_index) VALUES (?, ?, ?)');
 items.forEach((item, i) => insertItem.run(item.title, item.description, i));
 
 // Document folders (only insert if not already present)
