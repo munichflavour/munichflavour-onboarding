@@ -69,13 +69,13 @@ db.exec(`
   );
 `);
 
-db.exec(`PRAGMA foreign_keys = ON;`);
-
 // Admin account
 const adminHash = bcrypt.hashSync('admin123', 10);
 db.prepare(`INSERT OR IGNORE INTO users (username, password_hash, full_name, role) VALUES (?, ?, ?, 'admin')`).run('admin', adminHash, 'Administrator');
 
-// Clear and re-insert checklist items
+// Clear and re-insert checklist items (delete in correct order)
+db.prepare('DELETE FROM profile_checklist_items').run();
+db.prepare('DELETE FROM checklist_progress').run();
 db.prepare('DELETE FROM checklist_items').run();
 
 const items = [
