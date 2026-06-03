@@ -8,6 +8,8 @@ if (!fs.existsSync(dbDir)) fs.mkdirSync(dbDir);
 
 const db = new Database(path.join(dbDir, 'onboarding.db'));
 
+db.exec(`PRAGMA foreign_keys = OFF;`);
+
 db.exec(`
   CREATE TABLE IF NOT EXISTS users (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -66,6 +68,8 @@ db.exec(`
     FOREIGN KEY (user_id) REFERENCES users(id)
   );
 `);
+
+db.exec(`PRAGMA foreign_keys = ON;`);
 
 // Admin account
 const adminHash = bcrypt.hashSync('admin123', 10);
