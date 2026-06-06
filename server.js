@@ -127,7 +127,7 @@ db.exec(`
 `);
 
 // Migrations for existing DBs
-['confirmed_at TEXT', 'confirmed_by TEXT'].forEach(col => {
+['confirmed_at TEXT', 'confirmed_by TEXT', 'rejection_comment TEXT'].forEach(col => {
   try { db.exec(`ALTER TABLE checklist_progress ADD COLUMN ${col}`); } catch(e) {}
 });
 try { db.exec(`ALTER TABLE users ADD COLUMN profile_id INTEGER`); } catch(e) {}
@@ -270,6 +270,14 @@ app.post('/api/admin/employees/:userId/checklist/:itemId/unconfirm', requireAdmi
   res.json({ ok: true });
 });
 
+// Admin: reject item with comment
+app.post('/api/admin/employees/:userId/checklist/:itemId/reject', requireAdmin, (req, res) => {
+  const { comment } = req.body;
+  if (!comment || !comment.trim()) return res.status(400).json({ error: 'Kommentar erforderlich' });
+  db.prepare(`UPDATE checklist_progress SET completed_at = NULL, confirmed_at = NULL, confirmed_by = NULL, rejection_comment = ? WHERE user_id = ? AND checklist_item_id = ?`).run(comment.trim(), req.params.userId, req.params.itemId);
+  res.json({ ok: true });
+});
+
 // ===== EMPLOYEE: PDF =====
 app.get('/api/employee/report/pdf', requireAuth, (req, res) => {
   const user = db.prepare('SELECT * FROM users WHERE id = ?').get(req.session.userId);
@@ -377,7 +385,8 @@ app.get('/api/admin/employees', requireAdmin, (req, res) => {
     const itemIds = items.map(i => i.id);
     const done = itemIds.length > 0 ? db.prepare(`SELECT COUNT(*) as cnt FROM checklist_progress WHERE user_id = ? AND checklist_item_id IN (${itemIds.map(()=>'?').join(',')}) AND confirmed_at IS NOT NULL`).get(emp.id, ...itemIds).cnt : 0;
     const pending = itemIds.length > 0 ? db.prepare(`SELECT COUNT(*) as cnt FROM checklist_progress WHERE user_id = ? AND checklist_item_id IN (${itemIds.map(()=>'?').join(',')}) AND completed_at IS NOT NULL AND confirmed_at IS NULL`).get(emp.id, ...itemIds).cnt : 0;
-    return { ...emp, completed: done, total, pending };
+    const rejected = itemIds.length > 0 ? db.prepare(`SELECT COUNT(*) as cnt FROM checklist_progress WHERE user_id = ? AND checklist_item_id IN (${itemIds.map(()=>'?').join(',')}) AND completed_at IS NULL AND rejection_comment IS NOT NULL`).get(emp.id, ...itemIds).cnt : 0;
+    return { ...emp, completed: done, total, pending, rejected };
   });
   res.json(result);
 });

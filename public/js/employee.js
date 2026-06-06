@@ -45,9 +45,10 @@ function renderChecklist(items) {
     const p = item.progress;
     const isConfirmed = !!p?.confirmed_at;
     const isCompleted = !!p?.completed_at;
+    const isRejected = !isCompleted && !isConfirmed && !!p?.rejection_comment;
     const el = document.createElement('div');
     el.className = 'checklist-item' + (isConfirmed ? ' completed' : '');
-    let statusIcon = isConfirmed ? '✓' : (isCompleted ? '⏳' : '');
+    let statusIcon = isConfirmed ? '✓' : (isCompleted ? '⏳' : (isRejected ? '✗' : ''));
     let actionBtn = '';
     if (!isConfirmed && !isCompleted) actionBtn = `<button class="btn btn-secondary btn-sm" onclick="completeItem(${item.id}, event)">Abhaken</button>`;
     else if (isCompleted && !isConfirmed) actionBtn = `<button class="btn btn-secondary btn-sm" onclick="uncompleteItem(${item.id})" style="font-size:12px;">Rückgängig</button>`;
@@ -57,12 +58,23 @@ function renderChecklist(items) {
         <span class="meta-badge">✓ Erledigt: ${new Date(p.completed_at+'Z').toLocaleString('de-DE',{dateStyle:'short',timeStyle:'short'})}</span>
         <span class="meta-badge" style="background:#000;color:#fff;">✓ Bestätigt: ${new Date(p.confirmed_at+'Z').toLocaleString('de-DE',{dateStyle:'short',timeStyle:'short'})} von ${escHtml(p.confirmed_by)}</span>
       </div>`;
+    } else if (isRejected) {
+      metaHtml = `<div class="item-meta" style="display:block;padding:10px 16px;">
+        <div style="background:#fff0f0;border:1px solid #ffcccc;border-radius:6px;padding:10px 12px;">
+          <div style="font-weight:700;color:#cc0000;font-size:13px;margin-bottom:4px;">✗ Abgelehnt – bitte erneut erledigen</div>
+          <div style="font-size:13px;color:#333;">💬 ${escHtml(p.rejection_comment)}</div>
+        </div>
+      </div>`;
     } else if (isCompleted) {
       metaHtml = `<div class="item-meta"><span class="meta-badge" style="background:#fff8e1;border:1px solid #f0c040;">⏳ Erledigt am ${new Date(p.completed_at+'Z').toLocaleString('de-DE',{dateStyle:'short',timeStyle:'short'})} – wartet auf Bestätigung</span></div>`;
     }
+    let iconStyle = '';
+    if (isConfirmed) iconStyle = '';
+    else if (isCompleted) iconStyle = 'border-color:#f0c040;color:#b8860b;';
+    else if (isRejected) iconStyle = 'border-color:#cc0000;color:#cc0000;background:#fff0f0;';
     el.innerHTML = `
       <div class="checklist-item-header">
-        <div class="status-icon" style="${isConfirmed?'':''}${isCompleted&&!isConfirmed?'border-color:#f0c040;color:#b8860b;':''}">${statusIcon}</div>
+        <div class="status-icon" style="${iconStyle}">${statusIcon}</div>
         <div style="flex:1;min-width:0;">
           <div class="item-title">${escHtml(item.title)}</div>
           ${item.description?`<div class="item-desc">${escHtml(item.description)}</div>`:''}

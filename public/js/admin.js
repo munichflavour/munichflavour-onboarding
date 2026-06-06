@@ -58,6 +58,7 @@ async function loadEmployees() {
           <div class="progress-fraction">${emp.completed}/${emp.total}</div>
           <div class="progress-bar-wrap progress-mini-bar" style="margin-top:4px;"><div class="progress-bar-fill" style="width:${pct}%"></div></div>
           ${emp.pending > 0 ? `<div style="margin-top:4px;background:#f0c040;color:#000;border-radius:4px;padding:2px 6px;font-size:11px;font-weight:700;text-align:center;">⏳ ${emp.pending} ausstehend</div>` : ''}
+          ${emp.rejected > 0 ? `<div style="margin-top:4px;background:#ffcccc;color:#cc0000;border-radius:4px;padding:2px 6px;font-size:11px;font-weight:700;text-align:center;">✗ ${emp.rejected} abgelehnt</div>` : ''}
         </div>
         <button class="btn btn-danger btn-sm" style="flex-shrink:0;" onclick="deleteEmployee(${emp.id},'${escHtml(emp.full_name)}')">🗑</button>
       </div>`;
@@ -114,10 +115,17 @@ async function showEmployeeDetail(id) {
     if (isCompleted && !isConfirmed) {
       actionHtml = `
         <div style="padding:12px 16px;border-top:1px solid var(--gray-mid);background:#fffbea;">
-          <div style="font-size:13px;color:#666;margin-bottom:8px;">⏳ Erledigt am ${new Date(p.completed_at+'Z').toLocaleString('de-DE',{dateStyle:'short',timeStyle:'short'})} – Bestätigung ausstehend</div>
+          <div style="font-size:13px;color:#666;margin-bottom:10px;">⏳ Erledigt am ${new Date(p.completed_at+'Z').toLocaleString('de-DE',{dateStyle:'short',timeStyle:'short'})} – Bestätigung ausstehend</div>
           <div style="display:flex;flex-direction:column;gap:8px;">
             <input type="text" id="confirmName-${item.id}" placeholder="Dein Name" style="width:100%;padding:12px;border:1.5px solid #ccc;border-radius:6px;font-size:16px;">
-            <button class="btn btn-primary btn-full" onclick="confirmItem(${user.id}, ${item.id})">Bestätigen</button>
+            <div style="display:flex;gap:8px;">
+              <button class="btn btn-primary" style="flex:1;" onclick="confirmItem(${user.id}, ${item.id})">✓ Bestätigen</button>
+              <button class="btn btn-danger" style="flex:1;" onclick="toggleRejectForm(${item.id})">✗ Ablehnen</button>
+            </div>
+            <div id="rejectForm-${item.id}" style="display:none;flex-direction:column;gap:8px;">
+              <textarea id="rejectComment-${item.id}" placeholder="Kommentar für den Mitarbeiter (Pflicht)..." rows="3" style="width:100%;padding:12px;border:1.5px solid #cc0000;border-radius:6px;font-size:15px;resize:none;"></textarea>
+              <button class="btn btn-danger btn-full" onclick="rejectItem(${user.id}, ${item.id})">Ablehnung absenden</button>
+            </div>
           </div>
         </div>`;
     } else if (isConfirmed) {
@@ -197,6 +205,23 @@ async function showEmployeeDetail(id) {
 function showEmployeeList() {
   document.getElementById('empDetailView').classList.add('hidden');
   document.getElementById('empListView').classList.remove('hidden');
+}
+
+function toggleRejectForm(itemId) {
+  const form = document.getElementById(`rejectForm-${itemId}`);
+  form.style.display = form.style.display === 'none' ? 'flex' : 'none';
+  if (form.style.display === 'flex') document.getElementById(`rejectComment-${itemId}`)?.focus();
+}
+
+async function rejectItem(userId, itemId) {
+  const comment = document.getElementById(`rejectComment-${itemId}`)?.value.trim();
+  if (!comment) { alert('Bitte einen Kommentar eingeben.'); return; }
+  const r = await apiFetch(`/api/admin/employees/${userId}/checklist/${itemId}/reject`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ comment })
+  });
+  if (r?.ok) showEmployeeDetail(userId);
+  else alert(r?.data?.error || 'Fehler');
 }
 
 async function confirmItem(userId, itemId) {
