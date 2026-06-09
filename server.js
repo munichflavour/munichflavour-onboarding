@@ -165,6 +165,20 @@ if (storedPublic && storedPrivate) {
 }
 webpush.setVapidDetails('mailto:admin@municflavour.de', vapidPublicKey, vapidPrivateKey);
 
+async function sendPushToUser(userId, title, body, url = '/employee.html') {
+  const subs = db.prepare('SELECT endpoint, p256dh, auth FROM push_subscriptions WHERE user_id = ?').all(userId);
+  const payload = JSON.stringify({ title, body, url });
+  for (const sub of subs) {
+    try {
+      await webpush.sendNotification({ endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } }, payload);
+    } catch (err) {
+      if (err.statusCode === 410 || err.statusCode === 404) {
+        db.prepare('DELETE FROM push_subscriptions WHERE endpoint = ?').run(sub.endpoint);
+      }
+    }
+  }
+}
+
 async function sendPushToAdmins(title, body, url = '/admin.html') {
   const subs = db.prepare(`
     SELECT ps.endpoint, ps.p256dh, ps.auth FROM push_subscriptions ps
@@ -331,6 +345,8 @@ app.post('/api/admin/employees/:userId/checklist/:itemId/confirm', requireAdmin,
   const progress = db.prepare('SELECT * FROM checklist_progress WHERE user_id = ? AND checklist_item_id = ?').get(req.params.userId, req.params.itemId);
   if (!progress) return res.status(400).json({ error: 'Noch nicht abgehakt' });
   db.prepare(`UPDATE checklist_progress SET confirmed_at = datetime('now'), confirmed_by = ? WHERE user_id = ? AND checklist_item_id = ?`).run(confirmed_by, req.params.userId, req.params.itemId);
+  const confirmedItem = db.prepare('SELECT title FROM checklist_items WHERE id = ?').get(req.params.itemId);
+  sendPushToUser(req.params.userId, '✅ Aufgabe bestätigt!', `„${confirmedItem?.title}" wurde von ${confirmed_by} bestätigt.`);
   res.json({ ok: true });
 });
 app.post('/api/admin/employees/:userId/checklist/:itemId/unconfirm', requireAdmin, (req, res) => {
@@ -343,6 +359,8 @@ app.post('/api/admin/employees/:userId/checklist/:itemId/reject', requireAdmin, 
   const { comment } = req.body;
   if (!comment || !comment.trim()) return res.status(400).json({ error: 'Kommentar erforderlich' });
   db.prepare(`UPDATE checklist_progress SET completed_at = NULL, confirmed_at = NULL, confirmed_by = NULL, rejection_comment = ?, rejected_at = datetime('now') WHERE user_id = ? AND checklist_item_id = ?`).run(comment.trim(), req.params.userId, req.params.itemId);
+  const rejectedItem = db.prepare('SELECT title FROM checklist_items WHERE id = ?').get(req.params.itemId);
+  sendPushToUser(req.params.userId, '❌ Aufgabe abgelehnt', `„${rejectedItem?.title}" wurde abgelehnt. Kommentar: ${comment.trim()}`);
   res.json({ ok: true });
 });
 
@@ -640,6 +658,7 @@ app.post('/api/admin/employees/:id/clothing', requireAdmin, (req, res) => {
   const rid = result.lastInsertRowid;
   const insItem = db.prepare('INSERT INTO clothing_record_items (record_id, name, size, quantity) VALUES (?, ?, ?, ?)');
   db.transaction(() => items.forEach(item => insItem.run(rid, item.name, item.size||'', item.quantity||1)))();
+  sendPushToUser(req.params.id, '👕 Neue Arbeitskleidung', `Dir wurde Arbeitskleidung ausgegeben. Bitte bestätige den Erhalt mit deiner Unterschrift.`);
   res.json({ id: rid });
 });
 

@@ -259,4 +259,59 @@ async function logout() { await fetch('/api/logout',{method:'POST'}); window.loc
 async function apiFetch(url) { const res=await fetch(url); if(res.status===401){window.location.href='/login.html';return null;} return res.json(); }
 function escHtml(str) { return String(str||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 
+// ===== PUSH NOTIFICATIONS =====
+function urlBase64ToUint8Array(base64String) {
+  const padding = '='.repeat((4 - base64String.length % 4) % 4);
+  const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+  const rawData = atob(base64);
+  return Uint8Array.from([...rawData].map(c => c.charCodeAt(0)));
+}
+
+async function initPushButton() {
+  const btn = document.getElementById('pushBtn');
+  if (!btn) return;
+  if (!('serviceWorker' in navigator) || !('PushManager' in window) || !('Notification' in window)) return;
+  btn.style.display = '';
+  try {
+    const reg = await navigator.serviceWorker.ready;
+    const sub = await reg.pushManager.getSubscription();
+    if (sub && Notification.permission === 'granted') {
+      btn.textContent = '🔔'; btn.title = 'Benachrichtigungen aktiv – tippen zum Deaktivieren'; btn.style.opacity = '1';
+      await fetch('/api/push/subscribe', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(sub.toJSON()) });
+    } else {
+      btn.textContent = '🔕'; btn.title = 'Benachrichtigungen aktivieren'; btn.style.opacity = '0.6';
+    }
+  } catch(e) { btn.style.display = 'none'; }
+}
+
+async function togglePush() {
+  if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
+    alert('Dein Browser unterstützt leider keine Push-Benachrichtigungen.\n\nAuf iOS: App muss zuerst zum Home-Bildschirm hinzugefügt werden.');
+    return;
+  }
+  try {
+    const reg = await navigator.serviceWorker.ready;
+    const existing = await reg.pushManager.getSubscription();
+    const btn = document.getElementById('pushBtn');
+    if (existing) {
+      await fetch('/api/push/subscribe', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ endpoint: existing.endpoint }) });
+      await existing.unsubscribe();
+      btn.textContent = '🔕'; btn.style.opacity = '0.6';
+      return;
+    }
+    const perm = await Notification.requestPermission();
+    if (perm === 'denied') { alert('Benachrichtigungen wurden blockiert.\n\nBitte in den Browser-Einstellungen für diese Seite erlauben.'); return; }
+    if (perm !== 'granted') return;
+    const keyRes = await fetch('/api/push/vapid-public-key');
+    const { key } = await keyRes.json();
+    const sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: urlBase64ToUint8Array(key) });
+    await fetch('/api/push/subscribe', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(sub.toJSON()) });
+    btn.textContent = '🔔'; btn.style.opacity = '1';
+    alert('✅ Benachrichtigungen aktiviert!');
+  } catch(err) {
+    alert('Fehler beim Aktivieren: ' + err.message);
+  }
+}
+
 init();
+initPushButton();
