@@ -1,37 +1,17 @@
-const CACHE_NAME = 'mf-onboarding-v3';
-const STATIC_ASSETS = [
-  '/login.html',
-  '/employee.html',
-  '/admin.html',
-  '/css/style.css',
-  '/js/login.js',
-  '/js/employee.js',
-  '/js/admin.js',
-  '/manifest.json'
-];
+// Service Worker – Munich Flavour Onboarding
+// No static caching: updates are always live immediately.
+// Only handles Web Push Notifications.
 
-self.addEventListener('install', event => {
-  event.waitUntil(
-    caches.open(CACHE_NAME).then(cache => cache.addAll(STATIC_ASSETS))
-  );
-  self.skipWaiting();
-});
-
+self.addEventListener('install', () => self.skipWaiting());
 self.addEventListener('activate', event => {
+  // Remove any old caches from previous versions
   event.waitUntil(
-    caches.keys().then(keys =>
-      Promise.all(keys.filter(k => k !== CACHE_NAME).map(k => caches.delete(k)))
-    )
+    caches.keys().then(keys => Promise.all(keys.map(k => caches.delete(k))))
   );
   self.clients.claim();
 });
 
-self.addEventListener('fetch', event => {
-  if (event.request.url.includes('/api/')) return;
-  event.respondWith(
-    caches.match(event.request).then(cached => cached || fetch(event.request))
-  );
-});
+// No fetch handler → all requests go straight to the network
 
 // ===== PUSH NOTIFICATIONS =====
 self.addEventListener('push', event => {
