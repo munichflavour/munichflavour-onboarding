@@ -143,7 +143,7 @@ db.exec(`
 `);
 
 // Migrations for existing DBs
-['confirmed_at TEXT', 'confirmed_by TEXT', 'rejection_comment TEXT'].forEach(col => {
+['confirmed_at TEXT', 'confirmed_by TEXT', 'rejection_comment TEXT', 'rejected_at TEXT'].forEach(col => {
   try { db.exec(`ALTER TABLE checklist_progress ADD COLUMN ${col}`); } catch(e) {}
 });
 try { db.exec(`ALTER TABLE users ADD COLUMN profile_id INTEGER`); } catch(e) {}
@@ -342,7 +342,7 @@ app.post('/api/admin/employees/:userId/checklist/:itemId/unconfirm', requireAdmi
 app.post('/api/admin/employees/:userId/checklist/:itemId/reject', requireAdmin, (req, res) => {
   const { comment } = req.body;
   if (!comment || !comment.trim()) return res.status(400).json({ error: 'Kommentar erforderlich' });
-  db.prepare(`UPDATE checklist_progress SET completed_at = NULL, confirmed_at = NULL, confirmed_by = NULL, rejection_comment = ? WHERE user_id = ? AND checklist_item_id = ?`).run(comment.trim(), req.params.userId, req.params.itemId);
+  db.prepare(`UPDATE checklist_progress SET completed_at = NULL, confirmed_at = NULL, confirmed_by = NULL, rejection_comment = ?, rejected_at = datetime('now') WHERE user_id = ? AND checklist_item_id = ?`).run(comment.trim(), req.params.userId, req.params.itemId);
   res.json({ ok: true });
 });
 

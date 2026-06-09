@@ -107,12 +107,30 @@ async function showEmployeeDetail(id) {
     const p = item.progress;
     const isConfirmed = !!p?.confirmed_at;
     const isCompleted = !!p?.completed_at;
+    const isRejected = !isCompleted && !isConfirmed && !!p?.rejection_comment;
+
     let borderStyle = 'border-color:var(--gray-mid)';
     if (isConfirmed) borderStyle = 'border-color:#000';
     else if (isCompleted) borderStyle = 'border-color:#f0c040';
-    let statusIcon = isConfirmed ? '✓' : (isCompleted ? '⏳' : '');
+    else if (isRejected) borderStyle = 'border-color:#cc0000';
+
+    let statusIcon = isConfirmed ? '✓' : (isCompleted ? '⏳' : (isRejected ? '✗' : ''));
+    let statusIconStyle = '';
+    if (isConfirmed) statusIconStyle = 'background:#000;border-color:#000;color:#fff;';
+    else if (isCompleted) statusIconStyle = 'border-color:#f0c040;color:#b8860b;';
+    else if (isRejected) statusIconStyle = 'background:#cc0000;border-color:#cc0000;color:#fff;';
+
     let actionHtml = '';
-    if (isCompleted && !isConfirmed) {
+    if (isRejected) {
+      const rejectedAtStr = p.rejected_at ? new Date(p.rejected_at+'Z').toLocaleString('de-DE',{dateStyle:'short',timeStyle:'short'}) : '';
+      actionHtml = `
+        <div style="padding:12px 16px;border-top:1px solid #ffcccc;background:#fff5f5;">
+          <div style="font-size:13px;font-weight:700;color:#cc0000;margin-bottom:6px;">✗ Abgelehnt${rejectedAtStr ? ' am '+rejectedAtStr : ''} – wartet auf erneute Erledigung</div>
+          <div style="background:#fff0f0;border:1px solid #ffcccc;border-radius:6px;padding:10px;font-size:13px;color:#880000;">
+            <span style="font-weight:700;">Kommentar:</span> ${escHtml(p.rejection_comment)}
+          </div>
+        </div>`;
+    } else if (isCompleted && !isConfirmed) {
       actionHtml = `
         <div style="padding:12px 16px;border-top:1px solid var(--gray-mid);background:#fffbea;">
           <div style="font-size:13px;color:#666;margin-bottom:10px;">⏳ Erledigt am ${new Date(p.completed_at+'Z').toLocaleString('de-DE',{dateStyle:'short',timeStyle:'short'})} – Bestätigung ausstehend</div>
@@ -139,7 +157,7 @@ async function showEmployeeDetail(id) {
     html += `
       <div class="admin-checklist-item" style="${borderStyle}">
         <div class="admin-item-header">
-          <div class="status-icon" style="${isConfirmed?'background:#000;border-color:#000;color:#fff;':isCompleted?'border-color:#f0c040;color:#b8860b;':''}">${statusIcon}</div>
+          <div class="status-icon" style="${statusIconStyle}">${statusIcon}</div>
           <div style="flex:1;min-width:0;">
             <div style="font-weight:600;font-size:15px;${isConfirmed?'text-decoration:line-through;color:#666;':''}">${escHtml(item.title)}</div>
             ${item.description ? `<div style="font-size:13px;color:#666;margin-top:2px;">${escHtml(item.description)}</div>` : ''}
