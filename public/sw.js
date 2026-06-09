@@ -1,4 +1,4 @@
-const CACHE_NAME = 'mf-onboarding-v2';
+const CACHE_NAME = 'mf-onboarding-v3';
 const STATIC_ASSETS = [
   '/login.html',
   '/employee.html',
@@ -27,11 +27,37 @@ self.addEventListener('activate', event => {
 });
 
 self.addEventListener('fetch', event => {
-  // API calls: network first, no cache
-  if (event.request.url.includes('/api/')) {
-    return;
-  }
+  if (event.request.url.includes('/api/')) return;
   event.respondWith(
     caches.match(event.request).then(cached => cached || fetch(event.request))
+  );
+});
+
+// ===== PUSH NOTIFICATIONS =====
+self.addEventListener('push', event => {
+  let data = { title: 'Munich Flavour', body: 'Neue Benachrichtigung', url: '/admin.html' };
+  try { data = event.data.json(); } catch(e) {}
+  event.waitUntil(
+    self.registration.showNotification(data.title, {
+      body: data.body,
+      icon: '/assets/logo.jpg',
+      badge: '/assets/logo.jpg',
+      data: { url: data.url },
+      vibrate: [200, 100, 200],
+      requireInteraction: false
+    })
+  );
+});
+
+self.addEventListener('notificationclick', event => {
+  event.notification.close();
+  const url = event.notification.data?.url || '/admin.html';
+  event.waitUntil(
+    clients.matchAll({ type: 'window', includeUncontrolled: true }).then(clientList => {
+      for (const client of clientList) {
+        if (client.url.includes(url) && 'focus' in client) return client.focus();
+      }
+      if (clients.openWindow) return clients.openWindow(url);
+    })
   );
 });

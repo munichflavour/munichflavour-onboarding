@@ -608,10 +608,50 @@ if (uploadZone) {
 function escHtml(str) { return String(str||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 function fmtDate(iso) { if(!iso) return ''; return new Date(iso).toLocaleDateString('de-DE'); }
 
-// Employee clothing sign view (for admin to see employee sig needed)
+// ===== PUSH NOTIFICATIONS =====
+async function initPushNotifications() {
+  if (!('serviceWorker' in navigator) || !('PushManager' in window)) return;
+  try {
+    const reg = await navigator.serviceWorker.ready;
+    // Check if already subscribed
+    let sub = await reg.pushManager.getSubscription();
+    if (sub) {
+      // Re-register subscription with server (in case of new session)
+      await fetch('/api/push/subscribe', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(sub.toJSON())
+      });
+      return;
+    }
+    // Request permission
+    const permission = await Notification.requestPermission();
+    if (permission !== 'granted') return;
+    // Get VAPID key
+    const keyRes = await fetch('/api/push/vapid-public-key');
+    const { key } = await keyRes.json();
+    const applicationServerKey = urlBase64ToUint8Array(key);
+    sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey });
+    await fetch('/api/push/subscribe', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(sub.toJSON())
+    });
+    console.log('✓ Push Notifications aktiviert');
+  } catch (err) {
+    console.warn('Push setup fehlgeschlagen:', err);
+  }
+}
+
+function urlBase64ToUint8Array(base64String) {
+  const padding = '='.repeat((4 - base64String.length % 4) % 4);
+  const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+  const rawData = atob(base64);
+  return Uint8Array.from([...rawData].map(c => c.charCodeAt(0)));
+}
+
 // Init
 (async () => {
   const r=await apiFetch('/api/me');
   if (!r||r.data.role!=='admin') { window.location.href='/login.html'; return; }
   loadEmployees();
+  initPushNotifications();
 })();

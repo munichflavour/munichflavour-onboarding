@@ -7,6 +7,7 @@ const PDFDocument = require('pdfkit');
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
+const webpush = require('web-push');
 
 const app = express();
 
@@ -124,6 +125,21 @@ db.exec(`
     returned INTEGER DEFAULT 0,
     FOREIGN KEY (record_id) REFERENCES clothing_records(id)
   );
+
+  CREATE TABLE IF NOT EXISTS push_subscriptions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    endpoint TEXT NOT NULL UNIQUE,
+    p256dh TEXT NOT NULL,
+    auth TEXT NOT NULL,
+    created_at TEXT DEFAULT (datetime('now')),
+    FOREIGN KEY (user_id) REFERENCES users(id)
+  );
+
+  CREATE TABLE IF NOT EXISTS settings (
+    key TEXT PRIMARY KEY,
+    value TEXT NOT NULL
+  );
 `);
 
 // Migrations for existing DBs
@@ -131,6 +147,40 @@ db.exec(`
   try { db.exec(`ALTER TABLE checklist_progress ADD COLUMN ${col}`); } catch(e) {}
 });
 try { db.exec(`ALTER TABLE users ADD COLUMN profile_id INTEGER`); } catch(e) {}
+
+// ===== VAPID SETUP =====
+let vapidPublicKey, vapidPrivateKey;
+const storedPublic = db.prepare("SELECT value FROM settings WHERE key = 'vapid_public'").get();
+const storedPrivate = db.prepare("SELECT value FROM settings WHERE key = 'vapid_private'").get();
+if (storedPublic && storedPrivate) {
+  vapidPublicKey = storedPublic.value;
+  vapidPrivateKey = storedPrivate.value;
+} else {
+  const keys = webpush.generateVAPIDKeys();
+  vapidPublicKey = keys.publicKey;
+  vapidPrivateKey = keys.privateKey;
+  db.prepare("INSERT OR REPLACE INTO settings (key, value) VALUES ('vapid_public', ?)").run(vapidPublicKey);
+  db.prepare("INSERT OR REPLACE INTO settings (key, value) VALUES ('vapid_private', ?)").run(vapidPrivateKey);
+  console.log('✓ VAPID Keys generiert und gespeichert');
+}
+webpush.setVapidDetails('mailto:admin@municflavour.de', vapidPublicKey, vapidPrivateKey);
+
+async function sendPushToAdmins(title, body, url = '/admin.html') {
+  const subs = db.prepare(`
+    SELECT ps.endpoint, ps.p256dh, ps.auth FROM push_subscriptions ps
+    JOIN users u ON u.id = ps.user_id WHERE u.role = 'admin'
+  `).all();
+  const payload = JSON.stringify({ title, body, url });
+  for (const sub of subs) {
+    try {
+      await webpush.sendNotification({ endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } }, payload);
+    } catch (err) {
+      if (err.statusCode === 410 || err.statusCode === 404) {
+        db.prepare('DELETE FROM push_subscriptions WHERE endpoint = ?').run(sub.endpoint);
+      }
+    }
+  }
+}
 
 // Multer
 const adminStorage = multer.diskStorage({
@@ -166,6 +216,22 @@ function requireAdmin(req, res, next) {
   if (!req.session.userId || req.session.role !== 'admin') return res.status(403).json({ error: 'Kein Zugriff' });
   next();
 }
+
+// ===== PUSH NOTIFICATIONS =====
+app.get('/api/push/vapid-public-key', (req, res) => res.json({ key: vapidPublicKey }));
+
+app.post('/api/push/subscribe', requireAuth, (req, res) => {
+  const { endpoint, keys } = req.body;
+  if (!endpoint || !keys?.p256dh || !keys?.auth) return res.status(400).json({ error: 'Ungültige Subscription' });
+  db.prepare('INSERT OR REPLACE INTO push_subscriptions (user_id, endpoint, p256dh, auth) VALUES (?, ?, ?, ?)').run(req.session.userId, endpoint, keys.p256dh, keys.auth);
+  res.json({ ok: true });
+});
+
+app.delete('/api/push/subscribe', requireAuth, (req, res) => {
+  const { endpoint } = req.body;
+  if (endpoint) db.prepare('DELETE FROM push_subscriptions WHERE user_id = ? AND endpoint = ?').run(req.session.userId, endpoint);
+  res.json({ ok: true });
+});
 
 // ===== AUTH =====
 app.post('/api/login', (req, res) => {
@@ -247,6 +313,8 @@ app.post('/api/employee/checklist/:itemId/complete', requireAuth, (req, res) => 
   db.prepare(`INSERT INTO checklist_progress (user_id, checklist_item_id, completed_at)
     VALUES (?, ?, datetime('now'))
     ON CONFLICT(user_id, checklist_item_id) DO UPDATE SET completed_at = datetime('now')`).run(req.session.userId, req.params.itemId);
+  const user = db.prepare('SELECT full_name FROM users WHERE id = ?').get(req.session.userId);
+  sendPushToAdmins('✅ Aufgabe abgehakt', `${user.full_name} hat „${item.title}" als erledigt markiert.`, '/admin.html');
   res.json({ ok: true });
 });
 app.post('/api/employee/checklist/:itemId/uncomplete', requireAuth, (req, res) => {
@@ -497,6 +565,8 @@ app.get('/api/employee/uploads', requireAuth, (req, res) => res.json(db.prepare(
 app.post('/api/employee/uploads', requireAuth, employeeUpload.single('file'), (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'Keine Datei' });
   const result = db.prepare('INSERT INTO employee_uploads (user_id, original_name, stored_name) VALUES (?, ?, ?)').run(req.session.userId, req.file.originalname, req.file.filename);
+  const user = db.prepare('SELECT full_name FROM users WHERE id = ?').get(req.session.userId);
+  sendPushToAdmins('📄 Neues Dokument', `${user.full_name} hat „${req.file.originalname}" hochgeladen.`, '/admin.html');
   res.json({ id: result.lastInsertRowid });
 });
 app.get('/api/employee/uploads/:id/download', requireAuth, (req, res) => {
@@ -551,6 +621,8 @@ app.post('/api/employee/clothing/:recordId/sign', requireAuth, (req, res) => {
   if (!record || record.user_id !== req.session.userId) return res.status(403).json({ error: 'Kein Zugriff' });
   if (record.employee_signed_at) return res.status(400).json({ error: 'Bereits unterschrieben' });
   db.prepare(`UPDATE clothing_records SET employee_signature = ?, employee_signed_at = datetime('now') WHERE id = ?`).run(employee_signature, req.params.recordId);
+  const user = db.prepare('SELECT full_name FROM users WHERE id = ?').get(req.session.userId);
+  sendPushToAdmins('👕 Kleidung unterschrieben', `${user.full_name} hat den Erhalt der Arbeitskleidung bestätigt.`, '/admin.html');
   res.json({ ok: true });
 });
 
@@ -580,6 +652,8 @@ app.post('/api/employee/clothing/:recordId/return-sign', requireAuth, (req, res)
   const record = db.prepare('SELECT * FROM clothing_records WHERE id = ?').get(req.params.recordId);
   if (!record || record.user_id !== req.session.userId) return res.status(403).json({ error: 'Kein Zugriff' });
   db.prepare(`UPDATE clothing_records SET return_employee_signature = ?, return_employee_signed_at = datetime('now') WHERE id = ?`).run(return_employee_signature, req.params.recordId);
+  const user = db.prepare('SELECT full_name FROM users WHERE id = ?').get(req.session.userId);
+  sendPushToAdmins('👕 Rückgabe bestätigt', `${user.full_name} hat die Rückgabe der Arbeitskleidung unterschrieben.`, '/admin.html');
   res.json({ ok: true });
 });
 
