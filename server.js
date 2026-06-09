@@ -512,9 +512,10 @@ app.put('/api/admin/checklist/:id', requireAdmin, (req, res) => {
   res.json({ ok: true });
 });
 app.delete('/api/admin/checklist/:id', requireAdmin, (req, res) => {
-  db.prepare('DELETE FROM checklist_items WHERE id = ?').run(req.params.id);
+  // Delete dependent rows first, then the item itself
   db.prepare('DELETE FROM checklist_progress WHERE checklist_item_id = ?').run(req.params.id);
   db.prepare('DELETE FROM profile_checklist_items WHERE checklist_item_id = ?').run(req.params.id);
+  db.prepare('DELETE FROM checklist_items WHERE id = ?').run(req.params.id);
   res.json({ ok: true });
 });
 app.post('/api/admin/checklist/reorder', requireAdmin, (req, res) => {

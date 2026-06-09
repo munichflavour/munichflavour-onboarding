@@ -432,8 +432,9 @@ async function saveItem() {
 }
 async function deleteItem(id) {
   const item = checklistItems.find(i=>i.id===id);
-  if (!confirm(`"${item?.title}" löschen?`)) return;
-  await apiFetch(`/api/admin/checklist/${id}`, { method:'DELETE' });
+  if (!confirm(`"${item?.title}" löschen?\n\nAlle Fortschritte der Mitarbeiter für diesen Punkt werden ebenfalls gelöscht.`)) return;
+  const r = await apiFetch(`/api/admin/checklist/${id}`, { method:'DELETE' });
+  if (!r?.ok) { alert(r?.data?.error || 'Fehler beim Löschen'); return; }
   loadChecklistEditor();
 }
 
