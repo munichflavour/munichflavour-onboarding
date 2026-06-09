@@ -12,13 +12,24 @@ let activeReturnRecordId = null;
 let activeReturnUserId = null;
 
 // ===== Navigation =====
+let autoRefreshTimer = null;
+
 function showTab(tab) {
   ['employees','profiles','checklist','stats','documents'].forEach(t => {
     document.getElementById(`view-${t}`).classList.toggle('hidden', t !== tab);
     document.getElementById(`tab-${t}`).classList.toggle('active', t === tab);
   });
+  // Stop any existing auto-refresh
+  if (autoRefreshTimer) { clearInterval(autoRefreshTimer); autoRefreshTimer = null; }
   if (tab === 'checklist') loadChecklistEditor();
-  if (tab === 'employees') loadEmployees();
+  if (tab === 'employees') {
+    loadEmployees();
+    // Auto-refresh every 30s while on this tab
+    autoRefreshTimer = setInterval(() => {
+      const listVisible = !document.getElementById('empListView').classList.contains('hidden');
+      if (listVisible) loadEmployees();
+    }, 30000);
+  }
   if (tab === 'documents') loadDocuments();
   if (tab === 'profiles') loadProfiles();
   if (tab === 'stats') loadStats();
