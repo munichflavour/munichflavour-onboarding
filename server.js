@@ -496,6 +496,34 @@ app.delete('/api/admin/employees/:id', requireAdmin, (req, res) => {
   res.json({ ok: true });
 });
 
+// ===== ADMIN: CHECKLIST STATS =====
+app.get('/api/admin/stats/checklist', requireAdmin, (req, res) => {
+  const items = db.prepare('SELECT * FROM checklist_items ORDER BY order_index ASC').all();
+  const employees = db.prepare(`SELECT u.id, u.full_name, u.profile_id FROM users u WHERE u.role = 'employee'`).all();
+
+  const result = items.map(item => {
+    const confirmed = [], pending = [], rejected = [], open = [];
+
+    employees.forEach(emp => {
+      // Check if this item is relevant for this employee
+      if (emp.profile_id) {
+        const inProfile = db.prepare('SELECT 1 FROM profile_checklist_items WHERE profile_id = ? AND checklist_item_id = ?').get(emp.profile_id, item.id);
+        if (!inProfile) return; // item not in this employee's profile
+      }
+      const p = db.prepare('SELECT * FROM checklist_progress WHERE user_id = ? AND checklist_item_id = ?').get(emp.id, item.id);
+      const entry = { id: emp.id, full_name: emp.full_name };
+      if (p?.confirmed_at) confirmed.push(entry);
+      else if (p?.completed_at) pending.push(entry);
+      else if (p?.rejection_comment) rejected.push(entry);
+      else open.push(entry);
+    });
+
+    return { ...item, confirmed, pending, rejected, open };
+  });
+
+  res.json(result);
+});
+
 // ===== ADMIN: CHECKLIST EDITOR =====
 app.get('/api/admin/checklist', requireAdmin, (req, res) => res.json(db.prepare('SELECT * FROM checklist_items ORDER BY order_index ASC').all()));
 app.post('/api/admin/checklist', requireAdmin, (req, res) => {

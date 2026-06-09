@@ -13,7 +13,7 @@ let activeReturnUserId = null;
 
 // ===== Navigation =====
 function showTab(tab) {
-  ['employees','profiles','checklist','documents'].forEach(t => {
+  ['employees','profiles','checklist','stats','documents'].forEach(t => {
     document.getElementById(`view-${t}`).classList.toggle('hidden', t !== tab);
     document.getElementById(`tab-${t}`).classList.toggle('active', t === tab);
   });
@@ -21,6 +21,7 @@ function showTab(tab) {
   if (tab === 'employees') loadEmployees();
   if (tab === 'documents') loadDocuments();
   if (tab === 'profiles') loadProfiles();
+  if (tab === 'stats') loadStats();
 }
 
 async function logout() { await fetch('/api/logout', { method: 'POST' }); window.location.href = '/login.html'; }
@@ -373,6 +374,58 @@ async function deleteProfile(id, name) {
   if (!confirm(`Profil "${name}" löschen? Mitarbeiter mit diesem Profil sehen dann alle Aufgaben.`)) return;
   await apiFetch(`/api/admin/profiles/${id}`, { method:'DELETE' });
   loadProfiles();
+}
+
+// ===== AUSWERTUNG =====
+async function loadStats() {
+  const container = document.getElementById('statsContainer');
+  container.innerHTML = '<div style="padding:40px;text-align:center;"><span class="spinner" style="border-color:rgba(0,0,0,0.2);border-top-color:#000;"></span></div>';
+  const r = await apiFetch('/api/admin/stats/checklist');
+  if (!r) return;
+  const items = r.data;
+  if (!items.length) {
+    container.innerHTML = '<div class="card" style="text-align:center;color:#888;padding:32px;">Keine Checklistenpunkte vorhanden.</div>';
+    return;
+  }
+  container.innerHTML = items.map(item => {
+    const total = item.confirmed.length + item.pending.length + item.rejected.length + item.open.length;
+    const pct = total ? Math.round(item.confirmed.length / total * 100) : 0;
+
+    const nameList = (arr, color, icon) => arr.length
+      ? arr.map(e => `<span style="display:inline-flex;align-items:center;gap:4px;background:${color};border-radius:20px;padding:3px 10px;font-size:12px;margin:2px;">${icon} ${escHtml(e.full_name)}</span>`).join('')
+      : '';
+
+    const sections = [
+      { arr: item.open,      color: '#f0f0f0', icon: '⬜', label: 'Noch offen' },
+      { arr: item.rejected,  color: '#ffeeee', icon: '✗',  label: 'Abgelehnt' },
+      { arr: item.pending,   color: '#fffbea', icon: '⏳', label: 'Warte auf Bestätigung' },
+      { arr: item.confirmed, color: '#e8f5e9', icon: '✓',  label: 'Bestätigt' },
+    ].filter(s => s.arr.length > 0);
+
+    return `
+      <div class="card" style="margin-bottom:14px;">
+        <div style="font-weight:700;font-size:16px;margin-bottom:10px;">${escHtml(item.title)}</div>
+
+        <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:10px;font-size:13px;">
+          <span style="display:flex;align-items:center;gap:4px;"><span style="width:10px;height:10px;border-radius:50%;background:#4caf50;display:inline-block;"></span> ${item.confirmed.length} bestätigt</span>
+          <span style="display:flex;align-items:center;gap:4px;"><span style="width:10px;height:10px;border-radius:50%;background:#f0c040;display:inline-block;"></span> ${item.pending.length} ausstehend</span>
+          <span style="display:flex;align-items:center;gap:4px;"><span style="width:10px;height:10px;border-radius:50%;background:#e57373;display:inline-block;"></span> ${item.rejected.length} abgelehnt</span>
+          <span style="display:flex;align-items:center;gap:4px;"><span style="width:10px;height:10px;border-radius:50%;background:#ccc;display:inline-block;"></span> ${item.open.length} offen</span>
+        </div>
+
+        <div style="background:#eee;border-radius:99px;height:8px;margin-bottom:12px;overflow:hidden;">
+          <div style="height:100%;width:${pct}%;background:#000;border-radius:99px;transition:width 0.3s;"></div>
+        </div>
+
+        ${sections.map(s => `
+          <div style="margin-bottom:8px;">
+            <div style="font-size:12px;font-weight:600;color:#666;margin-bottom:4px;text-transform:uppercase;letter-spacing:0.5px;">${s.icon} ${s.label} (${s.arr.length})</div>
+            <div style="display:flex;flex-wrap:wrap;gap:4px;">
+              ${nameList(s.arr, s.color, s.icon)}
+            </div>
+          </div>`).join('')}
+      </div>`;
+  }).join('');
 }
 
 // ===== CHECKLIST EDITOR =====

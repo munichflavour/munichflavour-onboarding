@@ -50,6 +50,7 @@
       <button class="tab-btn active" onclick="showTab('employees')" id="tab-employees">Mitarbeiter</button>
       <button class="tab-btn" onclick="showTab('profiles')" id="tab-profiles">Profile</button>
       <button class="tab-btn" onclick="showTab('checklist')" id="tab-checklist">Checkliste</button>
+      <button class="tab-btn" onclick="showTab('stats')" id="tab-stats">Auswertung</button>
       <button class="tab-btn" onclick="showTab('documents')" id="tab-documents">Dokumente</button>
     </div>
 
@@ -88,6 +89,14 @@
       </div>
       <div id="checklistEditorList"></div>
       <p style="font-size:13px;color:#888;margin-top:8px;">Per Drag & Drop sortieren.</p>
+    </div>
+
+    <!-- AUSWERTUNG -->
+    <div id="view-stats" class="hidden">
+      <div class="section-title">Schulungsübersicht</div>
+      <div id="statsContainer">
+        <div style="padding:40px;text-align:center;"><span class="spinner" style="border-color:rgba(0,0,0,0.2);border-top-color:#000;"></span></div>
+      </div>
     </div>
 
     <!-- DOCUMENTS -->
