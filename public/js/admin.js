@@ -627,38 +627,6 @@ function escHtml(str) { return String(str||'').replace(/&/g,'&amp;').replace(/</
 function fmtDate(iso) { if(!iso) return ''; return new Date(iso).toLocaleDateString('de-DE'); }
 
 // ===== PUSH NOTIFICATIONS =====
-async function initPushNotifications() {
-  if (!('serviceWorker' in navigator) || !('PushManager' in window)) return;
-  try {
-    const reg = await navigator.serviceWorker.ready;
-    // Check if already subscribed
-    let sub = await reg.pushManager.getSubscription();
-    if (sub) {
-      // Re-register subscription with server (in case of new session)
-      await fetch('/api/push/subscribe', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(sub.toJSON())
-      });
-      return;
-    }
-    // Request permission
-    const permission = await Notification.requestPermission();
-    if (permission !== 'granted') return;
-    // Get VAPID key
-    const keyRes = await fetch('/api/push/vapid-public-key');
-    const { key } = await keyRes.json();
-    const applicationServerKey = urlBase64ToUint8Array(key);
-    sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey });
-    await fetch('/api/push/subscribe', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(sub.toJSON())
-    });
-    console.log('✓ Push Notifications aktiviert');
-  } catch (err) {
-    console.warn('Push setup fehlgeschlagen:', err);
-  }
-}
-
 function urlBase64ToUint8Array(base64String) {
   const padding = '='.repeat((4 - base64String.length % 4) % 4);
   const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
@@ -666,10 +634,82 @@ function urlBase64ToUint8Array(base64String) {
   return Uint8Array.from([...rawData].map(c => c.charCodeAt(0)));
 }
 
+async function initPushButton() {
+  const btn = document.getElementById('pushBtn');
+  if (!btn) return;
+  // Check support
+  if (!('serviceWorker' in navigator) || !('PushManager' in window) || !('Notification' in window)) {
+    // Not supported – hide button silently
+    return;
+  }
+  btn.style.display = '';
+  await updatePushButton();
+}
+
+async function updatePushButton() {
+  const btn = document.getElementById('pushBtn');
+  if (!btn) return;
+  try {
+    const reg = await navigator.serviceWorker.ready;
+    const sub = await reg.pushManager.getSubscription();
+    const perm = Notification.permission;
+    if (sub && perm === 'granted') {
+      btn.textContent = '🔔';
+      btn.title = 'Benachrichtigungen aktiv – tippen zum Deaktivieren';
+      btn.style.opacity = '1';
+      // Keep subscription synced with server
+      await fetch('/api/push/subscribe', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(sub.toJSON())
+      });
+    } else {
+      btn.textContent = '🔕';
+      btn.title = 'Benachrichtigungen aktivieren';
+      btn.style.opacity = '0.6';
+    }
+  } catch(e) {
+    btn.style.display = 'none';
+  }
+}
+
+async function togglePush() {
+  if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
+    alert('Dein Browser unterstützt leider keine Push-Benachrichtigungen.\n\nAuf iOS: App muss zuerst zum Home-Bildschirm hinzugefügt werden.');
+    return;
+  }
+  try {
+    const reg = await navigator.serviceWorker.ready;
+    const existing = await reg.pushManager.getSubscription();
+    if (existing) {
+      // Deactivate
+      await fetch('/api/push/subscribe', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ endpoint: existing.endpoint }) });
+      await existing.unsubscribe();
+      await updatePushButton();
+      return;
+    }
+    // Activate – request permission first
+    const perm = await Notification.requestPermission();
+    if (perm === 'denied') {
+      alert('Benachrichtigungen wurden blockiert.\n\nBitte in den Browser-Einstellungen für diese Seite erlauben.');
+      return;
+    }
+    if (perm !== 'granted') return;
+    const keyRes = await fetch('/api/push/vapid-public-key');
+    const { key } = await keyRes.json();
+    const sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: urlBase64ToUint8Array(key) });
+    await fetch('/api/push/subscribe', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(sub.toJSON()) });
+    await updatePushButton();
+    alert('✅ Benachrichtigungen aktiviert!');
+  } catch(err) {
+    console.error('Push error:', err);
+    alert('Fehler beim Aktivieren: ' + err.message);
+  }
+}
+
 // Init
 (async () => {
   const r=await apiFetch('/api/me');
   if (!r||r.data.role!=='admin') { window.location.href='/login.html'; return; }
   loadEmployees();
-  initPushNotifications();
+  initPushButton();
 })();
