@@ -122,13 +122,26 @@ async function showEmployeeDetail(id) {
     else if (isRejected) statusIconStyle = 'background:#cc0000;border-color:#cc0000;color:#fff;';
 
     let actionHtml = '';
-    if (isRejected) {
+    if (!p && !isCompleted && !isConfirmed) {
+      // Completely open – no progress at all
+      actionHtml = `
+        <div style="padding:12px 16px;border-top:1px solid var(--gray-mid);background:#fafafa;">
+          <div style="display:flex;flex-direction:column;gap:8px;">
+            <input type="text" id="confirmName-${item.id}" placeholder="Dein Name" style="width:100%;padding:12px;border:1.5px solid #ccc;border-radius:6px;font-size:16px;">
+            <button class="btn btn-primary" onclick="adminCompleteConfirm(${user.id}, ${item.id})">✓ Für Mitarbeiter abhaken & bestätigen</button>
+          </div>
+        </div>`;
+    } else if (isRejected) {
       const rejectedAtStr = p.rejected_at ? new Date(p.rejected_at+'Z').toLocaleString('de-DE',{dateStyle:'short',timeStyle:'short'}) : '';
       actionHtml = `
         <div style="padding:12px 16px;border-top:1px solid #ffcccc;background:#fff5f5;">
           <div style="font-size:13px;font-weight:700;color:#cc0000;margin-bottom:6px;">✗ Abgelehnt${rejectedAtStr ? ' am '+rejectedAtStr : ''} – wartet auf erneute Erledigung</div>
-          <div style="background:#fff0f0;border:1px solid #ffcccc;border-radius:6px;padding:10px;font-size:13px;color:#880000;">
+          <div style="background:#fff0f0;border:1px solid #ffcccc;border-radius:6px;padding:10px;font-size:13px;color:#880000;margin-bottom:10px;">
             <span style="font-weight:700;">Kommentar:</span> ${escHtml(p.rejection_comment)}
+          </div>
+          <div style="display:flex;flex-direction:column;gap:8px;">
+            <input type="text" id="confirmName-${item.id}" placeholder="Dein Name" style="width:100%;padding:12px;border:1.5px solid #ccc;border-radius:6px;font-size:16px;">
+            <button class="btn btn-primary" onclick="adminCompleteConfirm(${user.id}, ${item.id})">✓ Trotzdem abhaken & bestätigen</button>
           </div>
         </div>`;
     } else if (isCompleted && !isConfirmed) {
@@ -250,6 +263,17 @@ async function confirmItem(userId, itemId) {
   const r = await apiFetch(`/api/admin/employees/${userId}/checklist/${itemId}/confirm`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ confirmed_by: name }) });
   if (r?.ok) showEmployeeDetail(userId); else alert(r?.data?.error || 'Fehler');
 }
+async function adminCompleteConfirm(userId, itemId) {
+  const input = document.getElementById(`confirmName-${itemId}`);
+  const name = input?.value.trim();
+  if (!name) { input.style.borderColor='red'; input.focus(); return; }
+  const r = await apiFetch(`/api/admin/employees/${userId}/checklist/${itemId}/complete-confirm`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ confirmed_by: name })
+  });
+  if (r?.ok) showEmployeeDetail(userId); else alert(r?.data?.error || 'Fehler');
+}
+
 async function unconfirmItem(userId, itemId) {
   if (!confirm('Bestätigung zurücksetzen?')) return;
   const r = await apiFetch(`/api/admin/employees/${userId}/checklist/${itemId}/unconfirm`, { method:'POST' });

@@ -349,6 +349,19 @@ app.post('/api/admin/employees/:userId/checklist/:itemId/confirm', requireAdmin,
   sendPushToUser(req.params.userId, '✅ Aufgabe bestätigt!', `„${confirmedItem?.title}" wurde von ${confirmed_by} bestätigt.`);
   res.json({ ok: true });
 });
+// Admin: check off + confirm in one step
+app.post('/api/admin/employees/:userId/checklist/:itemId/complete-confirm', requireAdmin, (req, res) => {
+  const { confirmed_by } = req.body;
+  if (!confirmed_by) return res.status(400).json({ error: 'Name erforderlich' });
+  db.prepare(`INSERT INTO checklist_progress (user_id, checklist_item_id, completed_at, confirmed_at, confirmed_by)
+    VALUES (?, ?, datetime('now'), datetime('now'), ?)
+    ON CONFLICT(user_id, checklist_item_id) DO UPDATE SET
+      completed_at = datetime('now'), confirmed_at = datetime('now'), confirmed_by = ?,
+      rejection_comment = NULL, rejected_at = NULL`
+  ).run(req.params.userId, req.params.itemId, confirmed_by, confirmed_by);
+  res.json({ ok: true });
+});
+
 app.post('/api/admin/employees/:userId/checklist/:itemId/unconfirm', requireAdmin, (req, res) => {
   db.prepare('UPDATE checklist_progress SET confirmed_at = NULL, confirmed_by = NULL WHERE user_id = ? AND checklist_item_id = ?').run(req.params.userId, req.params.itemId);
   res.json({ ok: true });
