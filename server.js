@@ -523,6 +523,7 @@ app.delete('/api/admin/employees/:id', requireAdmin, (req, res) => {
   db.prepare('DELETE FROM employee_uploads WHERE user_id = ?').run(req.params.id);
   db.prepare('DELETE FROM clothing_record_items WHERE record_id IN (SELECT id FROM clothing_records WHERE user_id = ?)').run(req.params.id);
   db.prepare('DELETE FROM clothing_records WHERE user_id = ?').run(req.params.id);
+  db.prepare('DELETE FROM push_subscriptions WHERE user_id = ?').run(req.params.id);
   db.prepare('DELETE FROM users WHERE id = ?').run(req.params.id);
   res.json({ ok: true });
 });
