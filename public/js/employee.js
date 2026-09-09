@@ -27,10 +27,10 @@ function renderBrowser() {
   const folderTitle = document.getElementById('folderTitle');
 
   if (currentFolderId) {
-    breadcrumbRow.style.display = 'flex';
+    breadcrumbRow.classList.remove('hidden');
     folderTitle.textContent = folder?.name || '';
   } else {
-    breadcrumbRow.style.display = 'none';
+    breadcrumbRow.classList.add('hidden');
   }
 
   // Sub-folders

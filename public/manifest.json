@@ -1,7 +1,7 @@
 {
-  "name": "Munich Flavour Onboarding",
-  "short_name": "MF Onboarding",
-  "description": "Mitarbeiter-Onboarding für Munich Flavour",
+  "name": "MF Portal",
+  "short_name": "MF Portal",
+  "description": "Mitarbeiterportal für Munich Flavour – Anleitungen, Rezepte und mehr",
   "start_url": "/login.html",
   "display": "standalone",
   "background_color": "#ffffff",
