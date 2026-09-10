@@ -1,30 +1,26 @@
-# MF Portal: Wissen, das im Einsatz hilft
+# MF Portal: Dokumente für den Einsatz
 
-## Einschätzung
-Der Dokumentenbrowser ist eine gute Grundlage. Ein Dateilager allein hilft neuen Mitarbeitenden aber nur, wenn sie bereits wissen, wonach sie suchen. Der Mehrwert liegt in drei Aufgaben: auf das erste Event vorbereiten, während des Einsatzes schnell nachschlagen und Abläufe durch Wiederholung lernen.
+Das Portal dient zum schnellen Nachlesen von Anleitungen und Rezepten auf dem Handy. Mitarbeiterplanung und Einsatzorganisation bleiben in der bereits genutzten anderen App. Im Portal gibt es Ordner, Suche, Dokumentenansicht und Download; keine Lernrunden oder Wissensprüfungen.
 
-Die neue Startansicht bietet vier Einstiege mit passenden vorhandenen Dokumenten. Der Lernmodus verbindet Lesen, Abrufen aus dem Gedächtnis und Selbstvergleich. Er bewertet keine Antworten automatisch und ist kein Qualifikationsnachweis. Es werden weder Lernfortschritte noch Antworten gespeichert.
+## Inhaltliche Prioritäten
 
-## Welche Unterlagen bereitstehen sollten
+1. **Aktuelle Rezeptkarten:** Cocktails und alkoholfreie Drinks aus dem tatsächlich angebotenen Menü, danach Kaffee, Matcha und Smoothies entsprechend eurem Sortiment. Je Karte: Zutaten, exakte Mengen pro Portion, Zubereitung, Glas, Eis, Garnitur und ein Foto. Nur intern freigegebene Rezepturen verwenden.
+2. **Aufbau und Abbau:** Bebilderte Schrittfolgen pro Barkonzept, benötigte Teile und typische Fehler.
+3. **Geräte:** Kurzanleitungen für tatsächlich eingesetzte Kaffeemaschinen, Mühlen, Mixer und weitere Geräte; vollständige Herstelleranleitungen ergänzend.
+4. **Reinigung und Hygiene:** Geprüfte Abläufe je Gerät und Arbeitsbereich sowie aktuelle Produkt- und Allergeninformationen.
+5. **Fehlerhilfe:** Häufige Probleme im Einsatz und intern abgestimmte Handlungsschritte, einschließlich zuständiger Ansprechpartner.
 
-| Bereich | Priorisierte Inhalte | Praktischer Nutzen |
-| --- | --- | --- |
-| Mein erstes Event | Eine Seite „Mein erster Einsatz“, Rentman-Kurzanleitung, Treffpunkt-/Kontaktweg, Kleidung und mitzubringende Ausstattung, Ablauf vor/während/nach dem Event | Sicherheit über Erwartungen und Vorbereitung |
-| Rezepte | Aktuelle freigegebene Rezeptkarten für Cocktails, Kaffee, Matcha und Smoothies: Mengen, Portionen, Technik, Glas, Eis, Garnitur, Foto und Varianten | Einheitliche Qualität und schnelles Nachschlagen |
-| Aufbau & Geräte | Bebilderte Aufbaufolgen je Barkonzept, Packlisten, Geräte-Kurzanleitungen und Herstellerhandbücher, Abbau und Reinigung | Weniger Rückfragen und vermeidbare Fehler |
-| Sicher arbeiten | Intern geprüfte Hygiene-/Reinigungsvorgaben, aktuelle Produkt- und Allergeninformationen, Notfallkontakte und Vorgehen bei Störungen | Verlässliche Information am richtigen Ort |
-| Service | Begrüßung, Umgang mit Reklamationen, Übergabe an die Einsatzleitung, typische Gästefragen | Konkrete Handlungshilfe im Gästekontakt |
+## Vorgeschlagene Ordner
 
-Das sind Inhaltsvorschläge, keine bereits vorhandenen oder freigegebenen Betriebsanweisungen. Fachliche Inhalte und eigene Rezepturen müssen vom Betrieb bereitgestellt und geprüft werden.
+- Rezepte: Cocktails, Alkoholfrei, Kaffee, Matcha & Smoothies
+- Barkonzepte: je Konzept Aufbau und Abbau
+- Geräte: je Gerät Bedienung und Reinigung
+- Hygiene & Produktinformationen
 
-## So werden Unterlagen lernbar
-- Pro Rezept oder Aufgabe eine kurze, auf dem Handy lesbare Karte; längere Handbücher als Ergänzung.
-- Erst das Ergebnis zeigen, dann Material/Zutaten, nummerierte Schritte und häufige Fehler.
-- Aussagekräftiger Dateiname und Beschreibung; zum Beispiel „Cocktail – [Name] – Rezeptkarte“.
-- Verantwortliche Person, Version und Gültigkeitsdatum auf dem Dokument; veraltete Varianten aus der aktiven Bibliothek nehmen.
-- Kurze eigene Videos oder Bildfolgen für Handgriffe ergänzen, wenn die Anleitung davon profitiert.
+Dies ist ein Vorschlag für die redaktionelle Ordnung; bestehende Ordner und Dateien werden dadurch nicht verändert.
 
-Die Themenzuordnung erfolgt aktuell über Dateiname, Beschreibung und Ordnernamen; der PDF-Inhalt wird nicht automatisch gelesen. Die vier Lernbereiche können deshalb auch leere Zustände anzeigen. Die vollständige Bibliothek und Suche bleiben verfügbar.
+## Einheitliche Dokumentgestaltung
 
-## Nächster sinnvoller Ausbau
-Nach Bereitstellung freigegebener Rezeptkarten können daraus konkrete Übungsfragen mit geprüften Lösungen entstehen. Erst dann sind automatische Rückmeldungen zu Mengen und Techniken sinnvoll. Für den Anfang reichen ein Erst-Event-Leitfaden, die wichtigsten aktuellen Rezeptkarten und bebilderte Aufbauanleitungen.
+Pro Rezept oder kurzer Anleitung möglichst eine übersichtliche Seite mit gut lesbarer Schrift, Bildern und nummerierten Schritten. Dateinamen sollen das Gesuchte konkret benennen, etwa „Cocktail – [Name]“ oder „[Gerät] – Reinigung“. Version, Stand und verantwortliche Person gehören auf das Dokument. Veraltete Fassungen sollten aus der aktiven Bibliothek genommen werden.
+
+Als nächster Schritt wird eine Liste eures aktuellen Getränkeangebots, eurer Barkonzepte und Geräte benötigt. Daraus lässt sich eine konkrete Dokumentenliste erstellen und mit vorhandenen Unterlagen abgleichen. Es werden keine Rezepturen oder betrieblichen Anweisungen erfunden.

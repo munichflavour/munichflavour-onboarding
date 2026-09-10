@@ -18,7 +18,6 @@ async function loadDocuments() {
   allFolders = data.folders;
   allDocuments = data.documents;
   renderBrowser();
-  renderLearningHub();
 }
 
 // ===== BROWSER =====
