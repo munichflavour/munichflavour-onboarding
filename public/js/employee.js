@@ -18,6 +18,7 @@ async function loadDocuments() {
   allFolders = data.folders;
   allDocuments = data.documents;
   renderBrowser();
+  renderLearningHub();
 }
 
 // ===== BROWSER =====
@@ -51,6 +52,7 @@ function renderBrowser() {
     subFoldersEl.innerHTML = '';
   }
 
+  document.getElementById('fileSection').style.display = '';
   // Files in current folder
   const files = allDocuments.filter(d => d.folder_id === currentFolderId);
   const fileList = document.getElementById('fileList');

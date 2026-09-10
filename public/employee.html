@@ -123,6 +123,19 @@
       letter-spacing: 0.8px; color: var(--gray-dark);
       margin: 20px 0 10px;
     }
+    .learn-card {background:#fff;border:1px solid #ddd;border-radius:12px;padding:18px;margin-bottom:16px;overflow-wrap:anywhere;}
+    .learn-card h2 {font-size:22px;margin-bottom:8px;}
+    .learn-card p {margin:8px 0;color:#555;}
+    .learn-actions {display:flex;flex-wrap:wrap;gap:8px;margin:12px 0;}
+    .learn-actions button,.learn-card select,.learn-card summary {min-height:48px;font-size:16px;}
+    .learn-card textarea {margin:8px 0;}
+    .learn-card label {font-size:16px;text-transform:none;letter-spacing:0;}
+    .learn-card summary {cursor:pointer;padding:12px 0;font-weight:600;}
+    .file-name,.file-desc {white-space:normal;overflow-wrap:anywhere;}
+    .file-btn {width:48px;height:48px;}
+    .header-title,.search-bar input {min-width:0;}
+    .folder-name {overflow-wrap:anywhere;}
+    @media(max-width:380px){.file-item{flex-wrap:wrap}.file-actions{margin-left:auto}header{gap:8px;padding:10px}.logout-btn{padding:8px!important}}
   </style>
 </head>
 <body>
@@ -137,6 +150,7 @@
   </header>
 
   <main>
+    <section id="learningHub" aria-label="Lernen und Nachschlagen"></section>
     <!-- Search -->
     <div class="search-bar">
       <span class="search-icon">🔍</span>
@@ -166,6 +180,7 @@
     </div>
   </main>
 
+  <script src="/js/learning.js"></script>
   <script src="/js/employee.js"></script>
 </body>
 </html>
