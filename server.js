@@ -83,7 +83,15 @@ if (storedPublic && storedPrivate) {
 }
 webpush.setVapidDetails('mailto:admin@municflavour.de', vapidPublicKey, vapidPrivateKey);
 
+// Master switch so the admin can pause pushes (e.g. while bulk-uploading test documents)
+// without touching anyone's individual subscription.
+function isPushEnabled() {
+  const row = db.prepare("SELECT value FROM settings WHERE key = 'push_enabled'").get();
+  return !row || row.value !== 'false';
+}
+
 async function sendPushToAdmins(title, body, url = '/admin.html') {
+  if (!isPushEnabled()) return;
   const subs = db.prepare(`SELECT ps.endpoint, ps.p256dh, ps.auth FROM push_subscriptions ps JOIN users u ON u.id = ps.user_id WHERE u.role = 'admin'`).all();
   const payload = JSON.stringify({ title, body, url });
   for (const sub of subs) {
@@ -96,6 +104,7 @@ async function sendPushToAdmins(title, body, url = '/admin.html') {
 }
 
 async function sendPushToAllEmployees(title, body, url = '/employee.html') {
+  if (!isPushEnabled()) return;
   const subs = db.prepare(`SELECT ps.endpoint, ps.p256dh, ps.auth FROM push_subscriptions ps JOIN users u ON u.id = ps.user_id WHERE u.role = 'employee'`).all();
   const payload = JSON.stringify({ title, body, url });
   for (const sub of subs) {
@@ -148,6 +157,16 @@ app.delete('/api/push/subscribe', requireAuth, (req, res) => {
   const { endpoint } = req.body;
   if (endpoint) db.prepare('DELETE FROM push_subscriptions WHERE user_id = ? AND endpoint = ?').run(req.session.userId, endpoint);
   res.json({ ok: true });
+});
+
+// Master on/off switch for outgoing push notifications (e.g. pause during bulk uploads)
+app.get('/api/admin/settings', requireAdmin, (req, res) => {
+  res.json({ pushEnabled: isPushEnabled() });
+});
+app.put('/api/admin/settings', requireAdmin, (req, res) => {
+  const { pushEnabled } = req.body;
+  db.prepare("INSERT OR REPLACE INTO settings (key, value) VALUES ('push_enabled', ?)").run(pushEnabled ? 'true' : 'false');
+  res.json({ ok: true, pushEnabled: !!pushEnabled });
 });
 
 // ===== AUTH =====

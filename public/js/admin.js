@@ -34,6 +34,25 @@ async function apiFetch(url, opts = {}) {
   return { ok: res.ok, status: res.status, data };
 }
 
+// ===== PUSH AN/AUS =====
+async function loadPushSetting() {
+  const r = await apiFetch('/api/admin/settings');
+  if (!r?.ok) return;
+  document.getElementById('pushToggleInput').checked = r.data.pushEnabled;
+  document.getElementById('pushToggleStatus').textContent = r.data.pushEnabled
+    ? 'Aktiv – Mitarbeiter werden benachrichtigt'
+    : 'Pausiert – es werden keine Benachrichtigungen verschickt';
+}
+async function togglePushSetting(enabled) {
+  const statusEl = document.getElementById('pushToggleStatus');
+  statusEl.textContent = 'Speichere…';
+  const r = await apiFetch('/api/admin/settings', { method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ pushEnabled: enabled }) });
+  if (!r?.ok) { alert('Fehler beim Speichern'); loadPushSetting(); return; }
+  statusEl.textContent = enabled
+    ? 'Aktiv – Mitarbeiter werden benachrichtigt'
+    : 'Pausiert – es werden keine Benachrichtigungen verschickt';
+}
+
 // ===== OFFLINE-HINWEIS =====
 function initOfflineBanner() {
   const banner = document.getElementById('offlineBanner');
@@ -375,5 +394,6 @@ function escHtml(str) { return String(str||'').replace(/&/g,'&amp;').replace(/</
   const r = await apiFetch('/api/me');
   if (!r || r.data.role !== 'admin') { window.location.href = '/login.html'; return; }
   initOfflineBanner();
+  loadPushSetting();
   loadDocuments();
 })();
