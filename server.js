@@ -58,6 +58,13 @@ db.exec(`
     key TEXT PRIMARY KEY,
     value TEXT NOT NULL
   );
+
+  CREATE TABLE IF NOT EXISTS announcements (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    title TEXT NOT NULL,
+    body TEXT,
+    created_at TEXT DEFAULT (datetime('now'))
+  );
 `);
 
 // ===== VAPID =====
@@ -190,9 +197,17 @@ app.get('/api/documents', requireAuth, (req, res) => {
     documents: db.prepare('SELECT * FROM documents ORDER BY uploaded_at DESC').all()
   });
 });
+// Sucht Dateiname + Beschreibung. Filterung in JS statt SQL LIKE, damit Groß/Kleinschreibung
+// bei Umlauten (Ä/Ö/Ü) korrekt behandelt wird (SQLite LIKE kennt das nur für ASCII).
 app.get('/api/documents/search', requireAuth, (req, res) => {
-  const q = `%${req.query.q || ''}%`;
-  res.json(db.prepare(`SELECT * FROM documents WHERE original_name LIKE ? OR description LIKE ? ORDER BY uploaded_at DESC`).all(q, q));
+  const q = (req.query.q || '').trim().toLowerCase();
+  if (!q) return res.json([]);
+  const docs = db.prepare('SELECT * FROM documents ORDER BY uploaded_at DESC').all();
+  const results = docs.filter(d =>
+    d.original_name.toLowerCase().includes(q) ||
+    (d.description || '').toLowerCase().includes(q)
+  );
+  res.json(results);
 });
 app.get('/api/documents/:id/download', requireAuth, (req, res) => {
   const doc = db.prepare('SELECT * FROM documents WHERE id = ?').get(req.params.id);
@@ -250,6 +265,22 @@ app.delete('/api/admin/documents/:id', requireAdmin, (req, res) => {
   const fp = path.join(uploadsDir, doc.stored_name);
   if (fs.existsSync(fp)) fs.unlinkSync(fp);
   db.prepare('DELETE FROM documents WHERE id = ?').run(req.params.id);
+  res.json({ ok: true });
+});
+
+// ===== ANNOUNCEMENTS =====
+app.get('/api/announcements', requireAuth, (req, res) => {
+  res.json(db.prepare('SELECT * FROM announcements ORDER BY created_at DESC LIMIT 20').all());
+});
+app.post('/api/admin/announcements', requireAdmin, (req, res) => {
+  const { title, body } = req.body;
+  if (!title || !title.trim()) return res.status(400).json({ error: 'Titel erforderlich' });
+  const result = db.prepare('INSERT INTO announcements (title, body) VALUES (?, ?)').run(title.trim(), (body||'').trim());
+  sendPushToAllEmployees('📢 ' + title.trim(), (body||'').trim() || 'Neue Ankündigung im Portal.');
+  res.json({ id: result.lastInsertRowid });
+});
+app.delete('/api/admin/announcements/:id', requireAdmin, (req, res) => {
+  db.prepare('DELETE FROM announcements WHERE id = ?').run(req.params.id);
   res.json({ ok: true });
 });
 

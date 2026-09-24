@@ -22,6 +22,28 @@
     .upload-zone { border:2px dashed var(--gray-mid);border-radius:8px;padding:24px;text-align:center;cursor:pointer;transition:border-color 0.2s;margin-top:12px; }
     .upload-zone:hover,.upload-zone.dragover { border-color:var(--black); }
     .upload-zone p { color:var(--gray-dark);font-size:14px;margin-top:8px; }
+
+    .search-bar {
+      display: flex;
+      align-items: center;
+      background: var(--white);
+      border: 1.5px solid var(--gray-mid);
+      border-radius: 12px;
+      padding: 0 14px;
+      margin-bottom: 16px;
+      box-shadow: var(--shadow);
+    }
+    .search-bar input {
+      border: none;
+      box-shadow: none;
+      padding: 14px 10px;
+      font-size: 16px;
+      flex: 1;
+      background: transparent;
+    }
+    .search-bar input:focus { border: none; outline: none; }
+    .search-icon { font-size: 18px; color: #aaa; flex-shrink: 0; }
+    .search-clear { font-size: 18px; color: #aaa; cursor: pointer; flex-shrink: 0; padding: 4px; }
   </style>
 </head>
 <body>
@@ -33,9 +55,12 @@
   </header>
 
   <main>
+    <div id="offlineBanner" class="offline-banner hidden">📡 Offline – Änderungen sind erst nach Verbindung wieder möglich.</div>
+
     <div class="tabs">
       <button class="tab-btn active" onclick="showTab('documents')" id="tab-documents">Dokumente</button>
       <button class="tab-btn" onclick="showTab('employees')" id="tab-employees">Mitarbeiter</button>
+      <button class="tab-btn" onclick="showTab('announcements')" id="tab-announcements">Ankündigungen</button>
     </div>
 
     <!-- DOKUMENTE -->
@@ -47,7 +72,13 @@
           <button class="btn btn-primary btn-sm" onclick="openUploadModal(null)">+ Datei</button>
         </div>
       </div>
+      <div class="search-bar">
+        <span class="search-icon">🔍</span>
+        <input type="search" id="adminSearchInput" placeholder="Dokument suchen…" oninput="onAdminSearch(this.value)" autocomplete="off">
+        <span class="search-clear hidden" id="adminSearchClear" onclick="clearAdminSearch()">✕</span>
+      </div>
       <div id="docTree" class="card" style="padding:16px;"></div>
+      <div id="adminSearchResults" class="card hidden" style="padding:16px;"></div>
     </div>
 
     <!-- MITARBEITER -->
@@ -60,6 +91,20 @@
         <div id="empLoading" style="padding:40px;text-align:center;"><span class="spinner" style="border-color:rgba(0,0,0,0.2);border-top-color:#000;"></span></div>
         <div id="employeeList"></div>
       </div>
+    </div>
+
+    <!-- ANKÜNDIGUNGEN -->
+    <div id="view-announcements" class="hidden">
+      <div class="card-header" style="margin-bottom:12px;">
+        <span class="section-title" style="margin:0;">Ankündigungen</span>
+      </div>
+      <div class="card">
+        <div class="form-group"><label>Titel</label><input type="text" id="annTitle" autocomplete="off"></div>
+        <div class="form-group"><label>Text (optional)</label><textarea id="annBody"></textarea></div>
+        <div id="annError" class="alert alert-error hidden"></div>
+        <button class="btn btn-primary btn-full" onclick="createAnnouncement()">Veröffentlichen</button>
+      </div>
+      <div id="announcementAdminList"></div>
     </div>
   </main>
 
@@ -112,7 +157,7 @@
       <div class="form-group"><label>Ordner</label><select id="uploadFolderSelect"></select></div>
       <div class="form-group"><label>Beschreibung (optional)</label><input type="text" id="uploadDesc" autocomplete="off"></div>
       <div class="upload-zone" id="adminUploadZone" onclick="document.getElementById('adminFileInput').click()">
-        <div style="font-size:32px;">📄</div>
+        <div style="font-size:32px;">📤</div>
         <p>Hier klicken oder Datei hineinziehen</p>
         <p id="adminFileName" style="font-weight:600;color:#000;margin-top:4px;"></p>
       </div>

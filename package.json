@@ -1,7 +1,7 @@
 {
-  "name": "munich-flavour-onboarding",
-  "version": "1.0.0",
-  "description": "Employee onboarding management for Munich Flavour",
+  "name": "munich-flavour-portal",
+  "version": "1.1.0",
+  "description": "Mitarbeiterportal für Munich Flavour – Dokumente, Anleitungen und Infos zum Nachlesen",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
@@ -14,7 +14,6 @@
     "express": "^4.18.2",
     "express-session": "^1.17.3",
     "multer": "^1.4.5-lts.1",
-    "pdfkit": "^0.15.0",
     "web-push": "^3.6.7"
   }
 }

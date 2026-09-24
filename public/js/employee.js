@@ -4,20 +4,38 @@ let allFolders = [], allDocuments = [];
 let currentFolderId = null; // null = root
 let searchTimeout = null;
 
+const NEW_THRESHOLD_MS = 7 * 24 * 60 * 60 * 1000; // 7 Tage
+
 async function init() {
   const me = await apiFetch('/api/me');
-  if (!me) return;
-  document.getElementById('headerSub').textContent = me.full_name;
+  if (me) document.getElementById('headerSub').textContent = me.full_name;
   await loadDocuments();
+  await loadAnnouncements();
   initPushButton();
+  initOfflineBanner();
 }
 
 async function loadDocuments() {
   const data = await apiFetch('/api/documents');
-  if (!data) return;
+  if (!data) {
+    document.getElementById('fileList').innerHTML = `<div class="empty-state"><div class="empty-icon">📡</div><p>Offline – noch keine Dokumente im Zwischenspeicher.</p></div>`;
+    return;
+  }
   allFolders = data.folders;
   allDocuments = data.documents;
   renderBrowser();
+}
+
+// ===== "NEU"-Kennzeichnung =====
+function isNew(dateStr) {
+  return (Date.now() - Date.parse(dateStr + 'Z')) < NEW_THRESHOLD_MS;
+}
+
+function folderHasNew(folderId) {
+  const docs = allDocuments.filter(d => d.folder_id === folderId);
+  if (docs.some(d => isNew(d.uploaded_at))) return true;
+  const children = allFolders.filter(f => f.parent_id === folderId);
+  return children.some(c => folderHasNew(c.id));
 }
 
 // ===== BROWSER =====
@@ -41,7 +59,9 @@ function renderBrowser() {
       const count = allDocuments.filter(d => d.folder_id === f.id).length;
       const childCount = allFolders.filter(c => c.parent_id === f.id).length;
       const total = count + childCount;
+      const newDot = folderHasNew(f.id) ? '<span class="new-dot" title="Neue Inhalte"></span>' : '';
       return `<div class="folder-card" onclick="openFolder(${f.id})">
+        ${newDot}
         <div class="folder-emoji">📁</div>
         <div class="folder-name">${escHtml(f.name)}</div>
         <div class="folder-count">${total === 0 ? 'Leer' : total === 1 ? '1 Eintrag' : total + ' Einträge'}</div>
@@ -56,7 +76,7 @@ function renderBrowser() {
   const files = allDocuments.filter(d => d.folder_id === currentFolderId);
   const fileList = document.getElementById('fileList');
   if (!files.length && !subFolders.length) {
-    fileList.innerHTML = `<div class="empty-state"><div class="empty-icon">📂</div><p>Noch keine Dokumente vorhanden.</p></div>`;
+    fileList.innerHTML = `<div class="empty-state"><div class="empty-icon">📭</div><p>Noch keine Dokumente vorhanden.</p></div>`;
   } else if (!files.length) {
     fileList.innerHTML = '';
     document.getElementById('fileSection').style.display = 'none';
@@ -80,7 +100,7 @@ function navigateBack() {
   window.scrollTo(0, 0);
 }
 
-// ===== SEARCH =====
+// ===== SEARCH (Dateiname + Beschreibung) =====
 function onSearch(val) {
   clearTimeout(searchTimeout);
   const clear = document.getElementById('searchClear');
@@ -95,12 +115,16 @@ async function doSearch(q) {
   document.getElementById('searchLabel').textContent = `Ergebnisse für „${q}"`;
   const resultsEl = document.getElementById('searchResults');
   resultsEl.innerHTML = '<div style="padding:20px;text-align:center;"><span class="spinner" style="border-color:rgba(0,0,0,0.2);border-top-color:#000;"></span></div>';
-  const res = await fetch(`/api/documents/search?q=${encodeURIComponent(q)}`);
-  const docs = await res.json();
-  if (!docs.length) {
-    resultsEl.innerHTML = `<div class="empty-state"><div class="empty-icon">🔍</div><p>Keine Dokumente gefunden.</p></div>`;
-  } else {
-    resultsEl.innerHTML = docs.map(doc => fileItemHtml(doc)).join('');
+  try {
+    const res = await fetch(`/api/documents/search?q=${encodeURIComponent(q)}`);
+    const docs = await res.json();
+    if (!docs.length) {
+      resultsEl.innerHTML = `<div class="empty-state"><div class="empty-icon">🔍</div><p>Keine Dokumente gefunden.</p></div>`;
+    } else {
+      resultsEl.innerHTML = docs.map(doc => fileItemHtml(doc)).join('');
+    }
+  } catch (err) {
+    resultsEl.innerHTML = `<div class="empty-state"><div class="empty-icon">📡</div><p>Suche offline nicht verfügbar.</p></div>`;
   }
 }
 
@@ -127,10 +151,11 @@ function fileIcon(name) {
 
 function fileItemHtml(doc) {
   const date = new Date(doc.uploaded_at + 'Z').toLocaleDateString('de-DE');
+  const badge = isNew(doc.uploaded_at) ? '<span class="badge-new">Neu</span>' : '';
   return `<div class="file-item">
     <div class="file-type-icon">${fileIcon(doc.original_name)}</div>
     <div class="file-info">
-      <div class="file-name" title="${escHtml(doc.original_name)}">${escHtml(doc.original_name)}</div>
+      <div class="file-name" title="${escHtml(doc.original_name)}">${escHtml(doc.original_name)}${badge}</div>
       ${doc.description ? `<div class="file-desc">${escHtml(doc.description)}</div>` : ''}
       <div class="file-meta">${date}</div>
     </div>
@@ -139,6 +164,57 @@ function fileItemHtml(doc) {
       <a href="/api/documents/${doc.id}/download" class="file-btn file-btn-dl" title="Herunterladen">⬇</a>
     </div>
   </div>`;
+}
+
+// ===== ANKÜNDIGUNGEN =====
+let allAnnouncements = [];
+let announcementsExpanded = false;
+
+async function loadAnnouncements() {
+  const data = await apiFetch('/api/announcements');
+  if (!data) return;
+  allAnnouncements = data;
+  renderAnnouncements();
+}
+
+function renderAnnouncements() {
+  const section = document.getElementById('announcementsSection');
+  const list = document.getElementById('announcementsList');
+  const moreBtn = document.getElementById('announcementsMore');
+  if (!allAnnouncements.length) { section.classList.add('hidden'); return; }
+  section.classList.remove('hidden');
+  const visible = announcementsExpanded ? allAnnouncements : allAnnouncements.slice(0, 3);
+  list.innerHTML = visible.map(a => announcementHtml(a)).join('');
+  if (allAnnouncements.length > 3) {
+    moreBtn.classList.remove('hidden');
+    moreBtn.textContent = announcementsExpanded ? 'Weniger anzeigen' : `Weitere ${allAnnouncements.length - 3} anzeigen`;
+  } else {
+    moreBtn.classList.add('hidden');
+  }
+}
+
+function toggleAnnouncements() {
+  announcementsExpanded = !announcementsExpanded;
+  renderAnnouncements();
+}
+
+function announcementHtml(a) {
+  const date = new Date(a.created_at + 'Z').toLocaleDateString('de-DE');
+  return `<div class="announcement-card">
+    <div class="announcement-title">📢 ${escHtml(a.title)}</div>
+    ${a.body ? `<div class="announcement-body">${escHtml(a.body)}</div>` : ''}
+    <div class="announcement-date">${date}</div>
+  </div>`;
+}
+
+// ===== OFFLINE-HINWEIS =====
+function initOfflineBanner() {
+  const banner = document.getElementById('offlineBanner');
+  if (!banner) return;
+  const update = () => banner.classList.toggle('hidden', navigator.onLine);
+  window.addEventListener('online', update);
+  window.addEventListener('offline', update);
+  update();
 }
 
 // ===== PUSH =====
@@ -183,11 +259,17 @@ async function togglePush() {
 }
 
 async function logout() { await fetch('/api/logout', { method:'POST' }); window.location.href = '/login.html'; }
+
 async function apiFetch(url) {
-  const res = await fetch(url);
-  if (res.status === 401) { window.location.href = '/login.html'; return null; }
-  return res.json();
+  try {
+    const res = await fetch(url);
+    if (res.status === 401) { window.location.href = '/login.html'; return null; }
+    return await res.json();
+  } catch (err) {
+    return null; // offline / Netzwerkfehler – Aufrufer zeigt ggf. zwischengespeicherte Inhalte
+  }
 }
+
 function escHtml(str) { return String(str||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 
 init();

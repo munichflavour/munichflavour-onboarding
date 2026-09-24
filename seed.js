@@ -46,6 +46,12 @@ db.exec(`
     key TEXT PRIMARY KEY,
     value TEXT NOT NULL
   );
+  CREATE TABLE IF NOT EXISTS announcements (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    title TEXT NOT NULL,
+    body TEXT,
+    created_at TEXT DEFAULT (datetime('now'))
+  );
 `);
 
 // Admin account
@@ -59,6 +65,16 @@ if (folderCount === 0) {
   const insert = db.prepare('INSERT OR IGNORE INTO document_folders (name, parent_id) VALUES (?, NULL)');
   folders.forEach(name => insert.run(name));
   console.log(`✓ Ordner angelegt: ${folders.join(', ')}`);
+}
+
+// Seed a welcome announcement only if none exist yet
+const announcementCount = db.prepare('SELECT COUNT(*) as cnt FROM announcements').get().cnt;
+if (announcementCount === 0) {
+  db.prepare('INSERT INTO announcements (title, body) VALUES (?, ?)').run(
+    'Willkommen im Mitarbeiterportal',
+    'Hier findet ihr ab jetzt Rezepte, Anleitungen und wichtige Infos zum Nachlesen.'
+  );
+  console.log('✓ Willkommens-Ankündigung angelegt');
 }
 
 console.log('✓ Admin-Account: admin / admin123');

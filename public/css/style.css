@@ -136,6 +136,7 @@ label {
 input[type="text"],
 input[type="password"],
 input[type="date"],
+input[type="search"],
 textarea,
 select {
   width: 100%;
@@ -603,6 +604,84 @@ canvas.sig-pad {
 }
 
 @keyframes spin { to { transform: rotate(360deg); } }
+
+/* ===== Offline-Banner ===== */
+.offline-banner {
+  background: #b45309;
+  color: var(--white);
+  text-align: center;
+  font-size: 13px;
+  font-weight: 600;
+  padding: 10px 16px;
+  border-radius: var(--radius);
+  margin-bottom: 16px;
+}
+
+/* ===== "Neu"-Kennzeichnung ===== */
+.badge-new {
+  display: inline-block;
+  background: #cc0000;
+  color: var(--white);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  border-radius: 4px;
+  padding: 2px 6px;
+  margin-left: 6px;
+  vertical-align: middle;
+}
+
+/* ===== Ankündigungen ===== */
+.announcement-card {
+  background: var(--white);
+  border-radius: 10px;
+  box-shadow: var(--shadow);
+  border-left: 4px solid var(--black);
+  padding: 14px 16px;
+  margin-bottom: 10px;
+}
+
+.announcement-title {
+  font-weight: 700;
+  font-size: 15px;
+  margin-bottom: 4px;
+}
+
+.announcement-body {
+  font-size: 14px;
+  color: var(--gray-dark);
+  white-space: pre-wrap;
+}
+
+.announcement-date {
+  font-size: 12px;
+  color: #aaa;
+  margin-top: 6px;
+}
+
+.announcement-more {
+  display: block;
+  text-align: center;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--black);
+  cursor: pointer;
+  padding: 10px;
+  background: none;
+  border: none;
+  width: 100%;
+}
+
+.announcement-admin-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--gray-mid);
+}
+.announcement-admin-row:last-child { border-bottom: none; }
+.announcement-admin-content { flex: 1; min-width: 0; }
 
 /* ===== Responsive ===== */
 @media (max-width: 480px) {
