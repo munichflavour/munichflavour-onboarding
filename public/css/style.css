@@ -178,7 +178,7 @@ textarea { resize: vertical; min-height: 80px; }
 .btn:active { opacity: 0.8; }
 .btn:disabled { opacity: 0.4; cursor: not-allowed; }
 
-.btn-primary { background: var(--black); color: var(--white); width: 100%; }
+.btn-primary { background: var(--black); color: var(--white); }
 .btn-primary:hover:not(:disabled) { background: #222; }
 
 .btn-secondary {
