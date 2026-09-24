@@ -12,13 +12,15 @@
   <link rel="stylesheet" href="/css/style.css">
   <style>
     .folder-node { margin-bottom: 4px; }
-    .folder-header { display:flex;align-items:center;gap:8px;padding:10px 14px;background:var(--white);border:1.5px solid var(--gray-mid);border-radius:8px;cursor:pointer;transition:background 0.15s; }
+    .folder-header { display:flex;align-items:center;gap:8px;padding:10px 14px;background:var(--white);border:1.5px solid var(--gray-mid);border-radius:8px;cursor:pointer;transition:background 0.15s;flex-wrap:wrap; }
     .folder-header:hover { background:var(--gray-light); }
-    .folder-name { flex:1;font-weight:600;font-size:15px; }
-    .folder-actions { display:flex;gap:6px;flex-shrink:0; }
+    .folder-name { flex:1;font-weight:600;font-size:15px;min-width:70px;overflow-wrap:anywhere; }
+    .folder-actions { display:flex;gap:6px;flex-shrink:0;flex-wrap:wrap; }
+    .folder-actions .btn { padding:8px 10px; }
     .folder-children { margin-left:24px;margin-top:4px; }
-    .doc-item { display:flex;align-items:center;gap:10px;padding:10px 14px;background:var(--gray-light);border-radius:6px;margin-bottom:4px; }
-    .doc-name { flex:1;font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap; }
+    .doc-item { display:flex;align-items:center;gap:10px;padding:10px 14px;background:var(--gray-light);border-radius:6px;margin-bottom:4px;flex-wrap:wrap; }
+    .doc-name { flex:1;font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:80px; }
+    .doc-desc { font-size:12px;color:#888;max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap; }
     .upload-zone { border:2px dashed var(--gray-mid);border-radius:8px;padding:24px;text-align:center;cursor:pointer;transition:border-color 0.2s;margin-top:12px; }
     .upload-zone:hover,.upload-zone.dragover { border-color:var(--black); }
     .upload-zone p { color:var(--gray-dark);font-size:14px;margin-top:8px; }

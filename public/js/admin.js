@@ -147,10 +147,10 @@ function renderFolder(folder) {
   const header = document.createElement('div'); header.className='folder-header';
   header.innerHTML=`<span class="folder-icon">📁</span><span class="folder-name">${escHtml(folder.name)}</span>
     <div class="folder-actions" onclick="event.stopPropagation()">
-      <button class="btn btn-secondary btn-sm" onclick="openFolderModal(${folder.parent_id||'null'},${folder.id})">✏️</button>
-      <button class="btn btn-secondary btn-sm" onclick="openFolderModal(${folder.id})">+ Unterordner</button>
-      <button class="btn btn-primary btn-sm" onclick="openUploadModal(${folder.id})">+ Datei</button>
-      <button class="btn btn-danger btn-sm" onclick="deleteFolder(${folder.id},'${escHtml(folder.name)}')">🗑</button>
+      <button class="btn btn-secondary btn-sm" title="Ordner umbenennen" onclick="openFolderModal(${folder.parent_id||'null'},${folder.id})">✏️</button>
+      <button class="btn btn-secondary btn-sm" title="Unterordner hinzufügen" onclick="openFolderModal(${folder.id})">📂+</button>
+      <button class="btn btn-primary btn-sm" title="Datei hochladen" onclick="openUploadModal(${folder.id})">📄+</button>
+      <button class="btn btn-danger btn-sm" title="Ordner löschen" onclick="deleteFolder(${folder.id},'${escHtml(folder.name)}')">🗑</button>
     </div>`;
   const childrenEl = document.createElement('div'); childrenEl.className='folder-children';
   children.forEach(c=>childrenEl.appendChild(renderFolder(c)));
@@ -171,7 +171,7 @@ function renderDocItem(doc) {
   const badge = isNew(doc.uploaded_at) ? '<span class="badge-new">Neu</span>' : '';
   el.innerHTML=`<span style="font-size:20px;">${icon}</span>
     <span class="doc-name" title="${escHtml(doc.original_name)}">${escHtml(doc.original_name)}${badge}</span>
-    ${doc.description?`<span style="font-size:12px;color:#888;">${escHtml(doc.description)}</span>`:''}
+    ${doc.description?`<span class="doc-desc" title="${escHtml(doc.description)}">${escHtml(doc.description)}</span>`:''}
     <span style="font-size:12px;color:#aaa;flex-shrink:0;">${new Date(doc.uploaded_at+'Z').toLocaleDateString('de-DE')}</span>
     <a href="/api/documents/${doc.id}/download" class="btn btn-secondary btn-sm" style="flex-shrink:0;">⬇</a>
     <button class="btn btn-danger btn-sm" style="flex-shrink:0;" onclick="deleteDocument(${doc.id},'${escHtml(doc.original_name)}')">🗑</button>`;
