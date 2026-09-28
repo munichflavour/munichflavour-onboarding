@@ -166,15 +166,15 @@
   <!-- Upload Modal -->
   <div id="uploadModal" class="modal-overlay hidden">
     <div class="modal">
-      <div class="modal-title">Dokument hochladen</div>
+      <div class="modal-title">Dokumente hochladen</div>
       <div class="form-group"><label>Ordner</label><select id="uploadFolderSelect"></select></div>
-      <div class="form-group"><label>Beschreibung (optional)</label><input type="text" id="uploadDesc" autocomplete="off"></div>
+      <div class="form-group"><label>Beschreibung (optional, gilt für alle ausgewählten Dateien)</label><input type="text" id="uploadDesc" autocomplete="off"></div>
       <div class="upload-zone" id="adminUploadZone" onclick="document.getElementById('adminFileInput').click()">
         <div style="font-size:32px;">📤</div>
-        <p>Hier klicken oder Datei hineinziehen</p>
-        <p id="adminFileName" style="font-weight:600;color:#000;margin-top:4px;"></p>
+        <p>Hier klicken oder Dateien hineinziehen (auch mehrere)</p>
+        <div id="adminFileName" style="font-weight:600;color:#000;margin-top:4px;font-size:13px;"></div>
       </div>
-      <input type="file" id="adminFileInput" style="display:none" onchange="onFileSelected(this)">
+      <input type="file" id="adminFileInput" multiple style="display:none" onchange="onFileSelected(this)">
       <div id="uploadError" class="alert alert-error hidden"></div>
       <div class="modal-actions">
         <button class="btn btn-secondary" style="flex:1" onclick="closeUploadModal()">Abbrechen</button>

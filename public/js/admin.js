@@ -3,7 +3,7 @@ if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').cat
 let docData = { folders: [], documents: [] };
 let editingFolderId = null;
 let uploadFolderId = null;
-let selectedFile = null;
+let selectedFiles = [];
 let editingEmpId = null;
 
 const NEW_THRESHOLD_MS = 7 * 24 * 60 * 60 * 1000; // 7 Tage
@@ -250,8 +250,8 @@ async function deleteFolder(id, name) {
 
 // ===== UPLOAD MODAL =====
 function openUploadModal(folderId) {
-  uploadFolderId=folderId; selectedFile=null;
-  document.getElementById('adminFileName').textContent='';
+  uploadFolderId=folderId; selectedFiles=[];
+  document.getElementById('adminFileName').innerHTML='';
   document.getElementById('adminFileInput').value='';
   document.getElementById('uploadDesc').value='';
   document.getElementById('uploadError').classList.add('hidden');
@@ -269,13 +269,22 @@ function openUploadModal(folderId) {
   addOpts(docData.folders.filter(f=>!f.parent_id),0);
   document.getElementById('uploadModal').classList.remove('hidden'); document.body.style.overflow='hidden';
 }
-function closeUploadModal() { document.getElementById('uploadModal').classList.add('hidden'); document.body.style.overflow=''; selectedFile=null; }
-function onFileSelected(input) { selectedFile=input.files[0]; document.getElementById('adminFileName').textContent=selectedFile?selectedFile.name:''; }
+function closeUploadModal() { document.getElementById('uploadModal').classList.add('hidden'); document.body.style.overflow=''; selectedFiles=[]; }
+function setSelectedFiles(files) {
+  selectedFiles = Array.from(files);
+  const nameEl = document.getElementById('adminFileName');
+  if (!selectedFiles.length) { nameEl.innerHTML=''; return; }
+  nameEl.innerHTML = selectedFiles.length === 1
+    ? escHtml(selectedFiles[0].name)
+    : `${selectedFiles.length} Dateien ausgewählt:<br>` + selectedFiles.map(f=>escHtml(f.name)).join('<br>');
+}
+function onFileSelected(input) { setSelectedFiles(input.files); }
 async function uploadDocument() {
   const errEl=document.getElementById('uploadError'); errEl.classList.add('hidden');
-  if (!selectedFile) { errEl.textContent='Bitte eine Datei auswählen.'; errEl.classList.remove('hidden'); return; }
+  if (!selectedFiles.length) { errEl.textContent='Bitte mindestens eine Datei auswählen.'; errEl.classList.remove('hidden'); return; }
   const btn=document.getElementById('uploadConfirmBtn'); btn.disabled=true; btn.innerHTML='<span class="spinner"></span>';
-  const formData=new FormData(); formData.append('file',selectedFile);
+  const formData=new FormData();
+  selectedFiles.forEach(f=>formData.append('files',f));
   const folderId=document.getElementById('uploadFolderSelect').value;
   if (folderId) formData.append('folder_id',folderId);
   formData.append('description',document.getElementById('uploadDesc').value);
@@ -294,7 +303,7 @@ const uploadZone=document.getElementById('adminUploadZone');
 if (uploadZone) {
   uploadZone.addEventListener('dragover',e=>{e.preventDefault();uploadZone.classList.add('dragover');});
   uploadZone.addEventListener('dragleave',()=>uploadZone.classList.remove('dragover'));
-  uploadZone.addEventListener('drop',e=>{e.preventDefault();uploadZone.classList.remove('dragover');const f=e.dataTransfer.files[0];if(f){selectedFile=f;document.getElementById('adminFileName').textContent=f.name;}});
+  uploadZone.addEventListener('drop',e=>{e.preventDefault();uploadZone.classList.remove('dragover');if(e.dataTransfer.files.length) setSelectedFiles(e.dataTransfer.files);});
 }
 
 // Modal backdrop close

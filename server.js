@@ -271,12 +271,17 @@ app.delete('/api/admin/folders/:id', requireAdmin, (req, res) => {
 });
 
 // ===== ADMIN: DOCUMENTS =====
-app.post('/api/admin/documents', requireAdmin, upload.single('file'), (req, res) => {
-  if (!req.file) return res.status(400).json({ error: 'Keine Datei' });
+app.post('/api/admin/documents', requireAdmin, upload.array('files', 30), (req, res) => {
+  if (!req.files || !req.files.length) return res.status(400).json({ error: 'Keine Datei' });
   const { folder_id, description } = req.body;
-  const result = db.prepare('INSERT INTO documents (folder_id, original_name, stored_name, description) VALUES (?, ?, ?, ?)').run(folder_id||null, req.file.originalname, req.file.filename, description||'');
-  sendPushToAllEmployees('📄 Neues Dokument', `„${req.file.originalname}" wurde hochgeladen.`);
-  res.json({ id: result.lastInsertRowid });
+  const insert = db.prepare('INSERT INTO documents (folder_id, original_name, stored_name, description) VALUES (?, ?, ?, ?)');
+  const ids = req.files.map(f => insert.run(folder_id||null, f.originalname, f.filename, description||'').lastInsertRowid);
+  if (req.files.length === 1) {
+    sendPushToAllEmployees('📄 Neues Dokument', `„${req.files[0].originalname}" wurde hochgeladen.`);
+  } else {
+    sendPushToAllEmployees('📄 Neue Dokumente', `${req.files.length} neue Dokumente wurden hochgeladen.`);
+  }
+  res.json({ ids });
 });
 app.delete('/api/admin/documents/:id', requireAdmin, (req, res) => {
   const doc = db.prepare('SELECT * FROM documents WHERE id = ?').get(req.params.id);
