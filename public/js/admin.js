@@ -164,7 +164,7 @@ function renderFolder(folder) {
   const docs = docData.documents.filter(d=>d.folder_id===folder.id);
   const node = document.createElement('div'); node.className='folder-node';
   const header = document.createElement('div'); header.className='folder-header';
-  header.innerHTML=`<span class="folder-icon">📁</span><span class="folder-name">${escHtml(folder.name)}</span>
+  header.innerHTML=`<div class="folder-top"><span class="folder-icon">📁</span><span class="folder-name">${escHtml(folder.name)}</span></div>
     <div class="folder-actions" onclick="event.stopPropagation()">
       <button class="btn btn-secondary btn-sm" title="Ordner umbenennen" onclick="openFolderModal(${folder.parent_id||'null'},${folder.id})">✏️</button>
       <button class="btn btn-secondary btn-sm" title="Unterordner hinzufügen" onclick="openFolderModal(${folder.id})">📂+</button>
@@ -184,18 +184,21 @@ function renderFolder(folder) {
 }
 
 function renderDocItem(doc) {
-  const el=document.createElement('div'); el.className='doc-item';
+  const row=document.createElement('div'); row.className='doc-row';
   const ext = doc.original_name.split('.').pop().toLowerCase();
   const icon = ['pdf'].includes(ext)?'📕':['doc','docx'].includes(ext)?'📘':['xls','xlsx'].includes(ext)?'📗':['jpg','jpeg','png','gif','webp'].includes(ext)?'🖼️':'📄';
   const badge = isNew(doc.uploaded_at) ? '<span class="badge-new">Neu</span>' : '';
-  el.innerHTML=`<span style="font-size:20px;">${icon}</span>
-    <span class="doc-name" title="${escHtml(doc.original_name)}">${escHtml(doc.original_name)}${badge}</span>
-    ${doc.description?`<span class="doc-desc" title="${escHtml(doc.description)}">${escHtml(doc.description)}</span>`:''}
-    <span style="font-size:12px;color:#aaa;flex-shrink:0;">${new Date(doc.uploaded_at+'Z').toLocaleDateString('de-DE')}</span>
-    <a href="/api/documents/${doc.id}/view" target="_blank" class="btn btn-secondary btn-sm" style="flex-shrink:0;" title="Ansehen">👁</a>
-    <a href="/api/documents/${doc.id}/download" class="btn btn-secondary btn-sm" style="flex-shrink:0;" title="Herunterladen">⬇</a>
-    <button class="btn btn-danger btn-sm" style="flex-shrink:0;" onclick="deleteDocument(${doc.id},'${escHtml(doc.original_name)}')">🗑</button>`;
-  return el;
+  const date = new Date(doc.uploaded_at+'Z').toLocaleDateString('de-DE');
+  row.innerHTML=`<a href="/api/documents/${doc.id}/view" target="_blank" class="doc-item" title="Ansehen">
+      <span class="doc-icon">${icon}</span>
+      <span class="doc-info">
+        <span class="doc-name" title="${escHtml(doc.original_name)}">${escHtml(doc.original_name)}${badge}</span>
+        ${doc.description?`<span class="doc-desc" title="${escHtml(doc.description)}">${escHtml(doc.description)}</span>`:''}
+        <span class="doc-date">${date}</span>
+      </span>
+    </a>
+    <button class="btn btn-danger btn-sm doc-delete" title="Löschen" onclick="deleteDocument(${doc.id},'${escHtml(doc.original_name)}')">🗑</button>`;
+  return row;
 }
 
 // ===== SUCHE (Dateiname + Beschreibung) =====
