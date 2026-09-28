@@ -152,7 +152,7 @@ function fileIcon(name) {
 function fileItemHtml(doc) {
   const date = new Date(doc.uploaded_at + 'Z').toLocaleDateString('de-DE');
   const badge = isNew(doc.uploaded_at) ? '<span class="badge-new">Neu</span>' : '';
-  return `<div class="file-item">
+  return `<a href="/api/documents/${doc.id}/view" target="_blank" class="file-item" title="Ansehen">
     <div class="file-type-icon">${fileIcon(doc.original_name)}</div>
     <div class="file-info">
       <div class="file-name" title="${escHtml(doc.original_name)}">${escHtml(doc.original_name)}${badge}</div>
@@ -160,10 +160,9 @@ function fileItemHtml(doc) {
       <div class="file-meta">${date}</div>
     </div>
     <div class="file-actions">
-      <a href="/api/documents/${doc.id}/view" target="_blank" class="file-btn file-btn-view" title="Ansehen">👁</a>
-      <a href="/api/documents/${doc.id}/download" class="file-btn file-btn-dl" title="Herunterladen">⬇</a>
+      <span class="file-btn file-btn-view">👁</span>
     </div>
-  </div>`;
+  </a>`;
 }
 
 // ===== ANKÜNDIGUNGEN =====

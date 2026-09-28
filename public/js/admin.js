@@ -192,7 +192,8 @@ function renderDocItem(doc) {
     <span class="doc-name" title="${escHtml(doc.original_name)}">${escHtml(doc.original_name)}${badge}</span>
     ${doc.description?`<span class="doc-desc" title="${escHtml(doc.description)}">${escHtml(doc.description)}</span>`:''}
     <span style="font-size:12px;color:#aaa;flex-shrink:0;">${new Date(doc.uploaded_at+'Z').toLocaleDateString('de-DE')}</span>
-    <a href="/api/documents/${doc.id}/download" class="btn btn-secondary btn-sm" style="flex-shrink:0;">⬇</a>
+    <a href="/api/documents/${doc.id}/view" target="_blank" class="btn btn-secondary btn-sm" style="flex-shrink:0;" title="Ansehen">👁</a>
+    <a href="/api/documents/${doc.id}/download" class="btn btn-secondary btn-sm" style="flex-shrink:0;" title="Herunterladen">⬇</a>
     <button class="btn btn-danger btn-sm" style="flex-shrink:0;" onclick="deleteDocument(${doc.id},'${escHtml(doc.original_name)}')">🗑</button>`;
   return el;
 }
