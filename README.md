@@ -34,7 +34,15 @@ Der Server läuft danach auf **http://localhost:3000**
 |--------|-------------|-----------|
 | Admin | admin | admin123 |
 
-**Wichtig:** Passwort nach der Ersteinrichtung ändern und das Session-Secret in `server.js` vor einem echten Produktiveinsatz durch eine Umgebungsvariable ersetzen.
+**Wichtig:** Passwort nach der Ersteinrichtung ändern.
+
+## Umgebungsvariablen (optional)
+
+| Variable | Zweck |
+|----------|-------|
+| `SESSION_SECRET` | Secret für Session-Cookies. Wird bei Produktiveinsatz empfohlen; ohne gesetzte Variable erzeugt der Server beim ersten Start automatisch ein zufälliges Secret und speichert es in der Datenbank. |
+| `NODE_ENV=production` | Aktiviert u.a. `secure`-Cookies (nur über HTTPS gültig). |
+| `TRUST_PROXY=1` | Setzen, wenn die App hinter einem Reverse Proxy (nginx, Heroku, Render, …) mit HTTPS-Terminierung läuft – sonst erkennt Express HTTPS-Anfragen nicht korrekt. |
 
 ## Funktionen
 

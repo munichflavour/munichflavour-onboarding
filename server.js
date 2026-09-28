@@ -6,6 +6,7 @@ const Database = require('better-sqlite3');
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
+const crypto = require('crypto');
 const webpush = require('web-push');
 
 const app = express();
@@ -83,6 +84,21 @@ if (storedPublic && storedPrivate) {
 }
 webpush.setVapidDetails('mailto:admin@municflavour.de', vapidPublicKey, vapidPrivateKey);
 
+// ===== SESSION SECRET =====
+// Bevorzugt aus Umgebungsvariable (empfohlen für Produktivbetrieb). Falls nicht gesetzt,
+// wird einmalig ein zufälliges Secret erzeugt und in der DB gespeichert (wie die VAPID-Keys),
+// damit es nicht im Code steht und Sessions nicht bei jedem Neustart ungültig werden.
+let sessionSecret = process.env.SESSION_SECRET;
+if (!sessionSecret) {
+  const stored = db.prepare("SELECT value FROM settings WHERE key = 'session_secret'").get();
+  if (stored) {
+    sessionSecret = stored.value;
+  } else {
+    sessionSecret = crypto.randomBytes(32).toString('hex');
+    db.prepare("INSERT OR REPLACE INTO settings (key, value) VALUES ('session_secret', ?)").run(sessionSecret);
+  }
+}
+
 // Master switch so the admin can pause pushes (e.g. while bulk-uploading test documents)
 // without touching anyone's individual subscription.
 function isPushEnabled() {
@@ -123,18 +139,75 @@ const storage = multer.diskStorage({
 });
 const upload = multer({ storage, limits: { fileSize: 50*1024*1024 } });
 
+const isProduction = process.env.NODE_ENV === 'production';
+// Hinter einem Reverse Proxy (z.B. nginx, Heroku, Render) nötig, damit Express req.secure
+// korrekt erkennt und "secure" Cookies gesetzt werden. Per Env-Var aktivierbar.
+if (process.env.TRUST_PROXY) app.set('trust proxy', 1);
+
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 app.use(express.static(path.join(__dirname, 'public')));
 app.use('/assets', express.static(path.join(__dirname, 'assets')));
 
+// CSRF-Schutz: Für alle Anfragen, die Daten ändern, muss Origin/Referer auf denselben Host
+// zeigen. Das Frontend ruft die API ausschließlich same-origin per fetch() auf, sodass
+// Browser diesen Header automatisch mitschicken; eine Cross-Site-Anfrage (z.B. von einer
+// bösartigen Seite) hat einen abweichenden Origin und wird abgelehnt.
+function csrfProtection(req, res, next) {
+  if (['GET', 'HEAD', 'OPTIONS'].includes(req.method)) return next();
+  const source = req.get('origin') || req.get('referer');
+  if (!source) return res.status(403).json({ error: 'Anfrage abgelehnt' });
+  try {
+    if (new URL(source).host !== req.get('host')) return res.status(403).json({ error: 'Anfrage abgelehnt' });
+  } catch {
+    return res.status(403).json({ error: 'Anfrage abgelehnt' });
+  }
+  next();
+}
+app.use(csrfProtection);
+
 app.use(session({
   store: new SQLiteStore({ db: 'sessions.db', dir: dbDir }),
-  secret: 'munich-flavour-secret-2024',
+  secret: sessionSecret,
   resave: false,
   saveUninitialized: false,
-  cookie: { maxAge: 7*24*60*60*1000 }
+  cookie: { maxAge: 7*24*60*60*1000, sameSite: 'lax', secure: isProduction }
 }));
+
+// ===== LOGIN RATE LIMITING =====
+// Einfacher In-Memory-Limiter: pro IP max. 5 Fehlversuche, danach 15 Minuten Sperre.
+// Reicht für den Einsatzzweck (kleines internes Team); kein zusätzlicher Dienst nötig.
+const loginAttempts = new Map();
+const LOGIN_MAX_ATTEMPTS = 5;
+const LOGIN_WINDOW_MS = 15 * 60 * 1000;
+function loginRateLimit(req, res, next) {
+  const key = req.ip;
+  const now = Date.now();
+  const entry = loginAttempts.get(key);
+  if (entry && entry.lockedUntil && entry.lockedUntil > now) {
+    const waitMin = Math.ceil((entry.lockedUntil - now) / 60000);
+    return res.status(429).json({ error: `Zu viele Fehlversuche. Bitte in ${waitMin} Minute(n) erneut versuchen.` });
+  }
+  next();
+}
+function recordLoginFailure(req) {
+  const key = req.ip;
+  const now = Date.now();
+  const entry = loginAttempts.get(key);
+  if (!entry || entry.windowStart + LOGIN_WINDOW_MS < now) {
+    loginAttempts.set(key, { count: 1, windowStart: now, lockedUntil: 0 });
+    return;
+  }
+  entry.count += 1;
+  if (entry.count >= LOGIN_MAX_ATTEMPTS) entry.lockedUntil = now + LOGIN_WINDOW_MS;
+}
+function clearLoginFailures(req) { loginAttempts.delete(req.ip); }
+setInterval(() => {
+  const now = Date.now();
+  for (const [key, entry] of loginAttempts) {
+    if (entry.windowStart + LOGIN_WINDOW_MS < now && entry.lockedUntil < now) loginAttempts.delete(key);
+  }
+}, 60 * 60 * 1000).unref();
 
 function requireAuth(req, res, next) {
   if (!req.session.userId) return res.status(401).json({ error: 'Nicht angemeldet' });
@@ -170,11 +243,15 @@ app.put('/api/admin/settings', requireAdmin, (req, res) => {
 });
 
 // ===== AUTH =====
-app.post('/api/login', (req, res) => {
+app.post('/api/login', loginRateLimit, (req, res) => {
   const { username, password } = req.body;
   if (!username || !password) return res.status(400).json({ error: 'Benutzername und Passwort erforderlich' });
   const user = db.prepare('SELECT * FROM users WHERE username = ?').get(username);
-  if (!user || !bcrypt.compareSync(password, user.password_hash)) return res.status(401).json({ error: 'Ungültige Anmeldedaten' });
+  if (!user || !bcrypt.compareSync(password, user.password_hash)) {
+    recordLoginFailure(req);
+    return res.status(401).json({ error: 'Ungültige Anmeldedaten' });
+  }
+  clearLoginFailures(req);
   req.session.userId = user.id;
   req.session.role = user.role;
   res.json({ role: user.role, fullName: user.full_name });
