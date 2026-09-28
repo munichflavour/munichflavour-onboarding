@@ -41,7 +41,7 @@ Der Server läuft danach auf **http://localhost:3000**
 | Variable | Zweck |
 |----------|-------|
 | `SESSION_SECRET` | Secret für Session-Cookies. Wird bei Produktiveinsatz empfohlen; ohne gesetzte Variable erzeugt der Server beim ersten Start automatisch ein zufälliges Secret und speichert es in der Datenbank. |
-| `NODE_ENV=production` | Aktiviert u.a. `secure`-Cookies (nur über HTTPS gültig). |
+| `COOKIE_SECURE=true` | Nur setzen, wenn die App wirklich ausschließlich über **HTTPS** erreichbar ist (z.B. hinter einem Reverse Proxy mit TLS). Läuft die App per HTTP im lokalen Netz (Standardfall laut Installationsanleitung oben), **nicht** setzen – sonst funktioniert der Login nicht, weil der Browser das Session-Cookie verwirft. |
 | `TRUST_PROXY=1` | Setzen, wenn die App hinter einem Reverse Proxy (nginx, Heroku, Render, …) mit HTTPS-Terminierung läuft – sonst erkennt Express HTTPS-Anfragen nicht korrekt. |
 
 ## Funktionen

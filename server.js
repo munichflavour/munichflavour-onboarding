@@ -139,7 +139,12 @@ const storage = multer.diskStorage({
 });
 const upload = multer({ storage, limits: { fileSize: 50*1024*1024 } });
 
-const isProduction = process.env.NODE_ENV === 'production';
+// "Secure"-Cookies (nur per HTTPS gültig) sind nur sicher aktivierbar, wenn die App
+// tatsächlich über HTTPS erreichbar ist. Diese App wird oft direkt per HTTP im lokalen
+// Netz betrieben (siehe README), daher NICHT automatisch an NODE_ENV koppeln – sonst
+// wirft der Browser das Session-Cookie sofort weg und niemand kann sich mehr einloggen.
+// Nur setzen, wenn explizit per Env-Var bestätigt, dass HTTPS vorliegt.
+const cookieSecure = process.env.COOKIE_SECURE === 'true' || process.env.COOKIE_SECURE === '1';
 // Hinter einem Reverse Proxy (z.B. nginx, Heroku, Render) nötig, damit Express req.secure
 // korrekt erkennt und "secure" Cookies gesetzt werden. Per Env-Var aktivierbar.
 if (process.env.TRUST_PROXY) app.set('trust proxy', 1);
@@ -171,7 +176,7 @@ app.use(session({
   secret: sessionSecret,
   resave: false,
   saveUninitialized: false,
-  cookie: { maxAge: 7*24*60*60*1000, sameSite: 'lax', secure: isProduction }
+  cookie: { maxAge: 7*24*60*60*1000, sameSite: 'lax', secure: cookieSecure }
 }));
 
 // ===== LOGIN RATE LIMITING =====
