@@ -94,31 +94,37 @@
     .breadcrumb-back:active { background: var(--gray-light); }
     .breadcrumb-title { font-size: 18px; font-weight: 700; flex: 1; }
 
-    .file-list { background: var(--white); border-radius: 12px; box-shadow: var(--shadow); overflow: hidden; margin-bottom: 20px; }
+    /* Dokumentliste: gleiche feste Zeilenstruktur wie im Admin-Bereich (Icon | Text |
+       Ansehen), damit jede Zeile unabhängig von Dateiname/Beschreibung gleich aussieht.
+       Text wird per Ellipsis gekürzt statt umzubrechen. */
+    .file-list { background: var(--white); border-radius: 12px; box-shadow: var(--shadow); padding: 12px; margin-bottom: 20px; }
     .file-item {
       display: flex;
       align-items: center;
-      gap: 12px;
-      padding: 14px 16px;
-      border-bottom: 1px solid var(--gray-mid);
+      gap: 10px;
+      padding: 10px 12px;
+      background: var(--white);
+      border: 1px solid var(--gray-mid);
+      border-radius: 8px;
+      margin-bottom: 6px;
       -webkit-tap-highlight-color: transparent;
       color: inherit;
       text-decoration: none;
       cursor: pointer;
     }
-    .file-item:last-child { border-bottom: none; }
+    .file-item:last-child { margin-bottom: 0; }
     .file-item:active { background: var(--gray-light); }
-    .file-type-icon { font-size: 28px; flex-shrink: 0; }
-    .file-info { flex: 1; min-width: 0; }
+    .file-type-icon { font-size: 20px; flex-shrink: 0; }
+    .file-info { flex: 1; min-width: 0; display: flex; flex-direction: column; }
     .file-name { font-size: 14px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .file-meta { font-size: 12px; color: var(--gray-dark); margin-top: 2px; }
+    .file-meta { font-size: 11px; color: #aaa; margin-top: 1px; }
     .file-desc { font-size: 12px; color: #888; margin-top: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .file-actions { display: flex; gap: 8px; flex-shrink: 0; }
     .file-btn {
-      width: 42px; height: 42px;
-      border-radius: 10px;
+      width: 32px; height: 32px;
+      border-radius: 8px;
       display: flex; align-items: center; justify-content: center;
-      font-size: 18px;
+      font-size: 15px;
       text-decoration: none;
       cursor: pointer;
       border: none;
@@ -136,11 +142,8 @@
       letter-spacing: 0.8px; color: var(--gray-dark);
       margin: 20px 0 10px;
     }
-    .file-name,.file-desc {white-space:normal;overflow-wrap:anywhere;}
-    .file-btn {width:48px;height:48px;}
     .header-title,.search-bar input {min-width:0;}
-    .folder-name {overflow-wrap:anywhere;}
-    @media(max-width:380px){.file-item{flex-wrap:wrap}.file-actions{margin-left:auto}header{gap:8px;padding:10px}.logout-btn{padding:8px!important}}
+    @media(max-width:380px){header{gap:8px;padding:10px}.logout-btn{padding:8px!important}}
   </style>
 </head>
 <body>
