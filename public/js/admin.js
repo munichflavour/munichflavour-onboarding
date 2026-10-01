@@ -75,18 +75,47 @@ async function loadEmployees() {
   }
   list.innerHTML = r.data.map(emp => {
     const initials = emp.full_name.split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase();
+    const hasOvertime = emp.overtime_hours !== null && emp.overtime_hours !== undefined;
+    const overtimeText = hasOvertime ? formatOvertimeHours(emp.overtime_hours) + ' Std.' : 'Nicht erfasst';
     return `<div class="employee-row" style="cursor:default;">
       <div class="employee-avatar">${escHtml(initials)}</div>
       <div class="employee-info">
         <div class="employee-name">${escHtml(emp.full_name)}</div>
         <div class="employee-username">@${escHtml(emp.username)}</div>
+        <div class="employee-overtime">⏱ ${overtimeText}</div>
       </div>
       <div style="display:flex;gap:8px;flex-shrink:0;">
-        <button class="btn btn-secondary btn-sm" onclick="openEditEmpModal(${emp.id},'${escHtml(emp.full_name)}')">✏️</button>
-        <button class="btn btn-danger btn-sm" onclick="deleteEmployee(${emp.id},'${escHtml(emp.full_name)}')">🗑</button>
+        <button class="btn btn-secondary btn-sm" title="Überstunden bearbeiten" onclick="openOvertimeModal(${emp.id},'${escHtml(emp.full_name)}',${hasOvertime ? emp.overtime_hours : 0})">⏱</button>
+        <button class="btn btn-secondary btn-sm" title="Mitarbeiter bearbeiten" onclick="openEditEmpModal(${emp.id},'${escHtml(emp.full_name)}')">✏️</button>
+        <button class="btn btn-danger btn-sm" title="Mitarbeiter löschen" onclick="deleteEmployee(${emp.id},'${escHtml(emp.full_name)}')">🗑</button>
       </div>
     </div>`;
   }).join('');
+}
+
+function formatOvertimeHours(hours) {
+  const sign = hours > 0 ? '+' : '';
+  return sign + Number(hours).toLocaleString('de-DE', { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+}
+
+let editingOvertimeId = null;
+function openOvertimeModal(id, name, currentHours) {
+  editingOvertimeId = id;
+  document.getElementById('overtimeEmpName').textContent = name;
+  document.getElementById('overtimeHours').value = currentHours || 0;
+  document.getElementById('overtimeError').classList.add('hidden');
+  document.getElementById('overtimeModal').classList.remove('hidden');
+  document.body.style.overflow = 'hidden';
+}
+function closeOvertimeModal() { document.getElementById('overtimeModal').classList.add('hidden'); document.body.style.overflow = ''; editingOvertimeId = null; }
+
+async function saveOvertime() {
+  const errEl = document.getElementById('overtimeError'); errEl.classList.add('hidden');
+  const hours = parseFloat(document.getElementById('overtimeHours').value);
+  if (!Number.isFinite(hours)) { errEl.textContent = 'Bitte eine gültige Zahl eingeben.'; errEl.classList.remove('hidden'); return; }
+  const r = await apiFetch(`/api/admin/employees/${editingOvertimeId}/overtime`, { method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ hours }) });
+  if (!r?.ok) { errEl.textContent = r?.data?.error || 'Fehler beim Speichern'; errEl.classList.remove('hidden'); return; }
+  closeOvertimeModal(); loadEmployees();
 }
 
 function openNewEmpModal() {

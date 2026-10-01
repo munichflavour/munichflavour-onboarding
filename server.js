@@ -66,6 +66,13 @@ db.exec(`
     body TEXT,
     created_at TEXT DEFAULT (datetime('now'))
   );
+
+  CREATE TABLE IF NOT EXISTS overtime_balances (
+    user_id INTEGER PRIMARY KEY,
+    hours REAL NOT NULL DEFAULT 0,
+    updated_at TEXT DEFAULT (datetime('now')),
+    FOREIGN KEY (user_id) REFERENCES users(id)
+  );
 `);
 
 // ===== VAPID =====
@@ -122,6 +129,19 @@ async function sendPushToAdmins(title, body, url = '/admin.html') {
 async function sendPushToAllEmployees(title, body, url = '/employee.html') {
   if (!isPushEnabled()) return;
   const subs = db.prepare(`SELECT ps.endpoint, ps.p256dh, ps.auth FROM push_subscriptions ps JOIN users u ON u.id = ps.user_id WHERE u.role = 'employee'`).all();
+  const payload = JSON.stringify({ title, body, url });
+  for (const sub of subs) {
+    try {
+      await webpush.sendNotification({ endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } }, payload);
+    } catch (err) {
+      if (err.statusCode === 410 || err.statusCode === 404) db.prepare('DELETE FROM push_subscriptions WHERE endpoint = ?').run(sub.endpoint);
+    }
+  }
+}
+
+async function sendPushToUser(userId, title, body, url = '/employee.html') {
+  if (!isPushEnabled()) return;
+  const subs = db.prepare('SELECT endpoint, p256dh, auth FROM push_subscriptions WHERE user_id = ?').all(userId);
   const payload = JSON.stringify({ title, body, url });
   for (const sub of subs) {
     try {
@@ -268,7 +288,11 @@ app.get('/api/me', requireAuth, (req, res) => {
 
 // ===== ADMIN: EMPLOYEES =====
 app.get('/api/admin/employees', requireAdmin, (req, res) => {
-  res.json(db.prepare(`SELECT id, username, full_name, created_at FROM users WHERE role = 'employee' ORDER BY full_name ASC`).all());
+  res.json(db.prepare(`
+    SELECT u.id, u.username, u.full_name, u.created_at, ob.hours AS overtime_hours, ob.updated_at AS overtime_updated_at
+    FROM users u LEFT JOIN overtime_balances ob ON ob.user_id = u.id
+    WHERE u.role = 'employee' ORDER BY u.full_name ASC
+  `).all());
 });
 app.post('/api/admin/employees', requireAdmin, (req, res) => {
   const { username, password, full_name } = req.body;
@@ -287,8 +311,30 @@ app.delete('/api/admin/employees/:id', requireAdmin, (req, res) => {
   const user = db.prepare(`SELECT id FROM users WHERE id = ? AND role = 'employee'`).get(req.params.id);
   if (!user) return res.status(404).json({ error: 'Nicht gefunden' });
   db.prepare('DELETE FROM push_subscriptions WHERE user_id = ?').run(req.params.id);
+  db.prepare('DELETE FROM overtime_balances WHERE user_id = ?').run(req.params.id);
   db.prepare('DELETE FROM users WHERE id = ?').run(req.params.id);
   res.json({ ok: true });
+});
+
+// ===== ÜBERSTUNDENKONTO =====
+// Einfacher Saldo pro Mitarbeiter (kein Buchungsverlauf) – der Admin pflegt den
+// aktuellen Stand analog zur bisherigen Excel-Liste.
+app.get('/api/overtime', requireAuth, (req, res) => {
+  const row = db.prepare('SELECT hours, updated_at FROM overtime_balances WHERE user_id = ?').get(req.session.userId);
+  res.json(row || null);
+});
+app.put('/api/admin/employees/:id/overtime', requireAdmin, async (req, res) => {
+  const user = db.prepare(`SELECT id, full_name FROM users WHERE id = ? AND role = 'employee'`).get(req.params.id);
+  if (!user) return res.status(404).json({ error: 'Nicht gefunden' });
+  const hours = Number(req.body.hours);
+  if (!Number.isFinite(hours)) return res.status(400).json({ error: 'Ungültiger Stundenwert' });
+  db.prepare(`
+    INSERT INTO overtime_balances (user_id, hours, updated_at) VALUES (?, ?, datetime('now'))
+    ON CONFLICT(user_id) DO UPDATE SET hours = excluded.hours, updated_at = excluded.updated_at
+  `).run(user.id, hours);
+  const formatted = hours.toLocaleString('de-DE', { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+  sendPushToUser(user.id, '⏱ Überstunden aktualisiert', `Dein Überstunden-Stand wurde auf ${formatted} Std. aktualisiert.`);
+  res.json({ ok: true, hours });
 });
 
 // ===== DOCUMENTS =====

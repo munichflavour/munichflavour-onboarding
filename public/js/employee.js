@@ -11,8 +11,20 @@ async function init() {
   if (me) document.getElementById('headerSub').textContent = me.full_name;
   await loadDocuments();
   await loadAnnouncements();
+  await loadOvertime();
   initPushButton();
   initOfflineBanner();
+}
+
+// ===== ÜBERSTUNDENKONTO =====
+async function loadOvertime() {
+  const data = await apiFetch('/api/overtime');
+  const card = document.getElementById('overtimeCard');
+  if (!data) { card.classList.add('hidden'); return; }
+  const sign = data.hours > 0 ? '+' : '';
+  document.getElementById('overtimeValue').textContent = `${sign}${Number(data.hours).toLocaleString('de-DE', { minimumFractionDigits: 0, maximumFractionDigits: 2 })} Std.`;
+  document.getElementById('overtimeDate').textContent = `Stand: ${new Date(data.updated_at + 'Z').toLocaleDateString('de-DE')}`;
+  card.classList.remove('hidden');
 }
 
 async function loadDocuments() {

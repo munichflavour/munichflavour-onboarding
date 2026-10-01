@@ -49,13 +49,15 @@ Der Server läuft danach auf **http://localhost:3000**
 ### Mitarbeiter
 - Login
 - Dokumente durchsuchen (Ordnerstruktur) und per Volltextsuche finden
-- Dokumente ansehen oder herunterladen
-- Push-Benachrichtigung bei neuen Dokumenten (als installierte PWA)
+- Dokumente direkt ansehen (Klick auf die Zeile öffnet das Dokument)
+- Eigenen Überstunden-Stand einsehen (sofern vom Admin gepflegt)
+- Push-Benachrichtigung bei neuen Dokumenten und bei Aktualisierung des Überstunden-Stands (als installierte PWA)
 
 ### Admin
 - Ordnerstruktur anlegen, umbenennen, löschen (inkl. Unterordner)
 - Dokumente hochladen (Klick oder Drag & Drop) mit Beschreibung, löschen
 - Mitarbeiter anlegen, bearbeiten (Name/Passwort), löschen
+- Überstunden-Stand je Mitarbeiter pflegen (einfacher Saldo, kein Buchungsverlauf – wie bisher in Excel)
 
 ## App auf iPhone installieren (iOS)
 

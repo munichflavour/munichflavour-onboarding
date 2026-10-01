@@ -411,6 +411,7 @@ canvas.sig-pad {
 .employee-info { flex: 1; min-width: 0; }
 .employee-name { font-weight: 600; font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .employee-username { font-size: 13px; color: var(--gray-dark); }
+.employee-overtime { font-size: 12px; color: #888; margin-top: 2px; }
 
 .employee-progress { text-align: right; flex-shrink: 0; }
 .progress-fraction { font-size: 14px; font-weight: 600; }

@@ -166,6 +166,24 @@
     </div>
   </div>
 
+  <!-- Overtime Modal -->
+  <div id="overtimeModal" class="modal-overlay hidden">
+    <div class="modal">
+      <div class="modal-title">Überstunden bearbeiten</div>
+      <div style="font-size:14px;color:var(--gray-dark);margin-bottom:16px;" id="overtimeEmpName"></div>
+      <div class="form-group">
+        <label>Aktueller Stand (Stunden)</label>
+        <input type="number" step="0.25" id="overtimeHours" autocomplete="off">
+      </div>
+      <div style="font-size:12px;color:var(--gray-dark);margin-top:-8px;margin-bottom:16px;">Negative Werte sind möglich (z.B. -3 bei Minusstunden). Der Mitarbeiter wird per Push benachrichtigt.</div>
+      <div id="overtimeError" class="alert alert-error hidden"></div>
+      <div class="modal-actions">
+        <button class="btn btn-secondary" style="flex:1" onclick="closeOvertimeModal()">Abbrechen</button>
+        <button class="btn btn-primary" style="flex:1" onclick="saveOvertime()">Speichern</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Folder Modal -->
   <div id="folderModal" class="modal-overlay hidden">
     <div class="modal">
