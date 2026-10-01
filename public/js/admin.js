@@ -203,7 +203,8 @@ function renderFolder(folder) {
   const childrenEl = document.createElement('div'); childrenEl.className='folder-children';
   children.forEach(c=>childrenEl.appendChild(renderFolder(c)));
   docs.forEach(d=>childrenEl.appendChild(renderDocItem(d)));
-  let collapsed=false;
+  let collapsed=true;
+  childrenEl.style.display='none';
   header.addEventListener('click', () => {
     collapsed=!collapsed;
     childrenEl.style.display=collapsed?'none':'';
