@@ -26,34 +26,35 @@ import pymupdf
 HERE = Path(__file__).parent
 ASSETS = HERE / "assets"
 API = "https://api.rentman.net"
-# Kartenarten: Rentman-Materialgruppe mit den Drinks und Beschriftung(en) der Karte
+# Kartenarten: Rentman-Materialgruppe, Vorlage (assets/<vorlage>) und Layout (pt, A4 595.5 x 842.25).
+# Die Werte stammen aus den handgemachten Karten.
 KARTEN = {
-    "cocktails": dict(group="cocktails & longdrinks", datei="COCKTAILS", titel="Cocktails"),
-    "smoothies": dict(group="smoothies", datei="SMOOTHIES", titel="Smoothies"),
+    "cocktails": dict(
+        group="cocktails & longdrinks", datei="COCKTAILS", titel="Cocktails", text_x=176.5,
+        bloecke={  # Mitte der Drinkliste, Hoehe des Bereichs, Vertikal-Beschriftung
+            "COCKTAILS": dict(center=341, height=330, pitch=45.5, label_x=55, label_center=350),
+            "MOCKTAILS": dict(center=666, height=160, pitch=45.5, label_x=58, label_center=669),
+        },
+        trennlinie=dict(x0=60.1, x1=536.5, y=572.3, width=0.75)),
+    "smoothies": dict(
+        group="smoothies", datei="SMOOTHIES", titel="Smoothies", text_x=181,
+        bloecke={"SMOOTHIES": dict(center=418.5, height=500, pitch=90.7, label_x=55, label_center=421)}),
 }
 FARBZUSATZ = re.compile(r"\s*\((gelb|gruen|grün|blau|rot|orange|pink|lila|weiss|weiß)\)", re.I)
-MAX_TEXT_WIDTH = 385  # Platz zwischen Textspalte und rechtem Rand
+TEXT_RECHTS = 545  # rechter Rand fuer Drinktexte
 
-# Textkorrekturen fuer die Zutatenzeile (Rentman -> Karte), ohne Beruecksichtigung der Gross/Kleinschreibung
+# Textkorrekturen fuer Drinks, die nicht in der Stammliste stehen (Rentman -> Karte)
 ZUTATEN_ERSETZUNGEN = {
     "absolut wodka": "Wodka",
     "bombay sapphire gin": "Gin",
     "hollunder": "Holunder",
     "minze rohrzucker": "Minze, Rohrzucker",  # fehlendes Komma in Rentman
 }
-
-# Layout (pt, A4 595.5 x 842.25), uebernommen aus der handgemachten Karte
 TEXT_COLOR = (0x23 / 255, 0x22 / 255, 0x20 / 255)
 NAME_SIZE, ZUTAT_SIZE = 20, 10
-NAME_X = 176.5
-BLOCKS = {  # Mitte der Drinkliste, Hoehe des Bereichs, Position der Vertikal-Beschriftung
-    "COCKTAILS": dict(center=343, height=330, label_x=55, label_center=350),
-    "MOCKTAILS": dict(center=668, height=160, label_x=58, label_center=669),
-}
-BLOCKS["EINZEL"] = dict(center=460, height=520, label_x=55, label_center=460, max_pitch=62)  # nur eine Gruppe
-MAX_PITCH = 45.5
 LABEL_SIZE = 30
-DIVIDER = dict(x0=60.1, x1=536.5, y=572.3, width=0.75)
+LABEL_SPACING = 1.5  # Buchstabenabstand der senkrechten Beschriftung (pt)
+STAMMLISTE = HERE / "stammdaten" / "getraenke.json"
 
 
 # ---------------------------------------------------------------- Rentman
@@ -130,70 +131,85 @@ def clean_ingredients(text):
     return ", ".join(parts).upper()
 
 
-def split_menu(drinks):
-    """Teilt in (Cocktails, Mocktails). Mocktails erkennt man an '(alkoholfrei)' im Namen."""
-    is_free = lambda n: "alkoholfrei" in n.lower()
-    base = lambda n: re.sub(r"\s*\(alkoholfrei\)", "", n, flags=re.I).strip()
-    alcoholic = {n.lower() for n, _ in drinks if not is_free(n)}
-    cocktails, mocktails = [], []
+def resolve(drinks):
+    """[(Rentman-Name, Zutaten)] -> [dict(name, zutaten, alkoholfrei)] mit Texten aus der Stammliste.
+
+    Drinks ohne Stammlisten-Eintrag: Text aus Rentman (bereinigt), Warnung auf stderr.
+    """
+    stamm = {k: v for k, v in json.load(open(STAMMLISTE, encoding="utf-8")).items() if not k.startswith("_")}
+    alkoholisch = {n.lower() for n, _ in drinks if "alkoholfrei" not in n.lower()}
+    out = []
     for name, zutaten in drinks:
-        item = (base(name), clean_ingredients(zutaten))
-        if not is_free(name):
-            cocktails.append((item[0].upper(), item[1]))
-        else:
-            # gleicher Name wie ein alkoholischer Drink (z.B. Hugo) -> "Virgin Hugo"
-            label = f"Virgin {item[0]}" if item[0].lower() in alcoholic else item[0]
-            mocktails.append((label.upper(), item[1]))
-    return cocktails, mocktails
+        eintrag = stamm.get(re.sub(r"\s+", " ", name.lower()).strip())
+        if eintrag:
+            out.append(dict(name=eintrag["name"].upper(), zutaten=eintrag["zutaten"].upper(),
+                            alkoholfrei=bool(eintrag.get("alkoholfrei"))))
+            continue
+        print(f"Hinweis: '{name}' steht nicht in der Stammliste, Text aus Rentman wird verwendet.", file=sys.stderr)
+        frei = "alkoholfrei" in name.lower()
+        basis = re.sub(r"\s*\(alkoholfrei\)", "", name, flags=re.I).strip()
+        # gleicher Name wie ein alkoholischer Drink (z.B. Hugo) -> "Virgin Hugo"
+        anzeige = f"Virgin {basis}" if frei and basis.lower() in alkoholisch else basis
+        out.append(dict(name=anzeige.upper(), zutaten=clean_ingredients(zutaten), alkoholfrei=frei))
+    return out
 
 
 # ---------------------------------------------------------------- PDF
 
-def fit_size(font, text, size):
+def fit_size(font, text, size, x):
     """Verkleinert die Schrift, falls der Text sonst ueber den rechten Rand laeuft."""
     w = font.text_length(text, fontsize=size)
-    return size if w <= MAX_TEXT_WIDTH else size * MAX_TEXT_WIDTH / w
+    return size if x + w <= TEXT_RECHTS else size * (TEXT_RECHTS - x) / w
 
 
-def render(sections, out_path, titel):
-    """sections: [(Beschriftung, [(Name, Zutaten), ...]), ...] - eine oder zwei Gruppen."""
+def render(karte, sections, out_path):
+    """sections: [(Beschriftung, [(Name, Zutaten), ...]), ...]"""
+    cfg = KARTEN[karte]
     sections = [(t, items) for t, items in sections if items]
-    doc = pymupdf.open(ASSETS / "template.pdf")
+    adir = ASSETS / karte
+    doc = pymupdf.open(adir / "template.pdf")
     page = doc[0]
+    x = cfg["text_x"]
     mont = pymupdf.Font(fontfile=str(ASSETS / "Montserrat-Regular.ttf"))
+    label = pymupdf.Font(fontfile=str(adir / "label.ttf"))
     page.insert_font("mont", str(ASSETS / "Montserrat-Regular.ttf"))
-    page.insert_font("active", str(ASSETS / "Active-Regular.ttf"))
+    page.insert_font("label", str(adir / "label.ttf"))
     page.insert_font("bold", str(ASSETS / "Montserrat-Bold.ttf"))
-    active_chars = set(chr(c) for c in pymupdf.Font(fontfile=str(ASSETS / "Active-Regular.ttf")).valid_codepoints())
+    label_chars = set(chr(c) for c in label.valid_codepoints())
 
     for title, items in sections:
-        b = BLOCKS[title] if len(sections) == 2 else BLOCKS["EINZEL"]
-        pitch = min(b.get("max_pitch", MAX_PITCH), b["height"] / len(items))
-        scale = min(1.0, pitch / MAX_PITCH) ** 0.5
-        # Drinks sind vertikal um die Beschriftung zentriert
-        block_h = pitch * (len(items) - 1) + 31
+        b = cfg["bloecke"][title]
+        pitch = min(b["pitch"], b["height"] / len(items))
+        scale = min(1.0, pitch / 45.5) ** 0.5
+        block_h = pitch * (len(items) - 1) + 32      # von Oberkante Name bis Unterkante Zutatenzeile
         top = b["center"] - block_h / 2
         for i, (name, zutaten) in enumerate(items):
-            y = top + i * pitch + NAME_SIZE * 0.85
-            ns = fit_size(mont, name, NAME_SIZE * scale)
-            zs = fit_size(mont, zutaten, ZUTAT_SIZE * scale)
-            page.insert_text((NAME_X, y), name, fontname="mont", fontsize=ns, color=TEXT_COLOR)
-            page.insert_text((NAME_X, y + 10.5 * scale), zutaten, fontname="mont", fontsize=zs, color=TEXT_COLOR)
+            y = top + i * pitch + 19 * scale
+            page.insert_text((x, y), name, fontname="mont", fontsize=fit_size(mont, name, NAME_SIZE * scale, x),
+                             color=TEXT_COLOR)
+            if zutaten:
+                page.insert_text((x, y + 10.5 * scale), zutaten, fontname="mont",
+                                 fontsize=fit_size(mont, zutaten, ZUTAT_SIZE * scale, x), color=TEXT_COLOR)
         # senkrechte Beschriftung (gedreht um 90 Grad), mittig; Pinselschrift der Karte, falls alle Buchstaben vorhanden
-        fname = "active" if set(title) <= active_chars else "bold"
-        if fname == "bold":
-            print(f"Hinweis: Die Pinselschrift der Karte hat nicht alle Buchstaben fuer '{title}' "
+        use_label = set(title) <= label_chars
+        if not use_label:
+            print(f"Hinweis: Die Pinselschrift der Vorlage hat nicht alle Buchstaben fuer '{title}' "
                   "- Ersatzschrift Montserrat Bold.", file=sys.stderr)
-        font = pymupdf.Font(fontfile=str(ASSETS / ("Active-Regular.ttf" if fname == "active" else "Montserrat-Bold.ttf")))
-        size = LABEL_SIZE if fname == "active" else LABEL_SIZE * 0.8
-        w = font.text_length(title, fontsize=size)
-        page.insert_text(pymupdf.Point(b["label_x"] + 36.5, b["label_center"] + w / 2), title,
-                         fontname=fname, fontsize=size, color=TEXT_COLOR, rotate=90)
+        font = label if use_label else pymupdf.Font(fontfile=str(ASSETS / "Montserrat-Bold.ttf"))
+        size = LABEL_SIZE if use_label else LABEL_SIZE * 0.8
+        fname = "label" if use_label else "bold"
+        # Zeichen einzeln setzen (Canva-Buchstabenabstand), von unten nach oben, mittig auf label_center
+        total = sum(font.text_length(c, fontsize=size) for c in title) + LABEL_SPACING * (len(title) - 1)
+        y = b["label_center"] + total / 2
+        for c in title:
+            page.insert_text(pymupdf.Point(b["label_x"] + 27.5, y), c, fontname=fname, fontsize=size,
+                             color=TEXT_COLOR, rotate=90)
+            y -= font.text_length(c, fontsize=size) + LABEL_SPACING
 
-    if len(sections) == 2:
-        page.draw_line((DIVIDER["x0"], DIVIDER["y"]), (DIVIDER["x1"], DIVIDER["y"]),
-                       color=(0, 0, 0), width=DIVIDER["width"])
-    doc.set_metadata({"title": titel, "author": "Munich Flavour"})
+    if len(sections) == 2 and cfg.get("trennlinie"):
+        t = cfg["trennlinie"]
+        page.draw_line((t["x0"], t["y"]), (t["x1"], t["y"]), color=(0, 0, 0), width=t["width"])
+    doc.set_metadata({"title": cfg["titel"], "author": "Munich Flavour"})
     doc.save(out_path, garbage=3, deflate=True)
 
 
@@ -203,21 +219,21 @@ def main():
     ap.add_argument("-k", "--karte", choices=KARTEN, default="cocktails", help="Kartenart (Standard: cocktails)")
     ap.add_argument("-o", "--out", help="Ausgabedatei (Standard: <KARTE>_<Projektname>.pdf)")
     args = ap.parse_args()
-    karte = KARTEN[args.karte]
+    cfg = KARTEN[args.karte]
 
     project = find_project(args.projekt)
     print(f"Projekt: Nr. {project['number']} {project['name'].strip()} ({project['planperiod_start'][:10]})")
-    drinks = load_drinks(project["id"], karte["group"])
+    drinks = resolve(load_drinks(project["id"], cfg["group"]))
     if not drinks:
-        sys.exit(f"Im Projekt wurden keine Eintraege in der Materialgruppe '{karte['group']}' gefunden.")
+        sys.exit(f"Im Projekt wurden keine Eintraege in der Materialgruppe '{cfg['group']}' gefunden.")
     if args.karte == "cocktails":
-        cocktails, mocktails = split_menu(drinks)
-        sections = [("COCKTAILS", cocktails), ("MOCKTAILS", mocktails)]
+        sections = [("COCKTAILS", [(d["name"], d["zutaten"]) for d in drinks if not d["alkoholfrei"]]),
+                    ("MOCKTAILS", [(d["name"], d["zutaten"]) for d in drinks if d["alkoholfrei"]])]
     else:
-        sections = [(karte["titel"].upper(), [(n.upper(), clean_ingredients(z)) for n, z in drinks])]
+        sections = [(cfg["titel"].upper(), [(d["name"], d["zutaten"]) for d in drinks])]
     print(", ".join(f"{len(i)} {t.capitalize()}" for t, i in sections))
-    out = args.out or karte["datei"] + "_" + re.sub(r"[^\w-]+", "_", project["name"].strip()) + ".pdf"
-    render(sections, out, karte["titel"])
+    out = args.out or cfg["datei"] + "_" + re.sub(r"[^\w-]+", "_", project["name"].strip()) + ".pdf"
+    render(args.karte, sections, out)
     print("Gespeichert:", out)
 
 

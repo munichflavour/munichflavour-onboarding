@@ -1,0 +1,22 @@
+{
+  "_hinweis": "Kartentexte aus den fertigen Karten (Böttcher, Standard, Lammens). Schluessel = Rentman-Name in Kleinbuchstaben, ohne Farbzusatz. Fehlt ein Drink hier, nimmt das Skript den Text aus Rentman und gibt eine Warnung aus.",
+  "mojito": {"name": "Mojito", "zutaten": "Havana, Limette, Minze, Soda"},
+  "cuba libre": {"name": "Cuba Libre", "zutaten": "Havana, Cola, Limette"},
+  "whisky cola": {"name": "Whisky Cola", "zutaten": "Whisky, Cola"},
+  "gin & tonic": {"name": "Gin & Tonic", "zutaten": "Gin, Tonic Water"},
+  "wodka soda": {"name": "Wodka Soda", "zutaten": "Wodka, Soda, Limette"},
+  "aperol spritz": {"name": "Aperol Spritz", "zutaten": "Aperol, Prosecco, Orange, Soda"},
+  "hugo": {"name": "Hugo", "zutaten": "Prosecco, Holunder, Minze, Limette, Soda"},
+  "solero": {"name": "Solero", "zutaten": "Wodka, Vanille, Orange, Maracuja, Zitrone"},
+  "raspberry thyme smash": {"name": "Raspberry Thyme Smash", "zutaten": "Gin, Zitrone, Himbeere, Rohrzucker, Thymian, Soda"},
+  "munich mule": {"name": "Munich Mule", "zutaten": "Gin, Spicy Ginger, Gurke"},
+  "sarti lemon": {"name": "Sarti Lemon", "zutaten": "Sarti Rosato, Bitter Lemon, Grapefruit, Rosmarin"},
+
+  "nojito (alkoholfrei)": {"name": "Virgin Mojito", "zutaten": "Limette, Minze, weißer Rohrzucker, Soda", "alkoholfrei": true},
+  "hugo (alkoholfrei)": {"name": "Virgin Hugo", "zutaten": "Holunder, Minze, Limette, Soda", "alkoholfrei": true},
+  "wedding spritz (alkoholfrei)": {"name": "Wedding Spritz", "zutaten": "Johannisbeere, Tonic, Zitrone, Soda", "alkoholfrei": true},
+  "shirley temple (alkoholfrei)": {"name": "Shirley Temple", "zutaten": "Grenadine, Spicy Ginger, Gurke, Limette", "alkoholfrei": true},
+
+  "chia mango smoothie": {"name": "Chia Mango Smoothie", "zutaten": "Mango, Apfel, Banane, Zitrone, Chia Samen"},
+  "strawberry oat smoothie": {"name": "Strawberry Oat", "zutaten": "Erdbeere, Banane, Haferflocken, Hafermilch"}
+}
