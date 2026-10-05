@@ -17,6 +17,17 @@ Smoothies). Vorschau, PDF-Download und Hinweise stehen direkt darunter.
 Es werden nur **bestaetigte** Projekte angeboten (Rentman-Status Bestaetigt, Gepackt, Am Veranstaltungsort, Retour).
 Bei Option, Anfrage, Konzept oder Annulliert meldet die Oberflaeche den Status, erzeugt aber keine Karte.
 
+**Ablage:** Jede erzeugte Karte wird automatisch gespeichert, je Projekt in einem Unterordner
+`<Datum> <Projektname> (<Nummer>)` unter `~/Kartengenerator/Karten`. Eine neu erzeugte Karte ersetzt die alte mit
+gleichem Namen. Der Ordner laesst sich in `~/Kartengenerator/.env` aendern (z. B. auf einen Google-Drive-Ordner):
+
+```
+KARTEN_ORDNER=/Users/DEINNAME/Google Drive/Karten
+```
+
+Der Knopf **Im Finder zeigen** markiert die Datei im Finder. Von dort die PDF in Rentman im Projekt unter *Dateien*
+hochladen. Die Rentman-API (Version 1.16.0) bietet keinen Datei-Upload, deshalb ist dieser Schritt von Hand.
+
 Die Oberflaeche laeuft nur auf deinem Rechner (127.0.0.1:8765), beenden mit Ctrl+C im Terminalfenster.
 
 ## Kommandozeile

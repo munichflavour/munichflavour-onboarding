@@ -5,6 +5,8 @@ Start: python3 app.py   (oeffnet http://127.0.0.1:8765 im Browser; lauscht nur a
 """
 import base64
 import json
+import subprocess
+import sys
 import threading
 import urllib.parse
 import webbrowser
@@ -58,8 +60,10 @@ class Handler(BaseHTTPRequestHandler):
             self.senden(400, dict(fehler=str(e)))
 
     def do_POST(self):
-        if self.path != "/api/karten":
+        if self.path not in ("/api/karten", "/api/zeigen"):
             return self.senden(404, dict(fehler="Nicht gefunden"))
+        if self.path == "/api/zeigen":
+            return self.zeigen()
         try:
             pid = json.loads(self.rfile.read(int(self.headers.get("Content-Length", 0))))["id"]
             projekt = next((p for p in ck.alle_projekte() if p["id"] == pid), None)
@@ -67,16 +71,35 @@ class Handler(BaseHTTPRequestHandler):
                 raise ck.KartenFehler("Projekt nicht gefunden.")
             with LOCK:
                 karten = ck.erstelle_karten(projekt)
+            try:
+                pfade = [str(p) for p in ck.speichere_karten(projekt, karten)] if karten else []
+                speicherfehler = None
+            except ck.KartenFehler as e:  # Karten trotzdem anzeigen, nur den Speicherfehler melden
+                pfade, speicherfehler = [None] * len(karten), str(e)
             out = []
-            for k in karten:
+            for k, pfad in zip(karten, pfade):
                 png = pymupdf.open(stream=k["pdf"], filetype="pdf")[0].get_pixmap(dpi=80).tobytes("png")
                 out.append(dict(karte=k["karte"], titel=k["titel"], datei=k["datei"], anzahl=k["anzahl"],
-                                warnungen=k["warnungen"], pdf=base64.b64encode(k["pdf"]).decode(),
+                                warnungen=k["warnungen"], pfad=pfad, pdf=base64.b64encode(k["pdf"]).decode(),
                                 png=base64.b64encode(png).decode()))
-            self.senden(200, dict(projekt=projekt_json(projekt), karten=out))
+            self.senden(200, dict(projekt=projekt_json(projekt), karten=out, speicherfehler=speicherfehler))
         except ck.KartenFehler as e:
             self.senden(400, dict(fehler=str(e)))
         except Exception as e:  # unerwartet: Meldung statt Absturz
+            self.senden(500, dict(fehler=f"Unerwarteter Fehler: {e}"))
+
+
+    def zeigen(self):
+        """Zeigt eine gespeicherte Karte im Finder (nur Dateien unterhalb des Karten-Ordners)."""
+        try:
+            pfad = Path(json.loads(self.rfile.read(int(self.headers.get("Content-Length", 0))))["pfad"]).resolve()
+            if ck.karten_ordner().resolve() not in pfad.parents or not pfad.is_file():
+                return self.senden(400, dict(fehler="Datei nicht gefunden."))
+            if sys.platform != "darwin":
+                return self.senden(400, dict(fehler="Der Finder ist nur auf dem Mac verfuegbar."))
+            subprocess.run(["open", "-R", str(pfad)], check=False)
+            self.senden(200, dict(ok=True))
+        except Exception as e:
             self.senden(500, dict(fehler=f"Unerwarteter Fehler: {e}"))
 
 

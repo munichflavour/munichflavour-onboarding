@@ -73,13 +73,19 @@ def warn(msg):
     print("Hinweis:", msg, file=sys.stderr)
 
 
-def token():
-    t = os.environ.get("RENTMAN_API") or os.environ.get("rentman_api")
-    if not t and (HERE / ".env").exists():  # lokale Datei tools/cocktailkarte/.env mit Zeile RENTMAN_API=...
+def einstellung(name):
+    """Wert aus der Umgebung oder aus tools/cocktailkarte/.env (Zeilen der Form NAME=Wert), sonst None."""
+    wert = os.environ.get(name) or os.environ.get(name.lower())
+    if not wert and (HERE / ".env").exists():
         for line in (HERE / ".env").read_text().splitlines():
             k, _, v = line.partition("=")
-            if k.strip().upper() == "RENTMAN_API":
-                t = v.strip().strip("\"'")
+            if k.strip().upper() == name:
+                wert = v.strip().strip("\"'")
+    return wert or None
+
+
+def token():
+    t = einstellung("RENTMAN_API")
     if not t:
         raise KartenFehler("Rentman API-Token fehlt: Datei tools/cocktailkarte/.env mit der Zeile "
                            "RENTMAN_API=<Token> anlegen.")
@@ -334,6 +340,31 @@ def erstelle_karten(project, nur=None):
     return ergebnis
 
 
+def karten_ordner():
+    """Basisordner fuer fertige Karten: Einstellung KARTEN_ORDNER, sonst ~/Kartengenerator/Karten."""
+    return Path(einstellung("KARTEN_ORDNER") or Path.home() / "Kartengenerator" / "Karten").expanduser()
+
+
+def speichere_karten(project, karten):
+    """Legt die PDFs im Projektordner '<Datum> <Projektname> (<Nummer>)' ab; gleiche Namen werden ersetzt.
+
+    Rueckgabe: Liste der Dateipfade. Fehlt der Zugriff auf den Ordner, wird eine KartenFehler-Meldung geworfen.
+    """
+    sauber = lambda t: re.sub(r"[\\/:*?\"<>|]+", "-", t).strip()
+    name = f"{(project.get('planperiod_start') or 'ohne Datum')[:10]} {sauber(project['name'])} ({project['number']})"
+    ordner = karten_ordner() / name
+    try:
+        ordner.mkdir(parents=True, exist_ok=True)
+        pfade = []
+        for k in karten:
+            pfad = ordner / k["datei"]
+            pfad.write_bytes(k["pdf"])
+            pfade.append(pfad)
+    except OSError as e:
+        raise KartenFehler(f"Karten konnten nicht in '{ordner}' gespeichert werden: {e.strerror or e}") from e
+    return pfade
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("projekt", help="Projektnummer oder Teil des Projektnamens")
@@ -349,10 +380,16 @@ def main():
         sys.exit(str(e))
     if not karten:
         sys.exit("Im Projekt ist weder Cocktail- noch Smoothie-Material gebucht.")
-    for k in karten:
-        out = args.out if args.out and args.karte else k["datei"]
-        Path(out).write_bytes(k["pdf"])
-        print(f"{k['titel']}: {k['anzahl']} -> {out}")
+    try:
+        if args.out and args.karte:
+            Path(args.out).write_bytes(karten[0]["pdf"])
+            pfade = [Path(args.out)]
+        else:
+            pfade = speichere_karten(project, karten)
+    except KartenFehler as e:
+        sys.exit(str(e))
+    for k, pfad in zip(karten, pfade):
+        print(f"{k['titel']}: {k['anzahl']} -> {pfad}")
 
 
 if __name__ == "__main__":
