@@ -26,29 +26,36 @@ from pathlib import Path
 import pymupdf
 
 from essen import render_essen
+from schrift import Pinsel
 
 HERE = Path(__file__).parent
 ASSETS = HERE / "assets"
 API = "https://api.rentman.net"
-# Kartenarten: Rentman-Materialgruppe, Vorlage (assets/<vorlage>) und Layout (pt, A4 595.5 x 842.25).
-# Die Werte stammen aus den handgemachten Karten.
-KARTEN = {
-    "cocktails": dict(
-        group="cocktails & longdrinks", datei="COCKTAILS", titel="Cocktails", text_x=176.5,
-        bloecke={  # Mitte der Drinkliste, Hoehe des Bereichs, Vertikal-Beschriftung
-            "COCKTAILS": dict(center=341, height=330, pitch=45.5, label_x=55, label_center=350),
-            "MOCKTAILS": dict(center=666, height=160, pitch=45.5, label_x=58, label_center=669),
-        },
+# Layouts (pt, A4 595.5 x 842.25); die Werte stammen aus den handgemachten Karten. Vorlage = assets/<Layoutname>.
+LAYOUTS = {
+    "cocktails": dict(  # zwei Bloecke mit Trennlinie (Cocktails + Mocktails)
+        text_x=176.5,
+        bloecke=[  # Mitte der Drinkliste, Hoehe des Bereichs, Vertikal-Beschriftung
+            dict(center=341, height=330, pitch=45.5, label_x=55, label_center=350),
+            dict(center=666, height=160, pitch=45.5, label_x=58, label_center=669, label_max=170)],
         trennlinie=dict(x0=60.1, x1=536.5, y=572.3, width=0.75)),
-    "smoothies": dict(
-        group="smoothies", datei="SMOOTHIES", titel="Smoothies", text_x=181,
-        bloecke={"SMOOTHIES": dict(center=418.5, height=500, pitch=90.7, label_x=55, label_center=421)}),
-    "kaffee": dict(
-        group="kaffee", datei="KAFFEE-KARTE", titel="Kaffee", text_x=212,
-        # Espresso hat eine Zusatzzeile (Einfach/Doppelt): Eintraege mit Zusatz brauchen mehr Platz
-        bloecke={"KAFFEE": dict(center=432, height=490, pitch=54.8, pitch_ohne=45.6, label_x=55, label_center=421)}),
-    "essen": dict(group="catering", datei="ESSEN", titel="Essen"),
+    "smoothies": dict(  # ein Block (Smoothies, Hot Drinks, ...)
+        text_x=181,
+        bloecke=[dict(center=418.5, height=500, pitch=90.7, label_x=55, label_center=421)]),
+    "kaffee": dict(  # Espresso hat eine Zusatzzeile (Einfach/Doppelt): Eintraege mit Zusatz brauchen mehr Platz
+        text_x=212,
+        bloecke=[dict(center=432, height=490, pitch=54.8, pitch_ohne=45.6, label_x=55, label_center=421)]),
 }
+# Welche Rentman-Materialgruppe wird zu welcher Karte? Die Beschriftung der Karte ist immer der Gruppenname.
+GRUPPE_ESSEN = re.compile(r"^catering\b", re.I)
+GRUPPE_KAFFEE = re.compile(r"^(kaffee|coffee)", re.I)
+GRUPPE_GETRAENK = re.compile(r"cocktail|longdrink|aperitif|\bdrinks?\b|smoothie|matcha|shake|shot|slush|limonade|"
+                             r"hei(ß|ss)getränk", re.I)
+GRUPPE_COCKTAILIG = re.compile(r"cocktail|^drinks?$", re.I)   # Layout mit Cocktail/Mocktail-Aufteilung
+# Gruppennamen, die auf der Karte bewusst kuerzer stehen (bisherige handgemachte Karten)
+LABEL_NAMEN = {"cocktails & longdrinks": "COCKTAILS", "cocktails": "COCKTAILS", "matcha spezialitäten": "MATCHA"}
+KARTENARTEN = {"getraenke": "Getränke", "kaffee": "Kaffee", "essen": "Essen"}
+ZUSATZKARTEN = ["kaffee"]   # in der Oberflaeche trotz fehlender Rentman-Gruppe anforderbar (Standardliste)
 KAFFEE_STAMM = HERE / "stammdaten" / "kaffee.json"
 SPEISEN_STAMM = HERE / "stammdaten" / "speisen.json"
 # Rentman-Blockname (klein, ohne Doppelpunkt) -> Ueberschrift auf der Essenkarte
@@ -56,7 +63,7 @@ SPEISEN_ABSCHNITTE = {"canapés": "CANAPÉS", "brotzeit spezialitäten": "BROTZE
                       "dessert im weckglas": "DESSERT"}
 ABSCHNITT_REIHENFOLGE = ["SALATE", "CANAPÉS", "BROTZEIT"]  # Rest danach, DESSERT immer zuletzt
 KAFFEE_MATERIAL = re.compile(r"siebträger|kaffeebar|barista|kiste kaffee|^kaffee\b", re.I)
-FARBZUSATZ = re.compile(r"\s*\((gelb|gruen|grün|blau|rot|orange|pink|lila|weiss|weiß)\)", re.I)
+FARBZUSATZ = re.compile(r"\s*\(((hell|dunkel)?(gelb|gruen|grün|blau|rot|orange|pink|rosa?|lila|violett|weiss|weiß|türkis|magenta|braun|schwarz|gold|silber|grau|beige|petrol|flieder)|[^)]*\bfarbe)\)", re.I)  # Farbhinweis im Namen, z. B. "(gelb)"
 TEXT_RECHTS = 545  # rechter Rand fuer Drinktexte
 
 # Textkorrekturen fuer Drinks, die nicht in der Stammliste stehen (Rentman -> Karte)
@@ -204,9 +211,9 @@ def plain(text):
 
 
 def lade_material(project_id):
-    """Material und Materialgruppen eines Projekts: (Zeilen, {Gruppen-URL: Gruppenname klein})."""
+    """Material und Materialgruppen eines Projekts: (Zeilen, {Gruppen-URL: Gruppenname})."""
     rows = api_get(f"/projects/{project_id}/projectequipment")
-    groups = {f"/projectequipmentgroup/{g['id']}": g["name"].strip().lower()
+    groups = {f"/projectequipmentgroup/{g['id']}": g["name"].strip()
               for g in api_get(f"/projects/{project_id}/projectequipmentgroup")}
     return rows, groups
 
@@ -214,7 +221,8 @@ def lade_material(project_id):
 def positionen_aus(rows, groups, group_name):
     """Eintraege (unter den Bloecken mit Menge > 0) einer Materialgruppe: [dict(block, name, remark)]."""
     bloecke = {f"/projectequipment/{r['id']}": plain(r["name"]) for r in rows
-               if not r["parent"] and groups.get(r["equipment_group"]) == group_name and (r["quantity"] or 0) > 0}
+               if not r["parent"] and groups.get(r["equipment_group"], "").lower() == group_name.lower()
+               and (r["quantity"] or 0) > 0}
     return [dict(block=bloecke[r["parent"]], name=plain(r["name"]), remark=plain(r["external_remark"]))
             for r in rows if r["parent"] in bloecke]
 
@@ -254,28 +262,30 @@ def resolve(drinks):
     """
     stamm = {k: v for k, v in json.load(open(STAMMLISTE, encoding="utf-8")).items() if not k.startswith("_")}
     alkoholisch = {n.lower() for n, _ in drinks if "alkoholfrei" not in n.lower()}
-    out = []
+    out, unbekannt = [], []
     for name, zutaten in drinks:
         eintrag = stamm.get(re.sub(r"\s+", " ", name.lower()).strip())
         if eintrag:
             out.append(dict(name=eintrag["name"].upper(), zutaten=eintrag["zutaten"].upper(),
                             alkoholfrei=bool(eintrag.get("alkoholfrei"))))
             continue
-        warn(f"'{name}' steht nicht in der Stammliste, Text aus Rentman wird verwendet.")
+        unbekannt.append(name)
         frei = "alkoholfrei" in name.lower()
-        basis = re.sub(r"\s*\(alkoholfrei\)", "", name, flags=re.I).strip()
+        basis = re.sub(r"\s*\(?alkoholfrei\)?\s*$", "", name, flags=re.I).strip()
         # gleicher Name wie ein alkoholischer Drink (z.B. Hugo) -> "Virgin Hugo"
         anzeige = f"Virgin {basis}" if frei and basis.lower() in alkoholisch else basis
         out.append(dict(name=anzeige.upper(), zutaten=clean_ingredients(zutaten), alkoholfrei=frei))
+    if unbekannt:
+        warn("Nicht in der Stammliste (Text aus Rentman): " + ", ".join(unbekannt))
     return out
 
 
-def kaffee_aus(rows, groups, erzwingen=False):
+def kaffee_aus(rows, groups, gruppe=None, erzwingen=False):
     """[(Name, Zusatz)] der Kaffeekarte. Ohne Rentman-Gruppe 'Kaffee': Standardliste, wenn Kaffee-Equipment gebucht ist."""
     stamm = json.load(open(KAFFEE_STAMM, encoding="utf-8"))
     umb = stamm["umbenennung"]
     items, seen = [], set()
-    for p in positionen_aus(rows, groups, "kaffee"):
+    for p in positionen_aus(rows, groups, gruppe) if gruppe else []:
         if p["name"].lower() in seen:
             continue
         seen.add(p["name"].lower())
@@ -299,11 +309,11 @@ def speise_schluessel(name):
     return re.sub(r"\s+", " ", n).strip().lower()
 
 
-def speisen_aus(rows, groups):
+def speisen_aus(rows, groups, gruppe):
     """Abschnitte der Essenkarte: [dict(titel, items)] mit Texten, Allergenen und Ernaehrungsform aus der Stammliste."""
     stamm = {k: v for k, v in json.load(open(SPEISEN_STAMM, encoding="utf-8")).items() if not k.startswith("_")}
     abschnitte, gesehen = {}, set()
-    for p in positionen_aus(rows, groups, "catering"):
+    for p in positionen_aus(rows, groups, gruppe):
         blockname = re.sub(r"\s+", " ", p["block"].lower().rstrip(": ")).strip()
         titel = SPEISEN_ABSCHNITTE.get(blockname)
         if not titel:
@@ -336,23 +346,32 @@ def fit_size(font, text, size, x):
     return size if x + w <= TEXT_RECHTS else size * (TEXT_RECHTS - x) / w
 
 
-def render(karte, sections, out_path=None):
+def layout_fuer(layout, sections):
+    """(Vorlagenordner, Konfiguration, Block-Konfigurationen je Abschnitt, Trennlinie).
+
+    layout: "zwei" (Cocktail-Layout), "eins" (Smoothie-Layout), "kaffee" oder "auto" (je nach Abschnittszahl).
+    """
+    name = {"zwei": "cocktails", "eins": "smoothies", "kaffee": "kaffee",
+            "auto": "cocktails" if len(sections) == 2 else "smoothies"}[layout]
+    cfg = LAYOUTS[name]
+    return name, cfg, cfg["bloecke"][:len(sections)], cfg.get("trennlinie")
+
+
+def render(layout, sections, titel, out_path=None):
     """sections: [(Beschriftung, [(Name, Zutaten), ...]), ...]. Ohne out_path werden die PDF-Bytes zurueckgegeben."""
-    cfg = KARTEN[karte]
     sections = [(t, items) for t, items in sections if items]
-    adir = ASSETS / karte
+    vorlage, cfg, bloecke, trennlinie = layout_fuer(layout, sections)
+    adir = ASSETS / vorlage
     doc = pymupdf.open(adir / "template.pdf")
     page = doc[0]
     x = cfg["text_x"]
     mont = pymupdf.Font(fontfile=str(ASSETS / "Montserrat-Regular.ttf"))
-    label = pymupdf.Font(fontfile=str(adir / "label.ttf"))
+    bold = pymupdf.Font(fontfile=str(ASSETS / "Montserrat-Bold.ttf"))
     page.insert_font("mont", str(ASSETS / "Montserrat-Regular.ttf"))
-    page.insert_font("label", str(adir / "label.ttf"))
     page.insert_font("bold", str(ASSETS / "Montserrat-Bold.ttf"))
-    label_chars = set(chr(c) for c in label.valid_codepoints())
+    pinsel = Pinsel(page, adir)
 
-    for title, items in sections:
-        b = cfg["bloecke"][title]
+    for (title, items), b in zip(sections, bloecke):
         # Abstand pro Eintrag: mit Zusatzzeile 'pitch', ohne Zusatzzeile 'pitch_ohne' (Standard: gleich)
         adv = [b["pitch"] if z else b.get("pitch_ohne", b["pitch"]) for _, z in items]
         letzte_h = 32 if items[-1][1] else 24
@@ -370,66 +389,103 @@ def render(karte, sections, out_path=None):
                 page.insert_text((x, y + 10.5 * scale), zutaten, fontname="mont",
                                  fontsize=fit_size(mont, zutaten, ZUTAT_SIZE * scale, x), color=TEXT_COLOR)
             y_pos += adv[i]
-        # senkrechte Beschriftung (gedreht um 90 Grad), mittig; Pinselschrift der Karte, falls alle Buchstaben vorhanden
-        use_label = set(title) <= label_chars
-        if not use_label:
-            warn(f"Die Pinselschrift der Vorlage hat nicht alle Buchstaben fuer '{title}' - Ersatzschrift Montserrat Bold.")
-        font = label if use_label else pymupdf.Font(fontfile=str(ASSETS / "Montserrat-Bold.ttf"))
-        size = LABEL_SIZE if use_label else LABEL_SIZE * 0.8
-        fname = "label" if use_label else "bold"
-        # Zeichen einzeln setzen (Canva-Buchstabenabstand), von unten nach oben, mittig auf label_center
-        total = sum(font.text_length(c, fontsize=size) for c in title) + LABEL_SPACING * (len(title) - 1)
-        y = b["label_center"] + total / 2
-        for c in title:
-            page.insert_text(pymupdf.Point(b["label_x"] + 27.5, y), c, fontname=fname, fontsize=size,
-                             color=TEXT_COLOR, rotate=90)
-            y -= font.text_length(c, fontsize=size) + LABEL_SPACING
+        # senkrechte Beschriftung (um 90 Grad gedreht), mittig; Pinselschrift der Karte, falls alle Buchstaben vorhanden
+        bx = b["label_x"] + 27.5
+        if pinsel.kann(title):
+            size = LABEL_SIZE
+            laenge = pinsel.laenge(title, size, LABEL_SPACING)
+            if laenge > b.get("label_max", 300):          # lange Beschriftung verkleinern
+                size = size * b.get("label_max", 300) / laenge
+                laenge = pinsel.laenge(title, size, LABEL_SPACING)
+            pinsel.schreibe(bx, b["label_center"] + laenge / 2, title, size, LABEL_SPACING, TEXT_COLOR, vertikal=True)
+        else:
+            warn(f"Die Pinselschrift hat nicht alle Buchstaben fuer '{title}' - Ersatzschrift Montserrat Bold.")
+            size = LABEL_SIZE * 0.8
+            laenge = sum(bold.text_length(c, fontsize=size) for c in title) + LABEL_SPACING * (len(title) - 1)
+            y = b["label_center"] + laenge / 2
+            for c in title:
+                page.insert_text(pymupdf.Point(bx, y), c, fontname="bold", fontsize=size, color=TEXT_COLOR, rotate=90)
+                y -= bold.text_length(c, fontsize=size) + LABEL_SPACING
 
-    if len(sections) == 2 and cfg.get("trennlinie"):
-        t = cfg["trennlinie"]
+    if len(sections) == 2 and trennlinie:
+        t = trennlinie
         page.draw_line((t["x0"], t["y"]), (t["x1"], t["y"]), color=(0, 0, 0), width=t["width"])
-    doc.set_metadata({"title": cfg["titel"], "author": "Munich Flavour"})
+    doc.set_metadata({"title": titel, "author": "Munich Flavour"})
     if out_path is None:
         return doc.tobytes(garbage=3, deflate=True)
     doc.save(out_path, garbage=3, deflate=True)
 
 
-def erstelle_karten(project, nur=None):
-    """Erzeugt alle Karten, fuer die im Projekt Material gebucht ist (oder nur die Kartenart `nur`).
+def label_fuer(gruppe):
+    """Beschriftung der Karte = Rentman-Gruppenname (Grossbuchstaben, ohne Zusatz '-optional-')."""
+    n = re.sub(r"\s*-?\s*optional\s*-?\s*$", "", gruppe, flags=re.I).strip()
+    return LABEL_NAMEN.get(n.lower(), n.upper())
 
-    Rueckgabe: [dict(karte, titel, datei, anzahl, pdf, warnungen)]
+
+def kartengruppen(rows, groups):
+    """[(Gruppenname, Art)] der Materialgruppen mit gebuchten Eintraegen, die eine Karte ergeben (Reihenfolge wie Rentman)."""
+    ergebnis = []
+    for name in dict.fromkeys(groups.values()):
+        if not positionen_aus(rows, groups, name):
+            continue
+        if GRUPPE_ESSEN.search(name):
+            ergebnis.append((name, "essen"))
+        elif GRUPPE_KAFFEE.search(name):
+            ergebnis.append((name, "kaffee"))
+        elif GRUPPE_GETRAENK.search(name):
+            ergebnis.append((name, "getraenke"))
+    return ergebnis
+
+
+def erstelle_karten(project, nur=None):
+    """Erzeugt fuer jede passende Materialgruppe des Projekts eine Karte (oder nur die Art `nur`).
+
+    Die Beschriftung ist der Gruppenname aus Rentman. Rueckgabe:
+    [dict(karte, gruppe, titel, datei, anzahl, pdf, warnungen)]
     """
     rows, groups = lade_material(project["id"])
-    ergebnis = []
-    for karte, cfg in KARTEN.items():
-        if nur and karte != nur:
+    gruppen = kartengruppen(rows, groups)
+    if (nur == "kaffee" or not nur) and not any(a == "kaffee" for _, a in gruppen) and \
+            (nur == "kaffee" or any(KAFFEE_MATERIAL.search(plain(r["name"])) for r in rows)):
+        gruppen.append((None, "kaffee"))      # Kaffee-Equipment gebucht, aber keine Kaffee-Gruppe: Standardliste
+    ergebnis, benutzt = [], set()
+    for gruppe, art in gruppen:
+        if nur and art != nur:
             continue
         del WARNUNGEN[:]
-        if karte == "essen":
-            abschnitte = speisen_aus(rows, groups)
+        titel = gruppe or "Kaffee"
+        label = label_fuer(titel)
+        if art == "essen":
+            abschnitte = speisen_aus(rows, groups, gruppe)
             if not abschnitte:
                 continue
             warn("Allergene und Ernaehrungsangaben stammen aus der Stammliste (stammdaten/speisen.json), nicht aus "
                  "Rentman - bitte vor dem Druck pruefen.")
             anzahl = ", ".join(f"{len(a['items'])} {a['titel'].capitalize()}" for a in abschnitte)
             pdf = render_essen(abschnitte, ASSETS / "essen", warn)
+            prefix = "ESSEN"
         else:
-            if karte == "kaffee":
-                items = kaffee_aus(rows, groups, erzwingen=bool(nur))
-                sections = [("KAFFEE", items)]
+            if art == "kaffee":
+                sections, layout, prefix = [(label, kaffee_aus(rows, groups, gruppe, erzwingen=bool(nur)))], "kaffee", "KAFFEE-KARTE"
             else:
-                drinks = resolve(drinks_aus(rows, groups, cfg["group"]))
-                if karte == "cocktails":
-                    sections = [("COCKTAILS", [(d["name"], d["zutaten"]) for d in drinks if not d["alkoholfrei"]]),
-                                ("MOCKTAILS", [(d["name"], d["zutaten"]) for d in drinks if d["alkoholfrei"]])]
-                else:
-                    sections = [(cfg["titel"].upper(), [(d["name"], d["zutaten"]) for d in drinks])]
+                drinks = resolve(drinks_aus(rows, groups, gruppe))
+                cocktailig = bool(GRUPPE_COCKTAILIG.search(titel))
+                mit = [(d["name"], d["zutaten"]) for d in drinks if not d["alkoholfrei"]]
+                frei = [(d["name"], d["zutaten"]) for d in drinks if d["alkoholfrei"]]
+                zweit = "MOCKTAILS" if cocktailig else "ALKOHOLFREI"
+                sections = [(label, mit), (zweit, frei)] if mit and frei else [(label, mit + frei)]
+                layout, prefix = ("zwei" if cocktailig else "auto"), re.sub(r"[^\w]+", "-", label).strip("-")
             if not any(i for _, i in sections):
                 continue
             anzahl = ", ".join(f"{len(i)} {t.capitalize()}" for t, i in sections if i)
-            pdf = render(karte, sections)
-        datei = cfg["datei"] + "_" + re.sub(r"[^\w-]+", "_", project["name"].strip()).strip("_") + ".pdf"
-        ergebnis.append(dict(karte=karte, titel=cfg["titel"], datei=datei, anzahl=anzahl, pdf=pdf,
+            pdf = render(layout, sections, titel)
+        datei = prefix + "_" + re.sub(r"[^\w-]+", "_", project["name"].strip()).strip("_") + ".pdf"
+        basis, n = datei[:-4], 1
+        while datei in benutzt:       # zwei Gruppen mit gleicher Beschriftung im selben Projekt
+            n += 1
+            datei = f"{basis}_{n}.pdf"
+        benutzt.add(datei)
+        ergebnis.append(dict(karte=art, gruppe=gruppe, titel=titel, datei=datei, anzahl=anzahl, pdf=pdf,
                              warnungen=list(WARNUNGEN)))
     return ergebnis
 
@@ -462,7 +518,7 @@ def speichere_karten(project, karten):
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("projekt", help="Projektnummer oder Teil des Projektnamens")
-    ap.add_argument("-k", "--karte", choices=list(KARTEN), help="nur diese Kartenart (Standard: alle gebuchten)")
+    ap.add_argument("-k", "--karte", choices=list(KARTENARTEN), help="nur diese Kartenart (Standard: alle gebuchten)")
     ap.add_argument("-o", "--out", help="Ausgabedatei (nur zusammen mit --karte)")
     ap.add_argument("--auch-unbestaetigt", action="store_true", help="auch Projekte mit Status Option/Anfrage/Konzept")
     args = ap.parse_args()
@@ -473,9 +529,9 @@ def main():
     except KartenFehler as e:
         sys.exit(str(e))
     if not karten:
-        sys.exit("Im Projekt ist weder Cocktail- noch Smoothie-Material gebucht.")
+        sys.exit("Im Projekt ist kein Getränke-, Kaffee- oder Catering-Material gebucht, das eine Karte ergibt.")
     try:
-        if args.out and args.karte:
+        if args.out and len(karten) == 1:
             Path(args.out).write_bytes(karten[0]["pdf"])
             pfade = [Path(args.out)]
         else:

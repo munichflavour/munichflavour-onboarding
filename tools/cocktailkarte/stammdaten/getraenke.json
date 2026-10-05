@@ -18,5 +18,6 @@
   "shirley temple (alkoholfrei)": {"name": "Shirley Temple", "zutaten": "Grenadine, Spicy Ginger, Gurke, Limette", "alkoholfrei": true},
 
   "chia mango smoothie": {"name": "Chia Mango Smoothie", "zutaten": "Mango, Apfel, Banane, Zitrone, Chia Samen"},
+  "green smoothie": {"name": "Green Smoothie", "zutaten": "Ananas, Avocado, Apfel, Spinat, Ingwer, Sellerie, Orange"},
   "strawberry oat smoothie": {"name": "Strawberry Oat", "zutaten": "Erdbeere, Banane, Haferflocken, Hafermilch"}
 }

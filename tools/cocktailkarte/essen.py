@@ -8,6 +8,8 @@ import re
 
 import pymupdf
 
+from schrift import Pinsel
+
 TEXT = (0x23 / 255, 0x22 / 255, 0x20 / 255)
 NAME_SIZE, DESC_SIZE, DIET_SIZE, HEAD_SIZE = 16.2, 6.2, 8.4, 30
 NAME_LEAD, DESC_LEAD = 16.2, 6.4
@@ -91,18 +93,18 @@ def zeichne_item(page, it, fonts, x, top, mitte=None):
 
 def ueberschrift(page, text, mitte, y0, fonts, warn):
     """Abschnittsueberschrift in der Pinselschrift der Karte (wenn alle Buchstaben vorhanden), sonst Montserrat Bold."""
-    for name, font in fonts["labels"]:
-        if set(text) <= font["zeichen"]:
-            fname, f, size, spacing = name, font["font"], HEAD_SIZE, HEAD_SPACING
-            break
-    else:
-        warn(f"Die Pinselschrift der Vorlage hat nicht alle Buchstaben fuer '{text}' - Ersatzschrift Montserrat Bold.")
-        fname, f, size, spacing = "bold", fonts["bold"], HEAD_SIZE * 0.8, 1.0
-    w = sum(f.text_length(c, fontsize=size) for c in text) + spacing * (len(text) - 1)
+    pinsel = fonts["pinsel"]
+    if pinsel.kann(text):
+        w = pinsel.laenge(text, HEAD_SIZE, HEAD_SPACING)
+        pinsel.schreibe(mitte - w / 2, y0 + 27.4, text, HEAD_SIZE, HEAD_SPACING, TEXT)
+        return
+    warn(f"Die Pinselschrift der Vorlage hat nicht alle Buchstaben fuer '{text}' - Ersatzschrift Montserrat Bold.")
+    size, spacing = HEAD_SIZE * 0.8, 1.0
+    w = sum(fonts["bold"].text_length(c, fontsize=size) for c in text) + spacing * (len(text) - 1)
     x = mitte - w / 2
     for c in text:
-        page.insert_text((x, y0 + 27.4), c, fontname=fname, fontsize=size, color=TEXT)
-        x += f.text_length(c, fontsize=size) + spacing
+        page.insert_text((x, y0 + 27.4), c, fontname="bold", fontsize=size, color=TEXT)
+        x += fonts["bold"].text_length(c, fontsize=size) + spacing
 
 
 def render_essen(abschnitte, assets, warn):
@@ -113,13 +115,10 @@ def render_essen(abschnitte, assets, warn):
     doc = pymupdf.open(assets / "template.pdf")
     page = doc[0]
     fonts = dict(mont=pymupdf.Font(fontfile=str(assets.parent / "Montserrat-Regular.ttf")),
-                 bold=pymupdf.Font(fontfile=str(assets.parent / "Montserrat-Bold.ttf")), labels=[])
+                 bold=pymupdf.Font(fontfile=str(assets.parent / "Montserrat-Bold.ttf")))
     page.insert_font("mont", str(assets.parent / "Montserrat-Regular.ttf"))
     page.insert_font("bold", str(assets.parent / "Montserrat-Bold.ttf"))
-    for i, pfad in enumerate(sorted(assets.glob("label*.ttf"))):
-        f = pymupdf.Font(fontfile=str(pfad))
-        page.insert_font(f"label{i}", str(pfad))
-        fonts["labels"].append((f"label{i}", dict(font=f, zeichen=set(chr(c) for c in f.valid_codepoints()))))
+    fonts["pinsel"] = Pinsel(page, assets)
     legende_ttf = assets / "legende.ttf"
     page.insert_font("legende", str(legende_ttf))
     legende = pymupdf.Font(fontfile=str(legende_ttf))

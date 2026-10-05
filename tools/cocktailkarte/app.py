@@ -67,7 +67,7 @@ class Handler(BaseHTTPRequestHandler):
         try:
             body = json.loads(self.rfile.read(int(self.headers.get("Content-Length", 0))))
             pid, nur = body["id"], body.get("nur")
-            if nur and nur not in ck.KARTEN:
+            if nur and nur not in ck.KARTENARTEN:
                 raise ck.KartenFehler("Unbekannte Kartenart.")
             projekt = next((p for p in ck.alle_projekte() if p["id"] == pid), None)
             if not projekt:
@@ -76,7 +76,7 @@ class Handler(BaseHTTPRequestHandler):
                 karten = ck.erstelle_karten(projekt, nur)
             if nur and not karten:
                 raise ck.KartenFehler(f"Für dieses Projekt ist kein Material für die Karte "
-                                      f"'{ck.KARTEN[nur]['titel']}' gebucht.")
+                                      f"'{ck.KARTENARTEN[nur]}' gebucht.")
             try:
                 pfade = [str(p) for p in ck.speichere_karten(projekt, karten)] if karten else []
                 speicherfehler = None
@@ -85,11 +85,11 @@ class Handler(BaseHTTPRequestHandler):
             out = []
             for k, pfad in zip(karten, pfade):
                 png = pymupdf.open(stream=k["pdf"], filetype="pdf")[0].get_pixmap(dpi=80).tobytes("png")
-                out.append(dict(karte=k["karte"], titel=k["titel"], datei=k["datei"], anzahl=k["anzahl"],
+                out.append(dict(karte=k["karte"], gruppe=k["gruppe"], titel=k["titel"], datei=k["datei"], anzahl=k["anzahl"],
                                 warnungen=k["warnungen"], pfad=pfad, pdf=base64.b64encode(k["pdf"]).decode(),
                                 png=base64.b64encode(png).decode()))
             self.senden(200, dict(projekt=projekt_json(projekt), karten=out, speicherfehler=speicherfehler,
-                                  arten=[dict(karte=k, titel=c["titel"]) for k, c in ck.KARTEN.items()]))
+                                  arten=[dict(karte=k, titel=ck.KARTENARTEN[k] + "karte (Standardliste)") for k in ck.ZUSATZKARTEN]))
         except ck.KartenFehler as e:
             self.senden(400, dict(fehler=str(e)))
         except Exception as e:  # unerwartet: Meldung statt Absturz

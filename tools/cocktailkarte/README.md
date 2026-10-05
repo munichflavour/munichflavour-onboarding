@@ -45,14 +45,26 @@ python3 tools/cocktailkarte/cocktailkarte.py "Lammens" --karte smoothies   # nur
 Name oder Projektnummer, nur bestaetigte Projekte (`--auch-unbestaetigt` hebt das auf). Bei mehreren Treffern wird
 das naechste anstehende Event genommen.
 
-## Kartenarten und Datenquellen
+## Welche Karten entstehen? (gruppengesteuert)
 
-| Karte | Rentman-Gruppe | Texte |
+Fuer **jede passende Rentman-Materialgruppe** eines Projekts entsteht eine Karte. Die senkrechte Beschriftung ist der
+**Gruppenname aus Rentman** (Pinselschrift), z. B. "Drinks", "Hot Drinks", "Aperitif", "Smoothies".
+Kuerzer stehen nur die bisherigen Karten: `Cocktails & Longdrinks` und `Cocktails` -> COCKTAILS,
+`Matcha Spezialitaeten` -> MATCHA (Liste `LABEL_NAMEN` in `cocktailkarte.py`).
+
+| Gruppenname enthaelt | Karte | Texte |
 |---|---|---|
-| Cocktails (+ Mocktails) | `Cocktails & Longdrinks` | `stammdaten/getraenke.json`, sonst Rentman |
-| Smoothies | `Smoothies` | `stammdaten/getraenke.json`, sonst Rentman |
-| Kaffee | `Kaffee` (Zusatzzeile = Bemerkung, z. B. Einfach/Doppelt). Fehlt die Gruppe, aber Kaffee-Equipment ist gebucht (Siebtraeger, Kaffeebar ...), gilt die Standardliste | `stammdaten/kaffee.json` |
-| Essen | `Catering` (Bloecke: Canapes, Brotzeit Spezialitaeten, Speisen im Weckglas = Salate, Dessert im Weckglas) | `stammdaten/speisen.json` inkl. Allergene und vegetarisch/vegan |
+| cocktail, longdrink, aperitif, drinks, smoothie, matcha, shake, shot, slush, limonade, heissgetraenk | Getraenkekarte. Mit alkoholfreien Drinks zwei Abteilungen (MOCKTAILS bei Cocktail-Gruppen, sonst ALKOHOLFREI) | `stammdaten/getraenke.json`, sonst Rentman |
+| kaffee, coffee | Kaffeekarte (Zusatzzeile = Bemerkung, z. B. Einfach/Doppelt). Fehlt die Gruppe, aber Kaffee-Equipment ist gebucht (Siebtraeger, Kaffeebar ...), gilt die Standardliste | `stammdaten/kaffee.json` |
+| catering | Essenkarte (Bloecke: Canapes, Brotzeit Spezialitaeten, Speisen im Weckglas = Salate, Dessert im Weckglas) | `stammdaten/speisen.json` inkl. Allergene und vegetarisch/vegan |
+
+Andere Gruppen (Auftragspauschale, Bars, Mietequipment, Getraenke mit Weinen/Bier ...) ergeben keine Karte.
+Neue Gruppennamen erkennt man an den Mustern `GRUPPE_*` in `cocktailkarte.py`.
+
+**Pinselschrift:** Sie liegt nur als Auszug vor (nur die Buchstaben, die auf den fertigen Karten vorkommen). Fehlt ein
+Buchstabe (aktuell u. a. G, J, Q, W, X, Y, Ae/Oe/Ue und das &), steht die Beschriftung ersatzweise in Montserrat Bold
+und die Oberflaeche zeigt einen Hinweis. Mit einer fertigen Karte, die den Buchstaben enthaelt, laesst sich der
+Auszug ergaenzen (`make_template.py`).
 
 **Allergene** stehen nicht in Rentman, sondern in `stammdaten/speisen.json`. Die Angaben stammen aus den bisherigen
 Karten und sind nicht neu geprueft. Speisen ohne Eintrag werden ohne Allergene gesetzt und gemeldet.
