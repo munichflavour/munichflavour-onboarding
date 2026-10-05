@@ -46,7 +46,10 @@ class Handler(BaseHTTPRequestHandler):
                 self.senden(200, (ck.ASSETS / "cocktails" / "label.ttf").read_bytes(), "font/ttf")
             elif url.path == "/api/suche":
                 q = urllib.parse.parse_qs(url.query).get("q", [""])[0]
-                self.senden(200, dict(projekte=[projekt_json(p) for p in ck.suche(q)]))
+                treffer = ck.suche(q)
+                andere = [] if treffer else ck.nicht_bestaetigt(q)
+                self.senden(200, dict(projekte=[projekt_json(p) for p in treffer],
+                                      andere=[dict(projekt_json(p), status=p["status"]) for p in andere[:5]]))
             elif url.path == "/api/anstehende":
                 self.senden(200, dict(projekte=[projekt_json(p) for p in ck.anstehende()]))
             else:

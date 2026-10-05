@@ -46,7 +46,7 @@ h2{font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:var(--mute
   <p class="sub">Kartengenerator &middot; Daten direkt aus Rentman</p>
 
   <form id="form">
-    <input id="q" autocomplete="off" autofocus placeholder="Projektname oder -nummer, z. B. Böttcher">
+    <input id="q" autocomplete="off" autofocus placeholder="Name oder Nummer eines bestätigten Projekts, z. B. Böttcher">
     <button id="los">Karte erstellen</button>
   </form>
 
@@ -54,7 +54,7 @@ h2{font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:var(--mute
   <div id="auswahl"></div>
   <div id="ergebnis"></div>
 
-  <h2 id="bald-titel" hidden>Anstehende Events (nächste 21 Tage)</h2>
+  <h2 id="bald-titel" hidden>Bestätigte Events der nächsten 21 Tage</h2>
   <div id="bald" class="liste"></div>
 </main>
 
@@ -80,8 +80,13 @@ async function suchen(e) {
   $('auswahl').innerHTML = ''; $('ergebnis').innerHTML = '';
   sperre(true); status('Suche in Rentman …');
   try {
-    const { projekte } = await api('/api/suche?q=' + encodeURIComponent(q));
-    if (!projekte.length) { status(`Kein Projekt zu „${q}“ gefunden.`, 'fehler'); sperre(false); return; }
+    const { projekte, andere } = await api('/api/suche?q=' + encodeURIComponent(q));
+    if (!projekte.length) {
+      if (andere.length) {
+        status(`Kein bestätigtes Projekt zu „${q}“ gefunden. Es gibt aber: ` + andere.map(p => `${p.name} (${p.status}, ${datum(p.datum)})`).join('; ') + '. Karten gibt es nur für bestätigte Projekte.', 'fehler');
+      } else status(`Kein Projekt zu „${q}“ gefunden.`, 'fehler');
+      sperre(false); return;
+    }
     if (projekte.length === 1) { await erzeugen(projekte[0]); return; }
     status(`${projekte.length} Projekte gefunden – bitte auswählen (das nächste Event steht oben):`);
     $('auswahl').innerHTML = '<div class="treffer">' + projekte.slice(0, 30).map(p =>

@@ -103,14 +103,25 @@ def api_get(path, **params):
         offset += 300
 
 
+# Rentman-Status "Bestaetigt" (3) und die Folgestatus Gepackt (4), Am Veranstaltungsort (5), Retour (6)
+BESTAETIGT = {3, 4, 5, 6}
 _projekte = dict(zeit=0, daten=[])
 
 
 def alle_projekte():
-    """Projektliste (id, Nummer, Name, Datum), 10 Minuten zwischengespeichert."""
+    """Projektliste (id, Nummer, Name, Datum, Status), 10 Minuten zwischengespeichert.
+
+    Den Status fuehrt Rentman am Unterprojekt; jedes Projekt hat dort genau eine Zeile.
+    """
     if time.time() - _projekte["zeit"] > 600:
-        _projekte["daten"] = api_get("/projects", fields="id,number,name,planperiod_start")
-        _projekte["zeit"] = time.time()
+        status = {s["id"]: s["name"] for s in api_get("/statuses")}
+        status_von = {sp["project"]: int(sp["status"].split("/")[-1]) if sp["status"] else None
+                      for sp in api_get("/subprojects", fields="id,project,status")}
+        projekte = api_get("/projects", fields="id,number,name,planperiod_start")
+        for p in projekte:
+            sid = status_von.get(f"/projects/{p['id']}")
+            p["status_id"], p["status"] = sid, status.get(sid, "ohne Status")
+        _projekte["daten"], _projekte["zeit"] = projekte, time.time()
     return _projekte["daten"]
 
 
@@ -130,23 +141,36 @@ def sortiere_nach_datum(projekte):
     return sorted(projekte, key=key)
 
 
-def suche(query):
+def suche(query, nur_bestaetigt=True):
     q = query.strip().lower()
     if not q:
         return []
     treffer = [p for p in alle_projekte() if q in (p["name"] or "").lower() or q == str(p["number"])]
+    if nur_bestaetigt:
+        treffer = [p for p in treffer if p["status_id"] in BESTAETIGT]
     return sortiere_nach_datum(treffer)
+
+
+def nicht_bestaetigt(query):
+    """Projekte, die zur Suche passen, aber (noch) nicht bestaetigt sind - fuer den Hinweis in der Oberflaeche."""
+    return [p for p in suche(query, nur_bestaetigt=False) if p["status_id"] not in BESTAETIGT]
 
 
 def anstehende(tage=21):
     heute = datetime.date.today()
-    bald = [p for p in alle_projekte() if projekt_tag(p) and 0 <= (projekt_tag(p) - heute).days <= tage]
+    bald = [p for p in alle_projekte()
+            if p["status_id"] in BESTAETIGT and projekt_tag(p) and 0 <= (projekt_tag(p) - heute).days <= tage]
     return sortiere_nach_datum(bald)
 
 
-def find_project(query):
-    hits = suche(query)
+def find_project(query, nur_bestaetigt=True):
+    hits = suche(query, nur_bestaetigt)
     if not hits:
+        andere = nicht_bestaetigt(query) if nur_bestaetigt else []
+        if andere:
+            raise KartenFehler(f"Zu '{query}' gibt es nur nicht bestaetigte Projekte: "
+                               + ", ".join(f"{p['name'].strip()} ({p['status']})" for p in andere[:5])
+                               + ". Mit --auch-unbestaetigt trotzdem erzeugen.")
         raise KartenFehler(f"Kein Projekt zu '{query}' gefunden.")
     if len(hits) > 1:
         print(f"Mehrere Treffer fuer '{query}', es wird das naechste Event genommen:", file=sys.stderr)
@@ -315,9 +339,10 @@ def main():
     ap.add_argument("projekt", help="Projektnummer oder Teil des Projektnamens")
     ap.add_argument("-k", "--karte", choices=list(KARTEN), help="nur diese Kartenart (Standard: alle gebuchten)")
     ap.add_argument("-o", "--out", help="Ausgabedatei (nur zusammen mit --karte)")
+    ap.add_argument("--auch-unbestaetigt", action="store_true", help="auch Projekte mit Status Option/Anfrage/Konzept")
     args = ap.parse_args()
     try:
-        project = find_project(args.projekt)
+        project = find_project(args.projekt, nur_bestaetigt=not args.auch_unbestaetigt)
         print(f"Projekt: Nr. {project['number']} {project['name'].strip()} ({(project['planperiod_start'] or 'ohne Datum')[:10]})")
         karten = erstelle_karten(project, args.karte)
     except KartenFehler as e:
