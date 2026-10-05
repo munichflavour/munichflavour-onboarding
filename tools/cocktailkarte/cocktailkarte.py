@@ -17,6 +17,8 @@ import json
 import os
 import re
 import sys
+import time
+import urllib.error
 import urllib.parse
 import urllib.request
 from pathlib import Path
@@ -59,35 +61,97 @@ STAMMLISTE = HERE / "stammdaten" / "getraenke.json"
 
 # ---------------------------------------------------------------- Rentman
 
+class KartenFehler(Exception):
+    """Fehler mit verstaendlicher Meldung fuer den Anwender (CLI und Oberflaeche)."""
+
+
+WARNUNGEN = []
+
+
+def warn(msg):
+    WARNUNGEN.append(msg)
+    print("Hinweis:", msg, file=sys.stderr)
+
+
+def token():
+    t = os.environ.get("RENTMAN_API") or os.environ.get("rentman_api")
+    if not t and (HERE / ".env").exists():  # lokale Datei tools/cocktailkarte/.env mit Zeile RENTMAN_API=...
+        for line in (HERE / ".env").read_text().splitlines():
+            k, _, v = line.partition("=")
+            if k.strip().upper() == "RENTMAN_API":
+                t = v.strip().strip("\"'")
+    if not t:
+        raise KartenFehler("Rentman API-Token fehlt: Datei tools/cocktailkarte/.env mit der Zeile "
+                           "RENTMAN_API=<Token> anlegen.")
+    return t
+
+
 def api_get(path, **params):
-    token = os.environ.get("RENTMAN_API") or os.environ.get("rentman_api")
-    if not token:
-        sys.exit("Umgebungsvariable RENTMAN_API (Rentman API-Token) ist nicht gesetzt.")
     rows, offset = [], 0
     while True:
         q = urllib.parse.urlencode({**params, "limit": 300, "offset": offset})
-        req = urllib.request.Request(f"{API}{path}?{q}", headers={"Authorization": f"Bearer {token}"})
-        data = json.load(urllib.request.urlopen(req, timeout=60))["data"]
+        req = urllib.request.Request(f"{API}{path}?{q}", headers={"Authorization": f"Bearer {token()}"})
+        try:
+            data = json.load(urllib.request.urlopen(req, timeout=60))["data"]
+        except urllib.error.HTTPError as e:
+            raise KartenFehler(f"Rentman antwortet mit Fehler {e.code} (Token gueltig?).") from e
+        except urllib.error.URLError as e:
+            raise KartenFehler(f"Rentman nicht erreichbar: {e.reason}") from e
         rows += data
         if len(data) < 300:
             return rows
         offset += 300
 
 
+_projekte = dict(zeit=0, daten=[])
+
+
+def alle_projekte():
+    """Projektliste (id, Nummer, Name, Datum), 10 Minuten zwischengespeichert."""
+    if time.time() - _projekte["zeit"] > 600:
+        _projekte["daten"] = api_get("/projects", fields="id,number,name,planperiod_start")
+        _projekte["zeit"] = time.time()
+    return _projekte["daten"]
+
+
+def projekt_tag(p):
+    """Starttag des Projekts als date, oder None (manche Rentman-Projekte haben kein Datum)."""
+    d = (p.get("planperiod_start") or "")[:10]
+    return datetime.date.fromisoformat(d) if d else None
+
+
+def sortiere_nach_datum(projekte):
+    """Anstehende Events zuerst (nach Datum), danach vergangene (neueste zuerst), Projekte ohne Datum zuletzt."""
+    heute = datetime.date.today()
+
+    def key(p):
+        t = projekt_tag(p)
+        return (2, 0) if t is None else (t < heute, abs((t - heute).days))
+    return sorted(projekte, key=key)
+
+
+def suche(query):
+    q = query.strip().lower()
+    if not q:
+        return []
+    treffer = [p for p in alle_projekte() if q in (p["name"] or "").lower() or q == str(p["number"])]
+    return sortiere_nach_datum(treffer)
+
+
+def anstehende(tage=21):
+    heute = datetime.date.today()
+    bald = [p for p in alle_projekte() if projekt_tag(p) and 0 <= (projekt_tag(p) - heute).days <= tage]
+    return sortiere_nach_datum(bald)
+
+
 def find_project(query):
-    if query.isdigit():
-        hits = api_get("/projects", number=query)
-    else:
-        hits = [p for p in api_get("/projects") if query.lower() in (p["name"] or "").lower()]
+    hits = suche(query)
     if not hits:
-        sys.exit(f"Kein Projekt zu '{query}' gefunden.")
+        raise KartenFehler(f"Kein Projekt zu '{query}' gefunden.")
     if len(hits) > 1:
-        heute = datetime.date.today().isoformat()
-        hits.sort(key=lambda p: (p["planperiod_start"][:10] < heute, abs(
-            (datetime.date.fromisoformat(p["planperiod_start"][:10]) - datetime.date.today()).days)))
         print(f"Mehrere Treffer fuer '{query}', es wird das naechste Event genommen:", file=sys.stderr)
         for p in hits[:10]:
-            print(f"  Nr. {p['number']}  {p['name'].strip()}  ({p['planperiod_start'][:10]})", file=sys.stderr)
+            print(f"  Nr. {p['number']}  {p['name'].strip()}  ({(p['planperiod_start'] or 'ohne Datum')[:10]})", file=sys.stderr)
     return hits[0]
 
 
@@ -95,11 +159,16 @@ def plain(text):
     return re.sub(r"\s+", " ", html.unescape(re.sub(r"<[^>]+>", " ", text or ""))).strip()
 
 
-def load_drinks(project_id, group_name):
-    """Liefert [(Name, Zutatentext)] aller Drinks der angegebenen Materialgruppe."""
+def lade_material(project_id):
+    """Material und Materialgruppen eines Projekts: (Zeilen, {Gruppen-URL: Gruppenname klein})."""
     rows = api_get(f"/projects/{project_id}/projectequipment")
     groups = {f"/projectequipmentgroup/{g['id']}": g["name"].strip().lower()
               for g in api_get(f"/projects/{project_id}/projectequipmentgroup")}
+    return rows, groups
+
+
+def drinks_aus(rows, groups, group_name):
+    """Liefert [(Name, Zutatentext)] aller Drinks der angegebenen Materialgruppe."""
     blocks = {f"/projectequipment/{r['id']}" for r in rows
               if not r["parent"] and groups.get(r["equipment_group"]) == group_name and (r["quantity"] or 0) > 0}
     drinks, seen = [], set()
@@ -113,7 +182,7 @@ def load_drinks(project_id, group_name):
             continue
         seen.add(key)
         if not zutaten:
-            print(f"Hinweis: Drink '{name}' hat in Rentman keine Zutatenzeile (Bemerkung).", file=sys.stderr)
+            warn(f"Drink '{name}' hat in Rentman keine Zutatenzeile (Bemerkung).")
         drinks.append((name, zutaten))
     return drinks
 
@@ -145,7 +214,7 @@ def resolve(drinks):
             out.append(dict(name=eintrag["name"].upper(), zutaten=eintrag["zutaten"].upper(),
                             alkoholfrei=bool(eintrag.get("alkoholfrei"))))
             continue
-        print(f"Hinweis: '{name}' steht nicht in der Stammliste, Text aus Rentman wird verwendet.", file=sys.stderr)
+        warn(f"'{name}' steht nicht in der Stammliste, Text aus Rentman wird verwendet.")
         frei = "alkoholfrei" in name.lower()
         basis = re.sub(r"\s*\(alkoholfrei\)", "", name, flags=re.I).strip()
         # gleicher Name wie ein alkoholischer Drink (z.B. Hugo) -> "Virgin Hugo"
@@ -162,8 +231,8 @@ def fit_size(font, text, size, x):
     return size if x + w <= TEXT_RECHTS else size * (TEXT_RECHTS - x) / w
 
 
-def render(karte, sections, out_path):
-    """sections: [(Beschriftung, [(Name, Zutaten), ...]), ...]"""
+def render(karte, sections, out_path=None):
+    """sections: [(Beschriftung, [(Name, Zutaten), ...]), ...]. Ohne out_path werden die PDF-Bytes zurueckgegeben."""
     cfg = KARTEN[karte]
     sections = [(t, items) for t, items in sections if items]
     adir = ASSETS / karte
@@ -193,8 +262,7 @@ def render(karte, sections, out_path):
         # senkrechte Beschriftung (gedreht um 90 Grad), mittig; Pinselschrift der Karte, falls alle Buchstaben vorhanden
         use_label = set(title) <= label_chars
         if not use_label:
-            print(f"Hinweis: Die Pinselschrift der Vorlage hat nicht alle Buchstaben fuer '{title}' "
-                  "- Ersatzschrift Montserrat Bold.", file=sys.stderr)
+            warn(f"Die Pinselschrift der Vorlage hat nicht alle Buchstaben fuer '{title}' - Ersatzschrift Montserrat Bold.")
         font = label if use_label else pymupdf.Font(fontfile=str(ASSETS / "Montserrat-Bold.ttf"))
         size = LABEL_SIZE if use_label else LABEL_SIZE * 0.8
         fname = "label" if use_label else "bold"
@@ -210,31 +278,56 @@ def render(karte, sections, out_path):
         t = cfg["trennlinie"]
         page.draw_line((t["x0"], t["y"]), (t["x1"], t["y"]), color=(0, 0, 0), width=t["width"])
     doc.set_metadata({"title": cfg["titel"], "author": "Munich Flavour"})
+    if out_path is None:
+        return doc.tobytes(garbage=3, deflate=True)
     doc.save(out_path, garbage=3, deflate=True)
+
+
+def erstelle_karten(project, nur=None):
+    """Erzeugt alle Karten, fuer die im Projekt Material gebucht ist (oder nur die Kartenart `nur`).
+
+    Rueckgabe: [dict(karte, titel, datei, anzahl, pdf, warnungen)]
+    """
+    rows, groups = lade_material(project["id"])
+    ergebnis = []
+    for karte, cfg in KARTEN.items():
+        if nur and karte != nur:
+            continue
+        del WARNUNGEN[:]
+        drinks = resolve(drinks_aus(rows, groups, cfg["group"]))
+        if not drinks:
+            continue
+        if karte == "cocktails":
+            sections = [("COCKTAILS", [(d["name"], d["zutaten"]) for d in drinks if not d["alkoholfrei"]]),
+                        ("MOCKTAILS", [(d["name"], d["zutaten"]) for d in drinks if d["alkoholfrei"]])]
+        else:
+            sections = [(cfg["titel"].upper(), [(d["name"], d["zutaten"]) for d in drinks])]
+        anzahl = ", ".join(f"{len(i)} {t.capitalize()}" for t, i in sections if i)
+        pdf = render(karte, sections)
+        datei = cfg["datei"] + "_" + re.sub(r"[^\w-]+", "_", project["name"].strip()).strip("_") + ".pdf"
+        ergebnis.append(dict(karte=karte, titel=cfg["titel"], datei=datei, anzahl=anzahl, pdf=pdf,
+                             warnungen=list(WARNUNGEN)))
+    return ergebnis
 
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("projekt", help="Projektnummer oder Teil des Projektnamens")
-    ap.add_argument("-k", "--karte", choices=KARTEN, default="cocktails", help="Kartenart (Standard: cocktails)")
-    ap.add_argument("-o", "--out", help="Ausgabedatei (Standard: <KARTE>_<Projektname>.pdf)")
+    ap.add_argument("-k", "--karte", choices=list(KARTEN), help="nur diese Kartenart (Standard: alle gebuchten)")
+    ap.add_argument("-o", "--out", help="Ausgabedatei (nur zusammen mit --karte)")
     args = ap.parse_args()
-    cfg = KARTEN[args.karte]
-
-    project = find_project(args.projekt)
-    print(f"Projekt: Nr. {project['number']} {project['name'].strip()} ({project['planperiod_start'][:10]})")
-    drinks = resolve(load_drinks(project["id"], cfg["group"]))
-    if not drinks:
-        sys.exit(f"Im Projekt wurden keine Eintraege in der Materialgruppe '{cfg['group']}' gefunden.")
-    if args.karte == "cocktails":
-        sections = [("COCKTAILS", [(d["name"], d["zutaten"]) for d in drinks if not d["alkoholfrei"]]),
-                    ("MOCKTAILS", [(d["name"], d["zutaten"]) for d in drinks if d["alkoholfrei"]])]
-    else:
-        sections = [(cfg["titel"].upper(), [(d["name"], d["zutaten"]) for d in drinks])]
-    print(", ".join(f"{len(i)} {t.capitalize()}" for t, i in sections))
-    out = args.out or cfg["datei"] + "_" + re.sub(r"[^\w-]+", "_", project["name"].strip()) + ".pdf"
-    render(args.karte, sections, out)
-    print("Gespeichert:", out)
+    try:
+        project = find_project(args.projekt)
+        print(f"Projekt: Nr. {project['number']} {project['name'].strip()} ({(project['planperiod_start'] or 'ohne Datum')[:10]})")
+        karten = erstelle_karten(project, args.karte)
+    except KartenFehler as e:
+        sys.exit(str(e))
+    if not karten:
+        sys.exit("Im Projekt ist weder Cocktail- noch Smoothie-Material gebucht.")
+    for k in karten:
+        out = args.out if args.out and args.karte else k["datei"]
+        Path(out).write_bytes(k["pdf"])
+        print(f"{k['titel']}: {k['anzahl']} -> {out}")
 
 
 if __name__ == "__main__":

@@ -4,3 +4,5 @@ db/
 __pycache__/
 *.pyc
 tools/cocktailkarte/*.pdf
+tools/cocktailkarte/.env
+tools/cocktailkarte/.venv/
