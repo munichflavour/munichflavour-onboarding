@@ -65,12 +65,18 @@ class Handler(BaseHTTPRequestHandler):
         if self.path == "/api/zeigen":
             return self.zeigen()
         try:
-            pid = json.loads(self.rfile.read(int(self.headers.get("Content-Length", 0))))["id"]
+            body = json.loads(self.rfile.read(int(self.headers.get("Content-Length", 0))))
+            pid, nur = body["id"], body.get("nur")
+            if nur and nur not in ck.KARTEN:
+                raise ck.KartenFehler("Unbekannte Kartenart.")
             projekt = next((p for p in ck.alle_projekte() if p["id"] == pid), None)
             if not projekt:
                 raise ck.KartenFehler("Projekt nicht gefunden.")
             with LOCK:
-                karten = ck.erstelle_karten(projekt)
+                karten = ck.erstelle_karten(projekt, nur)
+            if nur and not karten:
+                raise ck.KartenFehler(f"Für dieses Projekt ist kein Material für die Karte "
+                                      f"'{ck.KARTEN[nur]['titel']}' gebucht.")
             try:
                 pfade = [str(p) for p in ck.speichere_karten(projekt, karten)] if karten else []
                 speicherfehler = None
@@ -82,7 +88,8 @@ class Handler(BaseHTTPRequestHandler):
                 out.append(dict(karte=k["karte"], titel=k["titel"], datei=k["datei"], anzahl=k["anzahl"],
                                 warnungen=k["warnungen"], pfad=pfad, pdf=base64.b64encode(k["pdf"]).decode(),
                                 png=base64.b64encode(png).decode()))
-            self.senden(200, dict(projekt=projekt_json(projekt), karten=out, speicherfehler=speicherfehler))
+            self.senden(200, dict(projekt=projekt_json(projekt), karten=out, speicherfehler=speicherfehler,
+                                  arten=[dict(karte=k, titel=c["titel"]) for k, c in ck.KARTEN.items()]))
         except ck.KartenFehler as e:
             self.senden(400, dict(fehler=str(e)))
         except Exception as e:  # unerwartet: Meldung statt Absturz

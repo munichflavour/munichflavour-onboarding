@@ -105,34 +105,60 @@ function blob(b64, typ) {
   return URL.createObjectURL(new Blob([arr], { type: typ }));
 }
 
+let zustand = { projekt: null, karten: [], arten: [], speicherfehler: null };
+
+function kartenHtml(k) {
+  const url = blob(k.pdf, 'application/pdf');
+  const warn = k.warnungen.length ? `<div class="warn"><b>Bitte prüfen</b><ul>${k.warnungen.map(w => `<li>${esc(w)}</li>`).join('')}</ul></div>` : '';
+  return `<div class="karte"><h3>${esc(k.titel)}</h3><div class="anz">${esc(k.anzahl)}</div>
+    <img alt="Vorschau ${esc(k.titel)}" src="data:image/png;base64,${k.png}">
+    <div class="aktion"><a href="${url}" download="${esc(k.datei)}"><button>PDF herunterladen</button></a>
+    <a href="${url}" target="_blank"><button class="zweit">Im Browser öffnen</button></a>
+    ${k.pfad ? `<button class="zweit" data-pfad="${esc(k.pfad)}">Im Finder zeigen</button>` : ''}</div>
+    ${k.pfad ? `<div class="pfad"><b>Gespeichert:</b> ${esc(k.pfad)}</div>` : ''}${warn}</div>`;
+}
+
+function zeige() {
+  const { projekt: p, karten, arten } = zustand;
+  const kopf = `${esc(p.name)} <span class="leer">&middot; Nr. ${p.nummer} &middot; ${datum(p.datum)}</span>`;
+  const fehlend = arten.filter(a => !karten.some(k => k.karte === a.karte));
+  const weitere = fehlend.length ? `<h2>Weitere Karte erstellen</h2><div class="liste">` +
+    fehlend.map(a => `<button class="chip" data-art="${a.karte}">${esc(a.titel)}</button>`).join('') + '</div>' : '';
+  $('ergebnis').innerHTML = `<h2>${kopf}</h2>` +
+    (karten.length ? `<div class="karten">${karten.map(kartenHtml).join('')}</div>`
+      : '<p class="leer">In diesem Projekt ist weder Getränke-, Kaffee- noch Catering-Material gebucht, daher wurde keine Karte erzeugt.</p>') +
+    (zustand.speicherfehler ? `<p class="fehler">${esc(zustand.speicherfehler)}</p>` : '') +
+    (karten.length ? `<div class="schritt"><b>Nächster Schritt:</b> Karte in Rentman im Projekt „${esc(p.name)}“ (Nr. ${p.nummer}) unter <i>Dateien</i> hochladen. Die Rentman-API erlaubt keinen automatischen Upload.</div>` : '') +
+    weitere;
+  $('ergebnis').querySelectorAll('button[data-pfad]').forEach(b => b.onclick = async () => {
+    try { await api('/api/zeigen', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ pfad: b.dataset.pfad }) }); }
+    catch (err) { status(err.message, 'fehler'); }
+  });
+  $('ergebnis').querySelectorAll('button[data-art]').forEach(b => b.onclick = () => zusatzKarte(b.dataset.art));
+}
+
+async function holeKarten(p, nur) {
+  return api('/api/karten', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: p.id, nur }) });
+}
+
 async function erzeugen(p) {
   $('auswahl').innerHTML = ''; $('ergebnis').innerHTML = '';
   sperre(true); status(`Lade Material von „${p.name}“ aus Rentman und erzeuge Karten …`);
   try {
-    const r = await api('/api/karten', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: p.id }) });
-    const kopf = `${esc(r.projekt.name)} <span class="leer">&middot; Nr. ${r.projekt.nummer} &middot; ${datum(r.projekt.datum)}</span>`;
-    if (!r.karten.length) {
-      status('');
-      $('ergebnis').innerHTML = `<h2>${kopf}</h2><p class="leer">In diesem Projekt ist weder Cocktail- noch Smoothie-Material gebucht, daher gibt es keine Karte.</p>`;
-    } else {
-      status('');
-      $('ergebnis').innerHTML = `<h2>${kopf}</h2><div class="karten">` + r.karten.map((k, i) => {
-        const url = blob(k.pdf, 'application/pdf');
-        const warn = k.warnungen.length ? `<div class="warn"><b>Bitte prüfen</b><ul>${k.warnungen.map(w => `<li>${esc(w)}</li>`).join('')}</ul></div>` : '';
-        return `<div class="karte"><h3>${esc(k.titel)}</h3><div class="anz">${esc(k.anzahl)}</div>
-          <img alt="Vorschau ${esc(k.titel)}" src="data:image/png;base64,${k.png}">
-          <div class="aktion"><a href="${url}" download="${esc(k.datei)}"><button>PDF herunterladen</button></a>
-          <a href="${url}" target="_blank"><button class="zweit">Im Browser öffnen</button></a>
-          ${k.pfad ? `<button class="zweit" data-pfad="${esc(k.pfad)}">Im Finder zeigen</button>` : ''}</div>
-          ${k.pfad ? `<div class="pfad"><b>Gespeichert:</b> ${esc(k.pfad)}</div>` : ''}${warn}</div>`;
-      }).join('') + '</div>'
-        + (r.speicherfehler ? `<p class="fehler">${esc(r.speicherfehler)}</p>` : '')
-        + `<div class="schritt"><b>Nächster Schritt:</b> Karte in Rentman im Projekt „${esc(r.projekt.name)}“ (Nr. ${r.projekt.nummer}) unter <i>Dateien</i> hochladen. Die Rentman-API erlaubt keinen automatischen Upload.</div>`;
-      $('ergebnis').querySelectorAll('button[data-pfad]').forEach(b => b.onclick = async () => {
-        try { await api('/api/zeigen', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ pfad: b.dataset.pfad }) }); }
-        catch (err) { status(err.message, 'fehler'); }
-      });
-    }
+    const r = await holeKarten(p);
+    zustand = { projekt: r.projekt, karten: r.karten, arten: r.arten, speicherfehler: r.speicherfehler };
+    status(''); zeige();
+  } catch (err) { status(err.message, 'fehler'); }
+  sperre(false);
+}
+
+async function zusatzKarte(art) {
+  sperre(true); status('Erzeuge Karte …');
+  try {
+    const r = await holeKarten(zustand.projekt, art);
+    zustand.karten = zustand.karten.filter(k => k.karte !== art).concat(r.karten);
+    zustand.speicherfehler = r.speicherfehler;
+    status(''); zeige();
   } catch (err) { status(err.message, 'fehler'); }
   sperre(false);
 }

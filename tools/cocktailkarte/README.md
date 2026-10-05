@@ -12,7 +12,7 @@
 **Benutzen:** Starter **Kartengenerator** auf dem Schreibtisch doppelklicken. Beim ersten Start wird nach dem
 Rentman API-Token gefragt (gespeichert in `~/Kartengenerator/.env`, nie im Repo). Im Browser Projektnamen eingeben,
 "Karte erstellen" klicken. Es werden alle Karten erzeugt, fuer die im Projekt Material gebucht ist (Cocktails,
-Smoothies). Vorschau, PDF-Download und Hinweise stehen direkt darunter.
+Smoothies, Kaffee, Essen). Fehlende Karten lassen sich unter "Weitere Karte erstellen" trotzdem anfordern. Vorschau, PDF-Download und Hinweise stehen direkt darunter.
 
 Es werden nur **bestaetigte** Projekte angeboten (Rentman-Status Bestaetigt, Gepackt, Am Veranstaltungsort, Retour).
 Bei Option, Anfrage, Konzept oder Annulliert meldet die Oberflaeche den Status, erzeugt aber keine Karte.
@@ -44,6 +44,18 @@ python3 tools/cocktailkarte/cocktailkarte.py "Lammens" --karte smoothies   # nur
 
 Name oder Projektnummer, nur bestaetigte Projekte (`--auch-unbestaetigt` hebt das auf). Bei mehreren Treffern wird
 das naechste anstehende Event genommen.
+
+## Kartenarten und Datenquellen
+
+| Karte | Rentman-Gruppe | Texte |
+|---|---|---|
+| Cocktails (+ Mocktails) | `Cocktails & Longdrinks` | `stammdaten/getraenke.json`, sonst Rentman |
+| Smoothies | `Smoothies` | `stammdaten/getraenke.json`, sonst Rentman |
+| Kaffee | `Kaffee` (Zusatzzeile = Bemerkung, z. B. Einfach/Doppelt). Fehlt die Gruppe, aber Kaffee-Equipment ist gebucht (Siebtraeger, Kaffeebar ...), gilt die Standardliste | `stammdaten/kaffee.json` |
+| Essen | `Catering` (Bloecke: Canapes, Brotzeit Spezialitaeten, Speisen im Weckglas = Salate, Dessert im Weckglas) | `stammdaten/speisen.json` inkl. Allergene und vegetarisch/vegan |
+
+**Allergene** stehen nicht in Rentman, sondern in `stammdaten/speisen.json`. Die Angaben stammen aus den bisherigen
+Karten und sind nicht neu geprueft. Speisen ohne Eintrag werden ohne Allergene gesetzt und gemeldet.
 
 ## Aufbau
 

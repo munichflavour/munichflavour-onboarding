@@ -1,0 +1,16 @@
+{
+  "_hinweis": "Kaffeekarte. 'umbenennung': Rentman-Name (klein) -> Name auf der Karte. 'standard': Liste fuer Projekte, die in Rentman Kaffee-Equipment, aber keine Gruppe 'Kaffee' gebucht haben (Reihenfolge wie auf der Karte Hoog).",
+  "umbenennung": {"verschiedene teevariationen": "Tee"},
+  "standard": [
+    {"name": "Americano"},
+    {"name": "Espresso", "zusatz": "Einfach/Doppelt"},
+    {"name": "Cappuccino"},
+    {"name": "Chai Latte"},
+    {"name": "Latte Macchiato"},
+    {"name": "Iced Latte"},
+    {"name": "Flat White"},
+    {"name": "Espresso Tonic"},
+    {"name": "Hot Chocolate"},
+    {"name": "Tee"}
+  ]
+}
