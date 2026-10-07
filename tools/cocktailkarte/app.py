@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
-"""Lokale Oberflaeche fuer den Kartengenerator: Projektname eingeben, Karten erzeugen lassen.
+"""Lokale Oberflaeche fuer den Kartengenerator: Projekt waehlen, Karten pruefen und bearbeiten, PDF speichern.
 
 Start: python3 app.py   (oeffnet http://127.0.0.1:8765 im Browser; lauscht nur auf diesem Rechner)
 """
 import base64
 import json
+import re
 import subprocess
 import sys
 import threading
@@ -20,10 +21,29 @@ import cocktailkarte as ck
 HOST, PORT = "127.0.0.1", 8765
 UI = Path(__file__).parent / "ui"
 LOCK = threading.Lock()  # Warnungs-Sammler im Kartenmodul ist nicht threadsicher
+MAX_EINTRAEGE = 120
 
 
 def projekt_json(p):
     return dict(id=p["id"], nummer=p["number"], name=(p["name"] or "").strip(), datum=(p["planperiod_start"] or "")[:10])
+
+
+def pruefe_entwurf(e):
+    """Prueft einen vom Browser gelieferten Entwurf auf Form und Groesse und bereinigt den Dateinamen."""
+    if not isinstance(e, dict) or e.get("karte") not in ck.KARTENARTEN:
+        raise ck.KartenFehler("Ungueltiger Entwurf.")
+    gruppen = [a.get("items") for a in e["abschnitte"]] if e["karte"] == "essen" and isinstance(e.get("abschnitte"), list) \
+        else [e.get("items")]
+    if sum(len(g) for g in gruppen if isinstance(g, list)) > MAX_EINTRAEGE or \
+            not all(isinstance(g, list) and all(isinstance(i, dict) for i in g) for g in gruppen):
+        raise ck.KartenFehler("Ungueltiger Entwurf (Eintraege).")
+    name = re.sub(r"[\\/:*?\"<>|]+", "-", Path(str(e.get("datei") or "karte.pdf")).name)
+    e["datei"] = name if name.lower().endswith(".pdf") else name + ".pdf"
+    return e
+
+
+def vorschau_png(pdf):
+    return pymupdf.open(stream=pdf, filetype="pdf")[0].get_pixmap(dpi=80).tobytes("png")
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -38,6 +58,9 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Cache-Control", "no-store")
         self.end_headers()
         self.wfile.write(data)
+
+    def body(self):
+        return json.loads(self.rfile.read(int(self.headers.get("Content-Length", 0))) or b"{}")
 
     def do_GET(self):
         url = urllib.parse.urlparse(self.path)
@@ -54,66 +77,103 @@ class Handler(BaseHTTPRequestHandler):
                                       andere=[dict(projekt_json(p), status=p["status"]) for p in andere[:5]]))
             elif url.path == "/api/anstehende":
                 self.senden(200, dict(projekte=[projekt_json(p) for p in ck.anstehende()]))
+            elif url.path == "/api/stand":
+                self.senden(200, ck.projektliste_stand())
             else:
                 self.senden(404, dict(fehler="Nicht gefunden"))
         except ck.KartenFehler as e:
             self.senden(400, dict(fehler=str(e)))
 
     def do_POST(self):
-        if self.path not in ("/api/karten", "/api/zeigen"):
-            return self.senden(404, dict(fehler="Nicht gefunden"))
-        if self.path == "/api/zeigen":
-            return self.zeigen()
         try:
-            body = json.loads(self.rfile.read(int(self.headers.get("Content-Length", 0))))
-            pid, nur = body["id"], body.get("nur")
-            if nur and nur not in ck.KARTENARTEN:
-                raise ck.KartenFehler("Unbekannte Kartenart.")
-            projekt = next((p for p in ck.alle_projekte() if p["id"] == pid), None)
-            if not projekt:
-                raise ck.KartenFehler("Projekt nicht gefunden.")
-            with LOCK:
-                karten = ck.erstelle_karten(projekt, nur)
-            if nur and not karten:
-                raise ck.KartenFehler(f"Für dieses Projekt ist kein Material für die Karte "
-                                      f"'{ck.KARTENARTEN[nur]}' gebucht.")
-            try:
-                pfade = [str(p) for p in ck.speichere_karten(projekt, karten)] if karten else []
-                speicherfehler = None
-            except ck.KartenFehler as e:  # Karten trotzdem anzeigen, nur den Speicherfehler melden
-                pfade, speicherfehler = [None] * len(karten), str(e)
-            out = []
-            for k, pfad in zip(karten, pfade):
-                png = pymupdf.open(stream=k["pdf"], filetype="pdf")[0].get_pixmap(dpi=80).tobytes("png")
-                out.append(dict(karte=k["karte"], gruppe=k["gruppe"], titel=k["titel"], datei=k["datei"], anzahl=k["anzahl"],
-                                warnungen=k["warnungen"], pfad=pfad, pdf=base64.b64encode(k["pdf"]).decode(),
-                                png=base64.b64encode(png).decode()))
-            self.senden(200, dict(projekt=projekt_json(projekt), karten=out, speicherfehler=speicherfehler,
-                                  arten=[dict(karte=k, titel=ck.KARTENARTEN[k] + "karte (Standardliste)") for k in ck.ZUSATZKARTEN]))
+            if self.path == "/api/aktualisieren":
+                ck.aktualisiere()
+                return self.senden(200, ck.projektliste_stand())
+            if self.path == "/api/entwurf":
+                return self.entwurf()
+            if self.path == "/api/vorschau":
+                return self.vorschau()
+            if self.path == "/api/erzeugen":
+                return self.erzeugen()
+            if self.path == "/api/zeigen":
+                return self.zeigen()
+            self.senden(404, dict(fehler="Nicht gefunden"))
         except ck.KartenFehler as e:
             self.senden(400, dict(fehler=str(e)))
+        except (KeyError, TypeError, ValueError) as e:
+            self.senden(400, dict(fehler=f"Ungueltige Anfrage: {e}"))
         except Exception as e:  # unerwartet: Meldung statt Absturz
             self.senden(500, dict(fehler=f"Unerwarteter Fehler: {e}"))
 
+    def projekt(self, pid):
+        p = next((p for p in ck.alle_projekte() if p["id"] == pid), None)
+        if not p:
+            raise ck.KartenFehler("Projekt nicht gefunden.")
+        return p
+
+    def entwurf(self):
+        """Datenstand der Karten eines Projekts (ohne PDF), zum Bearbeiten."""
+        b = self.body()
+        nur = b.get("nur")
+        if nur and nur not in ck.KARTENARTEN:
+            raise ck.KartenFehler("Unbekannte Kartenart.")
+        projekt = self.projekt(b["id"])
+        with LOCK:
+            entwuerfe = ck.entwuerfe_aus(projekt, nur)
+        if nur and not entwuerfe:
+            raise ck.KartenFehler(f"Für dieses Projekt ist kein Material für die Karte '{ck.KARTENARTEN[nur]}' gebucht.")
+        self.senden(200, dict(projekt=projekt_json(projekt), entwuerfe=entwuerfe,
+                              arten=[dict(karte=k, titel=ck.KARTENARTEN[k] + "karte (Standardliste)")
+                                     for k in ck.ZUSATZKARTEN]))
+
+    def vorschau(self):
+        e = pruefe_entwurf(self.body()["entwurf"])
+        with LOCK:
+            r = ck.render_entwurf(e)
+        self.senden(200, dict(png=base64.b64encode(vorschau_png(r["pdf"])).decode(), anzahl=r["anzahl"],
+                              warnungen=r["warnungen"]))
+
+    def erzeugen(self):
+        """Rendert den (bearbeiteten) Entwurf, speichert die PDF im Projektordner und merkt Stammlisten-Eintraege."""
+        b = self.body()
+        e, projekt = pruefe_entwurf(b["entwurf"]), self.projekt(b["id"])
+        with LOCK:
+            r = ck.render_entwurf(e)
+            fehler, pfad, gemerkt = None, None, 0
+            try:
+                pfad = str(ck.speichere_karten(projekt, [dict(datei=e["datei"], pdf=r["pdf"])])[0])
+            except ck.KartenFehler as ex:  # Karte trotzdem anzeigen, nur den Speicherfehler melden
+                fehler = str(ex)
+            try:
+                gemerkt = ck.merke_in_stammliste(e)
+            except ck.KartenFehler as ex:
+                fehler = (fehler + " " if fehler else "") + str(ex)
+        self.senden(200, dict(pdf=base64.b64encode(r["pdf"]).decode(), png=base64.b64encode(vorschau_png(r["pdf"])).decode(),
+                              anzahl=r["anzahl"], warnungen=r["warnungen"], pfad=pfad, gemerkt=gemerkt,
+                              speicherfehler=fehler))
 
     def zeigen(self):
         """Zeigt eine gespeicherte Karte im Finder (nur Dateien unterhalb des Karten-Ordners)."""
-        try:
-            pfad = Path(json.loads(self.rfile.read(int(self.headers.get("Content-Length", 0))))["pfad"]).resolve()
-            if ck.karten_ordner().resolve() not in pfad.parents or not pfad.is_file():
-                return self.senden(400, dict(fehler="Datei nicht gefunden."))
-            if sys.platform != "darwin":
-                return self.senden(400, dict(fehler="Der Finder ist nur auf dem Mac verfuegbar."))
-            subprocess.run(["open", "-R", str(pfad)], check=False)
-            self.senden(200, dict(ok=True))
-        except Exception as e:
-            self.senden(500, dict(fehler=f"Unerwarteter Fehler: {e}"))
+        pfad = Path(self.body()["pfad"]).resolve()
+        if ck.karten_ordner().resolve() not in pfad.parents or not pfad.is_file():
+            return self.senden(400, dict(fehler="Datei nicht gefunden."))
+        if sys.platform != "darwin":
+            return self.senden(400, dict(fehler="Der Finder ist nur auf dem Mac verfuegbar."))
+        subprocess.run(["open", "-R", str(pfad)], check=False)
+        self.senden(200, dict(ok=True))
 
 
 def main():
     server = ThreadingHTTPServer((HOST, PORT), Handler)
     url = f"http://{HOST}:{PORT}"
     print(f"Kartengenerator laeuft auf {url}  (beenden mit Ctrl+C)")
+
+    def vorwaermen():          # Projektliste schon beim Start laden (aus dem Cache sofort)
+        try:
+            ck.alle_projekte()
+        except ck.KartenFehler:
+            pass
+    threading.Thread(target=vorwaermen, daemon=True).start()
     threading.Timer(0.8, lambda: webbrowser.open(url)).start()
     try:
         server.serve_forever()

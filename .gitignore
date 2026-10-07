@@ -6,3 +6,6 @@ __pycache__/
 tools/cocktailkarte/*.pdf
 tools/cocktailkarte/.env
 tools/cocktailkarte/.venv/
+
+.cache/
+tools/cocktailkarte/daten/

@@ -10,9 +10,22 @@
    legt auf dem Schreibtisch den Starter **Kartengenerator** an. Token und Einstellungen bleiben bei Updates erhalten.
 
 **Benutzen:** Starter **Kartengenerator** auf dem Schreibtisch doppelklicken. Beim ersten Start wird nach dem
-Rentman API-Token gefragt (gespeichert in `~/Kartengenerator/.env`, nie im Repo). Im Browser Projektnamen eingeben,
-"Karte erstellen" klicken. Es werden alle Karten erzeugt, fuer die im Projekt Material gebucht ist (Cocktails,
-Smoothies, Kaffee, Essen). Fehlende Karten lassen sich unter "Weitere Karte erstellen" trotzdem anfordern. Vorschau, PDF-Download und Hinweise stehen direkt darunter.
+Rentman API-Token gefragt (gespeichert in `~/Kartengenerator/.env`, nie im Repo). Im Browser Projektnamen eingeben und
+"Karten laden" klicken. Fuer jede passende Rentman-Gruppe erscheint eine Karte mit Editor und Live-Vorschau:
+
+- Eintraege an- und abwaehlen, Reihenfolge aendern (Pfeile), Texte aendern, Eintraege hinzufuegen oder entfernen;
+  bei Essen auch Beschreibung, Allergene (Buchstaben laut Legende) und vegetarisch/vegan.
+- Mit dem Haken **merken** landet ein Eintrag in deiner eigenen Stammliste und gilt ab dann fuer alle Projekte
+  (geaenderte Texte werden automatisch zum Merken vorgeschlagen).
+- **PDF speichern** (oder **Alle Karten speichern**) legt die PDF im Projektordner ab. Fehlende Karten lassen sich unter
+  "Weitere Karte erstellen" anfordern.
+
+**Eigene Stammliste:** Aenderungen aus der Oberflaeche stehen in `~/Kartengenerator/daten/getraenke.json` und
+`speisen.json`. Sie haben Vorrang vor den mitgelieferten Listen in `stammdaten/` und werden bei Updates nie
+ueberschrieben. Der Ordner laesst sich in `.env` mit `DATEN_ORDNER=...` aendern.
+
+**Schneller Start:** Die Projektliste wird zwischengespeichert (`.cache/`) und im Hintergrund aktualisiert; die
+Anzeige "Stand ..." mit dem Knopf **Aktualisieren** zeigt, wie aktuell sie ist. Der allererste Start dauert etwa 4 Sekunden.
 
 Es werden nur **bestaetigte** Projekte angeboten (Rentman-Status Bestaetigt, Gepackt, Am Veranstaltungsort, Retour).
 Bei Option, Anfrage, Konzept oder Annulliert meldet die Oberflaeche den Status, erzeugt aber keine Karte.
@@ -54,7 +67,7 @@ Kuerzer stehen nur die bisherigen Karten: `Cocktails & Longdrinks` und `Cocktail
 
 | Gruppenname enthaelt | Karte | Texte |
 |---|---|---|
-| cocktail, longdrink, aperitif, drinks, smoothie, matcha, shake, shot, slush, limonade, heissgetraenk | Getraenkekarte. Mit alkoholfreien Drinks zwei Abteilungen (MOCKTAILS bei Cocktail-Gruppen, sonst ALKOHOLFREI) | `stammdaten/getraenke.json`, sonst Rentman |
+| cocktail, longdrink, aperitif, drinks, smoothie, matcha, shake, shot, slush, limonade, heissgetraenk | Getraenkekarte. Mit alkoholfreien Drinks zwei Abteilungen (MOCKTAILS bei Cocktail-Gruppen, sonst ALKOHOLFREI) | `stammdaten/getraenke.json` + eigene Liste, sonst Rentman |
 | kaffee, coffee | Kaffeekarte (Zusatzzeile = Bemerkung, z. B. Einfach/Doppelt). Fehlt die Gruppe, aber Kaffee-Equipment ist gebucht (Siebtraeger, Kaffeebar ...), gilt die Standardliste | `stammdaten/kaffee.json` |
 | catering | Essenkarte (Bloecke: Canapes, Brotzeit Spezialitaeten, Speisen im Weckglas = Salate, Dessert im Weckglas) | `stammdaten/speisen.json` inkl. Allergene und vegetarisch/vegan |
 
