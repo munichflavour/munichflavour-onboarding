@@ -41,7 +41,9 @@ LAYOUTS = {
         bloecke=[  # Mitte der Drinkliste, Hoehe des Bereichs, Vertikal-Beschriftung
             dict(center=341, height=330, pitch=45.5, label_x=55, label_center=350),
             dict(center=666, height=160, pitch=45.5, label_x=58, label_center=669, label_max=170)],
-        trennlinie=dict(x0=60.1, x1=536.5, y=572.3, width=0.75)),
+        trennlinie=dict(x0=60.1, x1=536.5, y=572.3, width=0.75),
+        # nur eine Abteilung (z. B. Drinks ohne Mocktails): Liste und Beschriftung mittig auf der Seite
+        einzeln=dict(center=452, height=520, pitch=58, label_x=55, label_center=452)),
     "smoothies": dict(  # ein Block (Smoothies, Hot Drinks, ...)
         text_x=181,
         bloecke=[dict(center=418.5, height=500, pitch=90.7, label_x=55, label_center=421)]),
@@ -487,6 +489,8 @@ def layout_fuer(layout, sections):
     name = {"zwei": "cocktails", "eins": "smoothies", "kaffee": "kaffee",
             "auto": "cocktails" if len(sections) == 2 else "smoothies"}[layout]
     cfg = LAYOUTS[name]
+    if name == "cocktails" and len(sections) == 1:
+        return name, cfg, [cfg["einzeln"]], None
     return name, cfg, cfg["bloecke"][:len(sections)], cfg.get("trennlinie")
 
 
