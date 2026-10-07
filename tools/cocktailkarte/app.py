@@ -5,13 +5,15 @@ Start: python3 app.py   (oeffnet http://127.0.0.1:8765 im Browser; lauscht nur a
 """
 import base64
 import json
+import os
 import re
-import subprocess
 import sys
 import threading
 import uuid
 from collections import OrderedDict
+import urllib.error
 import urllib.parse
+import urllib.request
 import webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -83,6 +85,8 @@ class Handler(BaseHTTPRequestHandler):
                                       andere=[dict(projekt_json(p), status=p["status"]) for p in andere[:5]]))
             elif url.path == "/api/anstehende":
                 self.senden(200, dict(projekte=[projekt_json(p) for p in ck.anstehende()]))
+            elif url.path == "/api/einstellungen":
+                self.senden(200, dict(bearbeiten=ck.bearbeiten_erlaubt(), plattform=sys.platform))
             elif url.path == "/api/stand":
                 self.senden(200, ck.projektliste_stand())
             elif url.path == "/api/pdf":
@@ -174,24 +178,31 @@ class Handler(BaseHTTPRequestHandler):
                 gemerkt = sum(ck.merke_in_stammliste(e) for e in entwuerfe)
             except ck.KartenFehler as ex:
                 fehler = str(ex)
-        GESPEICHERT.update(str(p.resolve()) for p in pfade)
+        GESPEICHERT.update(os.path.normcase(str(p.resolve())) for p in pfade)
         self.senden(200, dict(ordner=str(ordner), gemerkt=gemerkt, speicherfehler=fehler, dateien=[
             dict(datei=p.name, pfad=str(p), umbenannt=p.name != e["datei"]) for p, e in zip(pfade, entwuerfe)]))
 
     def zeigen(self):
         """Zeigt eine in dieser Sitzung gespeicherte Karte im Finder."""
         pfad = Path(self.body()["pfad"]).resolve()
-        if str(pfad) not in GESPEICHERT or not pfad.is_file():
+        if os.path.normcase(str(pfad)) not in GESPEICHERT or not pfad.is_file():
             return self.senden(400, dict(fehler="Datei nicht gefunden."))
-        if sys.platform != "darwin":
-            return self.senden(400, dict(fehler="Der Finder ist nur auf dem Mac verfuegbar."))
-        subprocess.run(["open", "-R", str(pfad)], check=False)
+        ck.zeige_im_ordner(pfad)
         self.senden(200, dict(ok=True))
 
 
 def main():
-    server = ThreadingHTTPServer((HOST, PORT), Handler)
     url = f"http://{HOST}:{PORT}"
+    try:
+        server = ThreadingHTTPServer((HOST, PORT), Handler)
+    except OSError:                       # Port belegt: laeuft der Kartengenerator vielleicht schon?
+        try:
+            urllib.request.urlopen(url + "/api/einstellungen", timeout=3).read()
+        except (OSError, urllib.error.URLError):
+            sys.exit(f"Der Port {PORT} ist von einem anderen Programm belegt. Bitte dieses Programm beenden und neu starten.")
+        print("Der Kartengenerator laeuft bereits - der Browser wird geoeffnet.")
+        webbrowser.open(url)
+        return
     print(f"Kartengenerator laeuft auf {url}  (beenden mit Ctrl+C)")
 
     def vorwaermen():          # Projektliste schon beim Start laden (aus dem Cache sofort)

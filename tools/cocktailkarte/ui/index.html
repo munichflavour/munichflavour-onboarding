@@ -155,6 +155,7 @@ async function suchen(e) {
 
 /* ---------- Karten: Zustand ---------- */
 let Z = { projekt: null, e: [], arten: [] };
+let EINST = { bearbeiten: true };
 const timers = {}, tokens = {};
 
 function eintraege(e) { return e.karte === 'essen' ? e.abschnitte.flatMap(a => a.items) : e.items; }
@@ -237,13 +238,13 @@ function ergHtml(e) {
   const g = e._erg; if (!g) return '';
   if (g.text) return `<div class="ok">${g.text}</div>` + (g.fehler ? `<p class="fehler">${esc(g.fehler)}</p>` : '');
   return `<div class="ok"><b>Gespeichert:</b> ${esc(g.pfad)}${g.umbenannt ? '<br>Der Dateiname war im Ordner schon vergeben, deshalb wurde die Nummer angehängt.' : ''}${g.gemerkt ? `<br>${g.gemerkt} Eintrag/Einträge in die Stammliste gemerkt.` : ''}</div>
-    <div class="aktion"><button class="zweit" data-a="zeigen" data-pfad="${esc(g.pfad)}">Im Finder zeigen</button></div>` + (g.fehler ? `<p class="fehler">${esc(g.fehler)}</p>` : '');
+    <div class="aktion"><button class="zweit" data-a="zeigen" data-pfad="${esc(g.pfad)}">Im Ordner zeigen</button></div>` + (g.fehler ? `<p class="fehler">${esc(g.fehler)}</p>` : '');
 }
 function aktionen(e, i) {
   return `<div class="aktion">
     <button id="sp${i}" data-a="speichern" data-e="${i}">PDF speichern</button>
     <a class="btn zweit" id="dl${i}" href="#" download="${esc(e.datei)}" data-a="dl" data-e="${i}" aria-disabled="true">PDF downloaden</a>
-    ${e._edit ? '' : `<button class="zweit" data-a="bearbeiten" data-e="${i}">Bearbeiten</button>`}</div>`;
+    ${e._edit || !EINST.bearbeiten ? '' : `<button class="zweit" data-a="bearbeiten" data-e="${i}">Bearbeiten</button>`}</div>`;
 }
 
 function panel(e, i) {
@@ -253,7 +254,7 @@ function panel(e, i) {
     ? `<div class="editor"><div class="leiste"><button class="zweit" data-a="fertig" data-e="${i}">Bearbeiten beenden</button></div>
         <div id="warn${i}">${warnHtml(e)}</div>${editor(e, i)}</div>`
     : `<div class="info"><div id="warn${i}">${warnHtml(e)}</div>
-        <p class="hinweis">Die Karte wurde aus Rentman erstellt und noch <b>nicht gespeichert</b>. Mit <i>Bearbeiten</i> kannst du Einträge, Texte und Reihenfolge ändern.</p>${knopfBlock}</div>`;
+        <p class="hinweis">Die Karte wurde aus Rentman erstellt und noch <b>nicht gespeichert</b>.${EINST.bearbeiten ? ' Mit <i>Bearbeiten</i> kannst du Einträge, Texte und Reihenfolge ändern.' : ''}</p>${knopfBlock}</div>`;
   return `<section class="karte" data-e="${i}">
     <div class="kopf"><h3>${esc(e.titel)}</h3><span class="anz" id="anz${i}">${esc(e._v.anzahl)}</span></div>
     <div class="spalten ${e._edit ? 'edit' : 'ansicht'}">${vorschau}${mitte}</div></section>`;
@@ -389,6 +390,7 @@ async function klick(ev) {
 $('form').addEventListener('submit', suchen);
 $('ergebnis').addEventListener('input', aenderung);
 $('ergebnis').addEventListener('click', klick);
+api('/api/einstellungen').then(e => { EINST = e; }).catch(() => {});
 bald(); stand();
 </script>
 </body>

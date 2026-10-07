@@ -15,6 +15,7 @@ import datetime
 import html
 import json
 import os
+import base64
 import re
 import subprocess
 import sys
@@ -101,7 +102,7 @@ def einstellung(name):
     """Wert aus der Umgebung oder aus tools/cocktailkarte/.env (Zeilen der Form NAME=Wert), sonst None."""
     wert = os.environ.get(name) or os.environ.get(name.lower())
     if not wert and (HERE / ".env").exists():
-        for line in (HERE / ".env").read_text().splitlines():
+        for line in (HERE / ".env").read_text(encoding="utf-8-sig").splitlines():
             k, _, v = line.partition("=")
             if k.strip().upper() == name:
                 wert = v.strip().strip("\"'")
@@ -217,7 +218,7 @@ def _lade_projekte():
             _projekte.update(daten=projekte, zeit=time.time(), fehler=None)
         try:
             CACHE.parent.mkdir(parents=True, exist_ok=True)
-            CACHE.write_text(json.dumps(dict(zeit=_projekte["zeit"], daten=projekte), ensure_ascii=False))
+            CACHE.write_text(json.dumps(dict(zeit=_projekte["zeit"], daten=projekte), ensure_ascii=False), encoding="utf-8")
         except OSError:
             pass                   # Cache ist nur eine Beschleunigung
     except KartenFehler as e:
@@ -254,7 +255,7 @@ def alle_projekte():
     """Projektliste: sofort aus dem Speicher oder dem Festplatten-Cache, bei Bedarf im Hintergrund aktualisiert."""
     if not _projekte["daten"] and CACHE.exists():
         try:
-            d = json.loads(CACHE.read_text())
+            d = json.loads(CACHE.read_text(encoding="utf-8"))
             _projekte.update(daten=d["daten"], zeit=d["zeit"])
         except (OSError, ValueError, KeyError):
             pass
@@ -617,7 +618,7 @@ def entwuerfe_aus(project, nur=None):
             e.update(items=[dict(d, aktiv=True) for d in drinks], layout="zwei" if cocktailig else "auto",
                      label2="MOCKTAILS" if cocktailig else "ALKOHOLFREI")
             prefix = re.sub(r"[^\w]+", "-", e["label"]).strip("-")
-        datei = prefix + "_" + re.sub(r"[^\w-]+", "_", project["name"].strip()).strip("_") + ".pdf"
+        datei = prefix + "_" + re.sub(r"[^\w-]+", "_", project["name"].strip())[:60].strip("_") + ".pdf"
         basis, n = datei[:-4], 1
         while datei in benutzt:       # zwei Gruppen mit gleicher Beschriftung im selben Projekt
             n += 1
@@ -670,9 +671,16 @@ def render_entwurf(e):
     return dict(pdf=pdf, anzahl=anzahl, warnungen=list(WARNUNGEN))
 
 
+def bearbeiten_erlaubt():
+    """Einstellung BEARBEITEN=aus sperrt das Bearbeiten und Aendern der Stammliste (z. B. auf einem Mitarbeiter-PC)."""
+    return str(einstellung("BEARBEITEN") or "an").strip().lower() not in ("aus", "nein", "0", "false", "off")
+
+
 def merke_in_stammliste(e):
     """Schreibt die als 'merken' markierten Eintraege eines Entwurfs in die eigene Stammliste. Rueckgabe: Anzahl."""
     n = 0
+    if not bearbeiten_erlaubt():
+        return n
     if e["karte"] == "getraenke":
         for i in e["items"]:
             if i.get("merken") and str(i.get("name", "")).strip():
@@ -731,10 +739,13 @@ def waehle_ordner(prompt="Ordner fuer die PDF auswaehlen"):
     Der Dialog startet im zuletzt gewaehlten Ordner. Auf anderen Systemen gibt es keinen Dialog; dann wird der
     Standardordner (karten_ordner) verwendet.
     """
-    if sys.platform != "darwin":
+    if sys.platform not in ("darwin", "win32"):
         return karten_ordner()
     letzter = lade_einstellungen().get("letzter_ordner")
-    start = letzter if letzter and Path(letzter).is_dir() else str(Path.home() / "Documents")
+    dokumente = Path.home() / "Documents"
+    start = letzter if letzter and Path(letzter).is_dir() else str(dokumente if dokumente.is_dir() else Path.home())
+    if sys.platform == "win32":
+        return _waehle_ordner_windows(prompt, start)
     esc = lambda t: t.replace("\\", "\\\\").replace('"', '\\"')
     skript = ['tell application "System Events"', "activate",
               f'set ordner to choose folder with prompt "{esc(prompt)}" default location (POSIX file "{esc(start)}")',
@@ -751,6 +762,50 @@ def waehle_ordner(prompt="Ordner fuer die PDF auswaehlen"):
     pfad = Path(r.stdout.strip())
     speichere_einstellung("letzter_ordner", str(pfad))
     return pfad
+
+
+def _waehle_ordner_windows(prompt, start):
+    """Ordner-Dialog unter Windows (PowerShell, kein Python-Tk noetig). Rueckgabe: Path oder None bei Abbruch."""
+    q = lambda t: t.replace("'", "''")       # fuer PowerShell-Zeichenketten in einfachen Anfuehrungszeichen
+    skript = f"""
+$ErrorActionPreference = 'Stop'
+[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+Add-Type -AssemblyName System.Windows.Forms
+$fenster = New-Object System.Windows.Forms.Form
+$fenster.StartPosition = 'CenterScreen'; $fenster.Opacity = 0; $fenster.ShowInTaskbar = $false; $fenster.TopMost = $true
+$fenster.Show(); $fenster.Activate()
+$dialog = New-Object System.Windows.Forms.FolderBrowserDialog
+$dialog.Description = '{q(prompt)}'
+$dialog.SelectedPath = '{q(start)}'
+$dialog.ShowNewFolderButton = $true
+$antwort = $dialog.ShowDialog($fenster)
+$fenster.Close()
+if ($antwort -eq [System.Windows.Forms.DialogResult]::OK) {{ [Console]::Out.Write($dialog.SelectedPath) }}
+"""
+    cmd = ["powershell", "-NoProfile", "-STA", "-ExecutionPolicy", "Bypass", "-EncodedCommand",
+           base64.b64encode(skript.encode("utf-16-le")).decode()]
+    try:
+        r = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", timeout=900,
+                           creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+    except (OSError, subprocess.TimeoutExpired) as e:
+        raise KartenFehler(f"Der Ordner-Dialog konnte nicht geoeffnet werden: {e}") from e
+    if r.returncode != 0:
+        raise KartenFehler("Der Ordner-Dialog konnte nicht geoeffnet werden: " + (r.stderr.strip()[:300] or "unbekannter Fehler"))
+    gewaehlt = r.stdout.strip().lstrip("\ufeff")
+    if not gewaehlt:
+        return None                                   # Abbrechen
+    speichere_einstellung("letzter_ordner", gewaehlt)
+    return Path(gewaehlt)
+
+
+def zeige_im_ordner(pfad):
+    """Zeigt die Datei im Dateimanager (Finder, Explorer; sonst der Ordner)."""
+    if sys.platform == "darwin":
+        subprocess.run(["open", "-R", str(pfad)], check=False)
+    elif sys.platform == "win32":
+        subprocess.Popen(["explorer", f"/select,{pfad}"])      # explorer meldet immer Fehlercode 1, daher Popen
+    else:
+        subprocess.Popen(["xdg-open", str(Path(pfad).parent)])
 
 
 def eindeutiger_pfad(ordner, datei):
@@ -774,7 +829,8 @@ def speichere_pdfs(ordner, dateien):
         return pfade
     except OSError as e:
         raise KartenFehler(f"Konnte nicht in '{ordner}' speichern: {e.strerror or e}. Unter macOS ggf. in den "
-                           "Systemeinstellungen > Datenschutz & Sicherheit den Zugriff fuer das Terminal erlauben.") from e
+                           "Systemeinstellungen > Datenschutz & Sicherheit den Zugriff fuer das Terminal erlauben; unter Windows "
+                           "pruefen, ob der Ordner beschreibbar ist.") from e
 
 
 def karten_ordner():
@@ -788,7 +844,7 @@ def speichere_karten(project, karten):
     Rueckgabe: Liste der Dateipfade. Fehlt der Zugriff auf den Ordner, wird eine KartenFehler-Meldung geworfen.
     """
     sauber = lambda t: re.sub(r"[\\/:*?\"<>|]+", "-", t).strip()
-    name = f"{(project.get('planperiod_start') or 'ohne Datum')[:10]} {sauber(project['name'])} ({project['number']})"
+    name = f"{(project.get('planperiod_start') or 'ohne Datum')[:10]} {sauber(project['name'])[:60].rstrip('. ')} ({project['number']})"
     ordner = karten_ordner() / name
     try:
         ordner.mkdir(parents=True, exist_ok=True)

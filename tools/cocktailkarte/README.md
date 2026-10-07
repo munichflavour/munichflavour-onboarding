@@ -1,6 +1,40 @@
 # Kartengenerator (Rentman -> PDF)
 
-## Oberflaeche auf dem Mac (empfohlen)
+## Oberflaeche auf Windows (z. B. Mitarbeiter-PC im Lager)
+
+Voraussetzung: Windows 10/11 (Surface mit Intel/AMD oder ARM) und beim ersten Start eine Internetverbindung.
+**Python muss nicht vorher installiert sein**: Fehlt es, installiert der Starter es automatisch ueber `winget`.
+
+**Installieren (auch fuer Updates):**
+1. ZIP des Branches von GitHub laden. **Rechtsklick auf die ZIP-Datei > Eigenschaften > unten "Zulassen" anhaken > OK**
+   (hebt die Windows-Sperre fuer Dateien aus dem Internet auf), dann **Alle extrahieren**.
+2. Optional die Datei `active-regular.otf` (Pinselschrift) neben `installieren.bat` legen (Ordner `tools\cocktailkarte`).
+3. `tools\cocktailkarte\installieren.bat` doppelklicken. Der Installer kopiert das Programm nach
+   `C:\Users\<Name>\Kartengenerator` und legt auf dem Desktop die Verknuepfung **Kartengenerator** an.
+   Eigene Daten (Token, Stammliste, Schrift, Einstellungen) bleiben bei Updates erhalten.
+4. Beim ersten Start (der Installer bietet ihn an) wird Python bei Bedarf installiert, die Programmumgebung
+   eingerichtet (1 bis 2 Minuten), der **Rentman API-Token** abgefragt und gefragt, ob Mitarbeitende Karten **bearbeiten**
+   duerfen. Auf einem Mitarbeiter-PC mit **N** antworten (siehe Mitarbeiter-Modus).
+
+**Benutzen:** Verknuepfung **Kartengenerator** doppelklicken. Der Browser oeffnet sich; das minimierte schwarze Fenster in
+der Taskleiste gehoert zum Programm und muss offen bleiben (Fenster schliessen = Programm beenden). Bedienung wie
+unten beschrieben. "PDF speichern" oeffnet den Windows-Dialog zur Ordnerwahl, "PDF downloaden" speichert im
+Download-Ordner des Browsers.
+
+**Mitarbeiter-Modus:** In der Datei `C:\Users\<Name>\Kartengenerator\.env` die Zeile `BEARBEITEN=aus` setzen (oder
+beim ersten Start mit N antworten). Dann gibt es keinen Knopf "Bearbeiten", und die Stammliste (Allergene!) kann
+nicht geaendert werden. Karten erzeugen, speichern und downloaden geht weiterhin. Entfernen der Zeile gibt das Bearbeiten
+wieder frei. (Die Sperre schuetzt vor Versehen, nicht vor gezielter Umgehung durch Fachleute.)
+
+**Sicherheit auf einem gemeinsam genutzten PC:** Der Rentman-Token steht in der Datei `.env` im Benutzerordner und gibt
+Zugriff auf Projekt- und Kundendaten. Besser einen **eigenen Rentman-Benutzer mit eingeschraenkten Rechten** und dessen
+Token verwenden, nicht den Token der Geschaeftsfuehrung.
+
+**Probleme?** `start.bat` im Ordner `C:\Users\<Name>\Kartengenerator` per Rechtsklick > "Als Administrator..." ist nicht
+noetig; stattdessen ein Eingabeaufforderung-Fenster oeffnen, `start.bat` hineinziehen und Enter druecken: Die Fehlermeldung
+bleibt dann sichtbar. Notfalls Python selbst von python.org installieren (Haken "Add python.exe to PATH" setzen).
+
+## Oberflaeche auf dem Mac
 
 **Einmalig installieren** (auch fuer Updates):
 1. ZIP des Branches von GitHub laden und entpacken.
