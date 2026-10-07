@@ -16,6 +16,7 @@ import html
 import json
 import os
 import re
+import subprocess
 import sys
 import threading
 import time
@@ -699,6 +700,77 @@ def erstelle_karten(project, nur=None):
         ergebnis.append(dict(karte=e["karte"], gruppe=e["gruppe"], titel=e["titel"], datei=e["datei"],
                              anzahl=r["anzahl"], pdf=r["pdf"], warnungen=e["warnungen"] + r["warnungen"]))
     return ergebnis
+
+
+def lade_einstellungen():
+    """Eigene Einstellungen der Oberflaeche (z. B. zuletzt gewaehlter Ordner), gespeichert im Datenordner."""
+    try:
+        return json.load(open(daten_ordner() / "einstellungen.json", encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+
+
+def speichere_einstellung(key, wert):
+    try:
+        daten = lade_einstellungen()
+        daten[key] = wert
+        pfad = daten_ordner() / "einstellungen.json"
+        pfad.parent.mkdir(parents=True, exist_ok=True)
+        pfad.write_text(json.dumps(daten, ensure_ascii=False, indent=2), encoding="utf-8")
+    except OSError:
+        pass                      # nur eine Komfortfunktion
+
+
+def waehle_ordner(prompt="Ordner fuer die PDF auswaehlen"):
+    """Ordner-Auswahldialog (macOS). Rueckgabe: Path, oder None bei Abbruch.
+
+    Der Dialog startet im zuletzt gewaehlten Ordner. Auf anderen Systemen gibt es keinen Dialog; dann wird der
+    Standardordner (karten_ordner) verwendet.
+    """
+    if sys.platform != "darwin":
+        return karten_ordner()
+    letzter = lade_einstellungen().get("letzter_ordner")
+    start = letzter if letzter and Path(letzter).is_dir() else str(Path.home() / "Documents")
+    esc = lambda t: t.replace("\\", "\\\\").replace('"', '\\"')
+    skript = ['tell application "System Events"', "activate",
+              f'set ordner to choose folder with prompt "{esc(prompt)}" default location (POSIX file "{esc(start)}")',
+              "return POSIX path of ordner", "end tell"]
+    cmd = ["osascript"] + [x for z in skript for x in ("-e", z)]
+    try:
+        r = subprocess.run(cmd, capture_output=True, text=True, timeout=900)
+    except (OSError, subprocess.TimeoutExpired) as e:
+        raise KartenFehler(f"Der Ordner-Dialog konnte nicht geoeffnet werden: {e}") from e
+    if r.returncode != 0:
+        if "-128" in r.stderr:                       # Abbrechen
+            return None
+        raise KartenFehler("Der Ordner-Dialog konnte nicht geoeffnet werden: " + (r.stderr.strip() or "unbekannter Fehler"))
+    pfad = Path(r.stdout.strip())
+    speichere_einstellung("letzter_ordner", str(pfad))
+    return pfad
+
+
+def eindeutiger_pfad(ordner, datei):
+    """Pfad im Ordner; existiert die Datei schon, wird ' (2)', ' (3)' ... angehaengt (nichts wird ueberschrieben)."""
+    ziel, n = Path(ordner) / datei, 2
+    while ziel.exists():
+        ziel = Path(ordner) / f"{Path(datei).stem} ({n}){Path(datei).suffix}"
+        n += 1
+    return ziel
+
+
+def speichere_pdfs(ordner, dateien):
+    """Schreibt [(Dateiname, PDF-Bytes)] in den Ordner (ohne etwas zu ueberschreiben). Rueckgabe: Liste der Pfade."""
+    try:
+        Path(ordner).mkdir(parents=True, exist_ok=True)
+        pfade = []
+        for datei, pdf in dateien:
+            pfad = eindeutiger_pfad(ordner, datei)
+            pfad.write_bytes(pdf)
+            pfade.append(pfad)
+        return pfade
+    except OSError as e:
+        raise KartenFehler(f"Konnte nicht in '{ordner}' speichern: {e.strerror or e}. Unter macOS ggf. in den "
+                           "Systemeinstellungen > Datenschutz & Sicherheit den Zugriff fuer das Terminal erlauben.") from e
 
 
 def karten_ordner():

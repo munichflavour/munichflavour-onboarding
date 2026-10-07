@@ -11,14 +11,20 @@
 
 **Benutzen:** Starter **Kartengenerator** auf dem Schreibtisch doppelklicken. Beim ersten Start wird nach dem
 Rentman API-Token gefragt (gespeichert in `~/Kartengenerator/.env`, nie im Repo). Im Browser Projektnamen eingeben und
-"Karten laden" klicken. Fuer jede passende Rentman-Gruppe erscheint eine Karte mit Editor und Live-Vorschau:
+"Karten laden" klicken. Fuer jede passende Rentman-Gruppe wird die Karte **automatisch angelegt** und mit Vorschau
+angezeigt. Dabei wird noch **nichts gespeichert**.
 
-- Eintraege an- und abwaehlen, Reihenfolge aendern (Pfeile), Texte aendern, Eintraege hinzufuegen oder entfernen;
-  bei Essen auch Beschreibung, Allergene (Buchstaben laut Legende) und vegetarisch/vegan.
+- **PDF speichern:** oeffnet einen Dialog zur Ordnerwahl (startet im zuletzt gewaehlten Ordner) und legt die PDF dort ab.
+  Existiert der Dateiname schon, wird " (2)" angehaengt, nichts wird ueberschrieben. **Alle PDFs speichern** fragt den
+  Ordner nur einmal. (Der Dialog ist ein macOS-Dialog; auf anderen Systemen wird der Standardordner `KARTEN_ORDNER`
+  bzw. `~/Kartengenerator/Karten` benutzt.)
+- **PDF downloaden:** laedt die PDF direkt in den Download-Ordner deines Browsers.
+- **Bearbeiten** (optional): Eintraege an- und abwaehlen, Reihenfolge aendern (Pfeile), Texte aendern, Eintraege
+  hinzufuegen oder entfernen; bei Essen auch Beschreibung, Allergene (Buchstaben laut Legende) und vegetarisch/vegan.
+  Die Vorschau aktualisiert sich live, **Bearbeiten beenden** schliesst den Editor.
 - Mit dem Haken **merken** landet ein Eintrag in deiner eigenen Stammliste und gilt ab dann fuer alle Projekte
-  (geaenderte Texte werden automatisch zum Merken vorgeschlagen).
-- **PDF speichern** (oder **Alle Karten speichern**) legt die PDF im Projektordner ab. Fehlende Karten lassen sich unter
-  "Weitere Karte erstellen" anfordern.
+  (geaenderte Texte werden automatisch zum Merken vorgeschlagen; uebernommen wird beim Speichern oder Downloaden).
+- Fehlende Karten lassen sich unter "Weitere Karte erstellen" anfordern.
 
 **Eigene Stammliste:** Aenderungen aus der Oberflaeche stehen in `~/Kartengenerator/daten/getraenke.json` und
 `speisen.json`. Sie haben Vorrang vor den mitgelieferten Listen in `stammdaten/` und werden bei Updates nie

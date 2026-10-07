@@ -17,10 +17,10 @@ form{display:flex;gap:10px;max-width:920px}
 input[type=text],input:not([type]),select{font:inherit;min-width:0;padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--ink)}
 #q{flex:1;padding:14px 16px;border-radius:10px}
 input:focus,select:focus{outline:2px solid var(--ink);outline-offset:1px}
-button{font:inherit;cursor:pointer;border-radius:10px;border:1px solid var(--ink);background:var(--ink);color:var(--bg);padding:12px 20px;font-weight:600}
-button.zweit{background:transparent;color:var(--ink);border-color:var(--line);font-weight:500;padding:9px 14px}
+button,a.btn{font:inherit;cursor:pointer;border-radius:10px;border:1px solid var(--ink);background:var(--ink);color:var(--bg);padding:12px 20px;font-weight:600;text-decoration:none;display:inline-block;line-height:1.5}
+button.zweit,a.btn.zweit{background:transparent;color:var(--ink);border-color:var(--line);font-weight:500;padding:11px 16px}
 button.klein{padding:3px 8px;border-radius:6px;font-size:13px;font-weight:500;background:transparent;color:var(--ink);border-color:var(--line)}
-button:disabled{opacity:.5;cursor:default}
+button:disabled,a.btn[aria-disabled=true]{opacity:.5;cursor:default;pointer-events:none}
 h2{font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);margin:30px 0 10px;font-weight:600}
 .liste{display:flex;flex-wrap:wrap;gap:8px}
 .chip{border:1px solid var(--line);background:var(--soft);color:var(--ink);padding:8px 14px;font-weight:400;border-radius:999px;font-size:14px}
@@ -33,12 +33,15 @@ h2{font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:var(--mute
 .stand{margin:14px 0 0;font-size:13px;color:var(--muted)}
 .stand button{padding:2px 8px;font-size:12px;border-radius:6px;margin-left:8px}
 .leiste{display:flex;gap:10px;flex-wrap:wrap;margin:8px 0 6px}
-/* Karte = Editor + Vorschau */
+/* Karte: Ansicht = Vorschau + Aktionen, Bearbeiten = Editor + Vorschau */
 .karte{border:1px solid var(--line);border-radius:14px;padding:18px;background:var(--soft);margin-top:18px}
 .kopf{display:flex;align-items:baseline;gap:12px}
 .kopf h3{margin:0;font-size:20px}.anz{color:var(--muted);font-size:14px}
-.spalten{display:grid;grid-template-columns:minmax(0,1fr) 320px;gap:22px;margin-top:12px}
-@media (max-width:900px){.spalten{grid-template-columns:1fr}}
+.spalten{display:grid;gap:22px;margin-top:12px}
+.spalten.ansicht{grid-template-columns:minmax(260px,380px) minmax(0,1fr);grid-template-areas:"vorschau info"}
+.spalten.edit{grid-template-columns:minmax(0,1fr) 320px;grid-template-areas:"editor vorschau"}
+.vorschau{grid-area:vorschau}.info{grid-area:info}.editor{grid-area:editor}
+@media (max-width:900px){.spalten.ansicht,.spalten.edit{grid-template-columns:1fr;grid-template-areas:"vorschau" "info" "editor"}}
 .editor h4{margin:14px 0 6px;font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);display:flex;align-items:center;gap:8px}
 .editor h4 input{flex:0 1 220px;text-transform:uppercase;font-size:13px;padding:4px 8px}
 .zeile{display:flex;align-items:center;gap:6px;flex-wrap:wrap;padding:6px 0;border-bottom:1px solid var(--line)}
@@ -60,6 +63,7 @@ h2{font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:var(--mute
 .ok{margin-top:10px;padding:9px 11px;border-radius:8px;background:var(--okbg);border:1px solid var(--ok);font-size:13px;word-break:break-all}
 .warn{margin-top:10px;padding:9px 12px;border-radius:8px;background:var(--warn);border:1px solid var(--warnb);font-size:13px}
 .warn b{display:block;margin-bottom:2px}.warn ul{margin:4px 0 0;padding-left:18px}
+.info .hinweis{color:var(--muted);font-size:14px;margin:6px 0 0}
 .schritt{margin-top:22px;padding:12px 14px;border-radius:10px;border:1px solid var(--line);background:var(--soft);font-size:14px;max-width:920px}
 .leer{color:var(--muted)}
 </style>
@@ -156,7 +160,8 @@ const timers = {}, tokens = {};
 function eintraege(e) { return e.karte === 'essen' ? e.abschnitte.flatMap(a => a.items) : e.items; }
 function sauber(e) { return JSON.parse(JSON.stringify(e, (k, v) => k.startsWith('_') ? undefined : v)); }
 function vorbereiten(e) {
-  e._v = { png: null, anzahl: '', warn: [], text: 'Vorschau wird erstellt …', err: false }; e._erg = null;
+  e._v = { png: null, anzahl: '', warn: [], text: 'Vorschau wird erstellt …', err: false, laedt: true, token: null };
+  e._erg = null; e._edit = false;
   eintraege(e).forEach(i => { i.merken = i.merken || i.quelle === 'manuell'; if (e.karte === 'essen') i.allergene = Array.isArray(i.allergene) ? i.allergene.join(', ') : (i.allergene || ''); });
   return e;
 }
@@ -175,7 +180,7 @@ async function laden(p, nur) {
   sperre(false);
 }
 
-/* ---------- Darstellung ---------- */
+/* ---------- Editor ---------- */
 const BADGES = { stamm: ['stamm', 'Stammliste'], rentman: ['neu', 'neu aus Rentman'], standard: ['stamm', 'Standardliste'], manuell: ['neu', 'manuell'] };
 const badge = q => BADGES[q] ? `<span class="badge ${BADGES[q][0]}">${BADGES[q][1]}</span>` : '';
 const knoepfe = `<span class="pfeile"><button class="klein" data-a="auf" title="nach oben">▲</button><button class="klein" data-a="ab" title="nach unten">▼</button><button class="klein" data-a="weg" title="Eintrag entfernen">✕</button></span>`;
@@ -223,28 +228,35 @@ function editor(e, i) {
     <div class="plus"><button class="klein" data-a="plus" data-e="${i}" data-frei="1">+ Eintrag</button></div>`;
 }
 
+/* ---------- Darstellung ---------- */
 function warnHtml(e) {
   const alle = [...new Set([...(e.warnungen || []), ...e._v.warn])];
   return alle.length ? `<div class="warn"><b>Bitte prüfen</b><ul>${alle.map(w => `<li>${esc(w)}</li>`).join('')}</ul></div>` : '';
 }
 function ergHtml(e) {
-  if (!e._erg) return '';
-  const g = e._erg;
-  return (g.pfad ? `<div class="ok"><b>Gespeichert:</b> ${esc(g.pfad)}${g.gemerkt ? `<br>${g.gemerkt} Eintrag/Einträge in die Stammliste gemerkt.` : ''}</div>
-    <div class="aktion"><a href="${g.url}" download="${esc(e.datei)}"><button class="zweit">PDF herunterladen</button></a>
-    <button class="zweit" data-a="zeigen" data-pfad="${esc(g.pfad)}">Im Finder zeigen</button></div>` :
-    `<div class="aktion"><a href="${g.url}" download="${esc(e.datei)}"><button class="zweit">PDF herunterladen</button></a></div>`) +
-    (g.fehler ? `<p class="fehler">${esc(g.fehler)}</p>` : '');
+  const g = e._erg; if (!g) return '';
+  if (g.text) return `<div class="ok">${g.text}</div>` + (g.fehler ? `<p class="fehler">${esc(g.fehler)}</p>` : '');
+  return `<div class="ok"><b>Gespeichert:</b> ${esc(g.pfad)}${g.umbenannt ? '<br>Der Dateiname war im Ordner schon vergeben, deshalb wurde die Nummer angehängt.' : ''}${g.gemerkt ? `<br>${g.gemerkt} Eintrag/Einträge in die Stammliste gemerkt.` : ''}</div>
+    <div class="aktion"><button class="zweit" data-a="zeigen" data-pfad="${esc(g.pfad)}">Im Finder zeigen</button></div>` + (g.fehler ? `<p class="fehler">${esc(g.fehler)}</p>` : '');
+}
+function aktionen(e, i) {
+  return `<div class="aktion">
+    <button id="sp${i}" data-a="speichern" data-e="${i}">PDF speichern</button>
+    <a class="btn zweit" id="dl${i}" href="#" download="${esc(e.datei)}" data-a="dl" data-e="${i}" aria-disabled="true">PDF downloaden</a>
+    ${e._edit ? '' : `<button class="zweit" data-a="bearbeiten" data-e="${i}">Bearbeiten</button>`}</div>`;
 }
 
 function panel(e, i) {
+  const knopfBlock = `${aktionen(e, i)}<div id="erg${i}">${ergHtml(e)}</div>`;      // Ansicht: rechts, Bearbeiten: unter der Vorschau
+  const vorschau = `<div class="vorschau"><img id="img${i}" alt="Vorschau ${esc(e.titel)}"><div class="vs" id="vs${i}"></div>${e._edit ? knopfBlock : ''}</div>`;
+  const mitte = e._edit
+    ? `<div class="editor"><div class="leiste"><button class="zweit" data-a="fertig" data-e="${i}">Bearbeiten beenden</button></div>
+        <div id="warn${i}">${warnHtml(e)}</div>${editor(e, i)}</div>`
+    : `<div class="info"><div id="warn${i}">${warnHtml(e)}</div>
+        <p class="hinweis">Die Karte wurde aus Rentman erstellt und noch <b>nicht gespeichert</b>. Mit <i>Bearbeiten</i> kannst du Einträge, Texte und Reihenfolge ändern.</p>${knopfBlock}</div>`;
   return `<section class="karte" data-e="${i}">
     <div class="kopf"><h3>${esc(e.titel)}</h3><span class="anz" id="anz${i}">${esc(e._v.anzahl)}</span></div>
-    <div id="warn${i}">${warnHtml(e)}</div>
-    <div class="spalten"><div class="editor">${editor(e, i)}</div>
-      <div class="vorschau"><img id="img${i}" alt="Vorschau ${esc(e.titel)}"><div class="vs" id="vs${i}"></div>
-        <div class="aktion"><button data-a="speichern" data-e="${i}">PDF speichern</button></div>
-        <div id="erg${i}">${ergHtml(e)}</div></div></div></section>`;
+    <div class="spalten ${e._edit ? 'edit' : 'ansicht'}">${vorschau}${mitte}</div></section>`;
 }
 
 function zeige() {
@@ -253,9 +265,9 @@ function zeige() {
   const fehlend = Z.arten.filter(a => !Z.e.some(e => e.karte === a.karte));
   let h = `<h2>${kopf}</h2>`;
   if (!Z.e.length) h += '<p class="leer">In diesem Projekt ist weder Getränke-, Kaffee- noch Catering-Material gebucht, daher wurde keine Karte erzeugt.</p>';
-  else h += `<div class="leiste"><button data-a="alle">Alle Karten speichern</button><button class="zweit" data-a="neu">Neu aus Rentman laden</button></div>` +
+  else h += `<div class="leiste"><button data-a="alle">Alle PDFs speichern</button><button class="zweit" data-a="neu">Neu aus Rentman laden</button></div>` +
     Z.e.map(panel).join('') +
-    `<div class="schritt"><b>Nächster Schritt:</b> Gespeicherte Karten in Rentman im Projekt „${esc(p.name)}“ (Nr. ${p.nummer}) unter <i>Dateien</i> hochladen. Die Rentman-API erlaubt keinen automatischen Upload.</div>`;
+    `<div class="schritt"><b>Nächster Schritt:</b> Die PDFs in Rentman im Projekt „${esc(p.name)}“ (Nr. ${p.nummer}) unter <i>Dateien</i> hochladen. Die Rentman-API erlaubt keinen automatischen Upload.</div>`;
   if (fehlend.length) h += `<h2>Weitere Karte erstellen</h2><div class="liste">` + fehlend.map(a => `<button class="chip" data-a="zusatz" data-art="${a.karte}">${esc(a.titel)}</button>`).join('') + '</div>';
   $('ergebnis').innerHTML = h;
   Z.e.forEach((e, i) => zeigeVs(i));
@@ -266,11 +278,15 @@ function zeigeVs(i) {
   if (e._v.png) $('img' + i).src = 'data:image/png;base64,' + e._v.png;
   $('vs' + i).textContent = e._v.text || ''; $('vs' + i).className = 'vs' + (e._v.err ? ' err' : '');
   $('anz' + i).textContent = e._v.anzahl || ''; $('warn' + i).innerHTML = warnHtml(e);
+  const bereit = !e._v.laedt && !!e._v.token;               // PDF erst anbieten, wenn die Vorschau aktuell ist
+  const dl = $('dl' + i); dl.setAttribute('aria-disabled', bereit ? 'false' : 'true');
+  dl.href = bereit ? '/api/pdf?t=' + e._v.token : '#';
+  $('sp' + i).disabled = e._v.laedt;
 }
 
-/* ---------- Vorschau + Speichern ---------- */
+/* ---------- Vorschau ---------- */
 function plane(i) {
-  const e = Z.e[i]; e._v.text = 'Vorschau wird aktualisiert …'; e._v.err = false; zeigeVs(i);
+  const e = Z.e[i]; e._v.laedt = true; e._v.text = 'Vorschau wird aktualisiert …'; e._v.err = false; zeigeVs(i);
   clearTimeout(timers[i]); timers[i] = setTimeout(() => vorschau(i), 600);
 }
 async function vorschau(i) {
@@ -279,24 +295,39 @@ async function vorschau(i) {
   try {
     const r = await post('/api/vorschau', { entwurf: sauber(e) });
     if (t !== tokens[i]) return;
-    e._v = { png: r.png, anzahl: r.anzahl, warn: r.warnungen, text: '', err: false };
-  } catch (err) { if (t !== tokens[i]) return; e._v.text = err.message; e._v.err = true; }
+    e._v = { png: r.png, anzahl: r.anzahl, warn: r.warnungen, text: '', err: false, laedt: false, token: r.token };
+  } catch (err) { if (t !== tokens[i]) return; e._v.text = err.message; e._v.err = true; e._v.laedt = false; e._v.token = null; }
   zeigeVs(i);
 }
-function blobUrl(b64) {
-  const bin = atob(b64), arr = new Uint8Array(bin.length);
-  for (let k = 0; k < bin.length; k++) arr[k] = bin.charCodeAt(k);
-  return URL.createObjectURL(new Blob([arr], { type: 'application/pdf' }));
+
+/* ---------- Speichern (Ordner waehlen) und Downloaden ---------- */
+function gemerktVerbuchen(e) { eintraege(e).forEach(it => { if (it.merken) { it.merken = false; it.quelle = it.quelle === 'standard' ? 'standard' : 'stamm'; } }); }
+
+async function speichern(indizes) {
+  const meldung = '<div class="ok">Bitte im geöffneten Dialog den Ordner auswählen (der Dialog kann hinter dem Browserfenster liegen) …</div>';
+  indizes.forEach(i => { const el = $('erg' + i); if (el) el.innerHTML = meldung; });
+  let r;
+  try { r = await post('/api/speichern', { entwuerfe: indizes.map(i => sauber(Z.e[i])) }); }
+  catch (err) { indizes.forEach(i => { Z.e[i]._erg = { text: '', fehler: err.message }; }); zeige(); return; }
+  if (r.abgebrochen) { indizes.forEach(i => { const el = $('erg' + i); if (el) el.innerHTML = '<p class="leer">Speichern abgebrochen.</p>'; }); return; }
+  indizes.forEach((i, k) => {
+    const e = Z.e[i], d = r.dateien[k];
+    e._erg = { pfad: d.pfad, umbenannt: d.umbenannt, gemerkt: k === 0 ? r.gemerkt : 0, fehler: r.speicherfehler };
+    gemerktVerbuchen(e);
+  });
+  const y = window.scrollY; zeige(); window.scrollTo(0, y);
 }
-async function speichern(i) {
-  const e = Z.e[i]; clearTimeout(timers[i]); tokens[i] = (tokens[i] || 0) + 1;
-  try {
-    const r = await post('/api/erzeugen', { id: Z.projekt.id, entwurf: sauber(e) });
-    e._erg = { pfad: r.pfad, url: blobUrl(r.pdf), gemerkt: r.gemerkt, fehler: r.speicherfehler };
-    e._v = { png: r.png, anzahl: r.anzahl, warn: r.warnungen, text: '', err: false };
-    eintraege(e).forEach(it => { if (it.merken) { it.merken = false; it.quelle = it.quelle === 'standard' ? 'standard' : 'stamm'; } });
-    const y = window.scrollY; zeige(); window.scrollTo(0, y);
-  } catch (err) { e._v.text = err.message; e._v.err = true; zeigeVs(i); throw err; }
+
+function downloadStarten(ev, i) {
+  const e = Z.e[i];
+  if (e._v.laedt || !e._v.token) { ev.preventDefault(); return; }      // Vorschau noch nicht fertig
+  const merken = eintraege(e).some(it => it.merken);
+  if (merken) {                                                          // Stammliste bedienen, ohne den Download zu stoeren
+    navigator.sendBeacon('/api/merken', new Blob([JSON.stringify({ entwurf: sauber(e) })], { type: 'application/json' }));
+    gemerktVerbuchen(e);
+  }
+  e._erg = { text: `<b>Heruntergeladen:</b> ${esc(e.datei)} (in den Download-Ordner deines Browsers).${merken ? '<br>Markierte Einträge wurden in die Stammliste gemerkt.' : ''}` };
+  $('erg' + i).innerHTML = ergHtml(e);
 }
 
 /* ---------- Bearbeiten (Ereignisse) ---------- */
@@ -306,7 +337,7 @@ function zeileInfo(el) {
   const liste = e.karte === 'essen' ? e.abschnitte[+z.dataset.s].items : e.items;
   return { e, i: +z.dataset.e, liste, j: +z.dataset.i, z };
 }
-const TEXTFELDER = ['name', 'zutaten', 'zusatz', 'beschreibung', 'allergene', 'ernaehrung', 'alkoholfrei'];
+const TEXTFELDER = ['name', 'zutaten', 'zusatz', 'beschreibung', 'allergene', 'ernaehrung'];
 
 function aenderung(ev) {
   const f = ev.target.dataset.f; if (!f) return;
@@ -316,7 +347,7 @@ function aenderung(ev) {
   }
   const it = info.liste[info.j];
   it[f] = ev.target.type === 'checkbox' ? ev.target.checked : ev.target.value;
-  if (TEXTFELDER.includes(f) && f !== 'alkoholfrei' && info.e.karte !== 'kaffee' && !it.merken) {   // geaendert -> fuer die Stammliste vormerken
+  if (TEXTFELDER.includes(f) && info.e.karte !== 'kaffee' && !it.merken) {   // geaendert -> fuer die Stammliste vormerken
     it.merken = true; const m = info.z.querySelector('[data-f=merken]'); if (m) m.checked = true;
   }
   if (f === 'aktiv') info.z.classList.toggle('aus', !it.aktiv);
@@ -333,6 +364,7 @@ function bewege(info, richtung) {
 async function klick(ev) {
   const b = ev.target.closest('[data-a]'); if (!b) return;
   const a = b.dataset.a, y = window.scrollY, neuZeichnen = () => { zeige(); window.scrollTo(0, y); };
+  if (a === 'dl') { downloadStarten(ev, +b.dataset.e); return; }        // normaler Link-Download, nicht abbrechen
   if (a === 'auf' || a === 'ab' || a === 'weg') {
     const info = zeileInfo(b); if (!info) return;
     if (a === 'weg') info.liste.splice(info.j, 1); else if (!bewege(info, a === 'auf' ? -1 : 1)) return;
@@ -343,12 +375,11 @@ async function klick(ev) {
     else if (e.karte === 'kaffee') e.items.push({ ...neu, zusatz: '', merken: false });
     else e.items.push({ ...neu, zutaten: '', alkoholfrei: b.dataset.frei === '1' });
     neuZeichnen();
-  } else if (a === 'speichern') {
-    b.disabled = true; try { await speichern(+b.dataset.e); } catch (e) {} b.disabled = false;
-  } else if (a === 'alle') {
-    b.disabled = true;
-    for (let i = 0; i < Z.e.length; i++) { try { await speichern(i); } catch (e) { break; } }
-  } else if (a === 'neu') { laden(Z.projekt); }
+  } else if (a === 'bearbeiten') { Z.e[+b.dataset.e]._edit = true; neuZeichnen(); }
+  else if (a === 'fertig') { Z.e[+b.dataset.e]._edit = false; neuZeichnen(); }
+  else if (a === 'speichern') { await speichern([+b.dataset.e]); }
+  else if (a === 'alle') { await speichern(Z.e.map((e, i) => i)); }
+  else if (a === 'neu') { laden(Z.projekt); }
   else if (a === 'zusatz') { laden(Z.projekt, b.dataset.art); }
   else if (a === 'zeigen') {
     try { await post('/api/zeigen', { pfad: b.dataset.pfad }); } catch (err) { status(err.message, 'fehler'); }

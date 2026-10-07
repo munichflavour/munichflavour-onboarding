@@ -9,6 +9,8 @@ import re
 import subprocess
 import sys
 import threading
+import uuid
+from collections import OrderedDict
 import urllib.parse
 import webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -22,6 +24,8 @@ HOST, PORT = "127.0.0.1", 8765
 UI = Path(__file__).parent / "ui"
 LOCK = threading.Lock()  # Warnungs-Sammler im Kartenmodul ist nicht threadsicher
 MAX_EINTRAEGE = 120
+PDFS = OrderedDict()      # Token -> (Dateiname, PDF-Bytes) der letzten Vorschau, fuer 'PDF downloaden'
+GESPEICHERT = set()       # Pfade, die diese Sitzung gespeichert hat (nur diese darf 'Im Finder zeigen' oeffnen)
 
 
 def projekt_json(p):
@@ -50,10 +54,12 @@ class Handler(BaseHTTPRequestHandler):
     def log_message(self, fmt, *args):
         pass
 
-    def senden(self, status, body, ctype="application/json; charset=utf-8"):
+    def senden(self, status, body, ctype="application/json; charset=utf-8", headers=None):
         data = body if isinstance(body, bytes) else json.dumps(body, ensure_ascii=False).encode()
         self.send_response(status)
         self.send_header("Content-Type", ctype)
+        for k, v in (headers or {}).items():
+            self.send_header(k, v)
         self.send_header("Content-Length", str(len(data)))
         self.send_header("Cache-Control", "no-store")
         self.end_headers()
@@ -79,6 +85,13 @@ class Handler(BaseHTTPRequestHandler):
                 self.senden(200, dict(projekte=[projekt_json(p) for p in ck.anstehende()]))
             elif url.path == "/api/stand":
                 self.senden(200, ck.projektliste_stand())
+            elif url.path == "/api/pdf":
+                token = urllib.parse.parse_qs(url.query).get("t", [""])[0]
+                if token not in PDFS:
+                    return self.senden(404, dict(fehler="Die Vorschau ist abgelaufen, bitte die Karte neu laden."))
+                datei, pdf = PDFS[token]
+                self.senden(200, pdf, "application/pdf", {
+                    "Content-Disposition": "attachment; filename=\"karte.pdf\"; filename*=UTF-8''" + urllib.parse.quote(datei)})
             else:
                 self.senden(404, dict(fehler="Nicht gefunden"))
         except ck.KartenFehler as e:
@@ -93,8 +106,10 @@ class Handler(BaseHTTPRequestHandler):
                 return self.entwurf()
             if self.path == "/api/vorschau":
                 return self.vorschau()
-            if self.path == "/api/erzeugen":
-                return self.erzeugen()
+            if self.path == "/api/speichern":
+                return self.speichern()
+            if self.path == "/api/merken":
+                return self.merken()
             if self.path == "/api/zeigen":
                 return self.zeigen()
             self.senden(404, dict(fehler="Nicht gefunden"))
@@ -130,32 +145,43 @@ class Handler(BaseHTTPRequestHandler):
         e = pruefe_entwurf(self.body()["entwurf"])
         with LOCK:
             r = ck.render_entwurf(e)
+        token = uuid.uuid4().hex
+        PDFS[token] = (e["datei"], r["pdf"])
+        while len(PDFS) > 60:
+            PDFS.popitem(last=False)
         self.senden(200, dict(png=base64.b64encode(vorschau_png(r["pdf"])).decode(), anzahl=r["anzahl"],
-                              warnungen=r["warnungen"]))
+                              warnungen=r["warnungen"], token=token))
 
-    def erzeugen(self):
-        """Rendert den (bearbeiteten) Entwurf, speichert die PDF im Projektordner und merkt Stammlisten-Eintraege."""
-        b = self.body()
-        e, projekt = pruefe_entwurf(b["entwurf"]), self.projekt(b["id"])
+    def merken(self):
+        """Traegt die markierten Eintraege in die eigene Stammliste ein (auch beim Download aufgerufen)."""
+        e = pruefe_entwurf(self.body()["entwurf"])
         with LOCK:
-            r = ck.render_entwurf(e)
-            fehler, pfad, gemerkt = None, None, 0
+            self.senden(200, dict(gemerkt=ck.merke_in_stammliste(e)))
+
+    def speichern(self):
+        """Ordner waehlen (Dialog), PDFs der Entwuerfe dort ablegen und markierte Eintraege in die Stammliste merken."""
+        entwuerfe = [pruefe_entwurf(e) for e in self.body()["entwuerfe"]]
+        if not entwuerfe or len(entwuerfe) > 20:
+            raise ck.KartenFehler("Keine Karte zum Speichern.")
+        ordner = ck.waehle_ordner("Ordner fuer " + ("die PDF" if len(entwuerfe) == 1 else "die PDFs") + " auswaehlen")
+        if ordner is None:
+            return self.senden(200, dict(abgebrochen=True))
+        with LOCK:
+            renders = [ck.render_entwurf(e) for e in entwuerfe]
+            pfade = ck.speichere_pdfs(ordner, [(e["datei"], r["pdf"]) for e, r in zip(entwuerfe, renders)])
+            gemerkt, fehler = 0, None
             try:
-                pfad = str(ck.speichere_karten(projekt, [dict(datei=e["datei"], pdf=r["pdf"])])[0])
-            except ck.KartenFehler as ex:  # Karte trotzdem anzeigen, nur den Speicherfehler melden
-                fehler = str(ex)
-            try:
-                gemerkt = ck.merke_in_stammliste(e)
+                gemerkt = sum(ck.merke_in_stammliste(e) for e in entwuerfe)
             except ck.KartenFehler as ex:
-                fehler = (fehler + " " if fehler else "") + str(ex)
-        self.senden(200, dict(pdf=base64.b64encode(r["pdf"]).decode(), png=base64.b64encode(vorschau_png(r["pdf"])).decode(),
-                              anzahl=r["anzahl"], warnungen=r["warnungen"], pfad=pfad, gemerkt=gemerkt,
-                              speicherfehler=fehler))
+                fehler = str(ex)
+        GESPEICHERT.update(str(p.resolve()) for p in pfade)
+        self.senden(200, dict(ordner=str(ordner), gemerkt=gemerkt, speicherfehler=fehler, dateien=[
+            dict(datei=p.name, pfad=str(p), umbenannt=p.name != e["datei"]) for p, e in zip(pfade, entwuerfe)]))
 
     def zeigen(self):
-        """Zeigt eine gespeicherte Karte im Finder (nur Dateien unterhalb des Karten-Ordners)."""
+        """Zeigt eine in dieser Sitzung gespeicherte Karte im Finder."""
         pfad = Path(self.body()["pfad"]).resolve()
-        if ck.karten_ordner().resolve() not in pfad.parents or not pfad.is_file():
+        if str(pfad) not in GESPEICHERT or not pfad.is_file():
             return self.senden(400, dict(fehler="Datei nicht gefunden."))
         if sys.platform != "darwin":
             return self.senden(400, dict(fehler="Der Finder ist nur auf dem Mac verfuegbar."))
