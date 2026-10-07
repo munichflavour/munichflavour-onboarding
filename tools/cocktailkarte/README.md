@@ -148,8 +148,8 @@ Dateien im neuen Design enden auf `_NEU.pdf`.
 - Neu gibt es fuer alle Karten: Cocktails, Smoothies, Drinks, Hot Drinks, Matcha, Aperitif, Kaffee und Essen
   (Essen: zwei Spalten Salate/Brotzeit, Dessert zentriert darunter, Allergen-Legende fest in der Vorlage).
   Die Essenkarte im neuen Design zeigt keine (V)/(VG)-Hinweise, wie in der Vorlage ESSEN_NEU.
-- Die Ueberschriftschrift Agrandir ist lizenzpflichtig. In `assets/neu/` liegen nur Auszuege (A-Z, Ä Ö Ü, a-z, Ziffern).
-  Es fehlen Sonderzeichen wie & und É (z. B. CANAPÉS): dann steht die Ueberschrift in Montserrat Bold mit Hinweis.
+- Die Ueberschriftschrift Agrandir ist lizenzpflichtig. In `assets/neu/` liegen nur Auszuege (A-Z, Ä Ö Ü É, a-z, Ziffern, gaengige Satz- und Sonderzeichen).
+  Fehlt ein Zeichen (z. B. : oder Anfuehrungszeichen unten): dann steht die Ueberschrift in Montserrat Bold mit Hinweis.
   Mit der vollstaendigen Datei `Agrandir-Black.otf` (neben den Installer legen, er kopiert sie nach `daten/`) gibt es
   keine Ersatzschrift.
 - Code: `neu.py` (Layout inkl. Essenkarte), `make_template_neu.py` (baut `assets/neu/template.pdf` aus der Canva-PDF; `template_essen.pdf` entstand analog aus ESSEN_NEU).

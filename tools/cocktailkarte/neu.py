@@ -214,8 +214,12 @@ def render_neu_essen(abschnitte, assets, warn, agrandir=None, titel="Speisen"):
 
     def kopf(text, mitte, y):
         size = KOPF_SIZE
+        grenze = 2 * min(mitte - 40, 555 - mitte)             # muss innerhalb des Rahmens bleiben
         if pinsel.kann(text):
             w = pinsel.laenge(text, size, KOPF_SPUR * size)
+            if w > grenze:
+                size *= grenze / w
+                w = grenze
             pinsel.schreibe(mitte - w / 2, y, text, size, KOPF_SPUR * size, SCHWARZ)
         else:
             warn(f"Die Schrift Agrandir hat nicht alle Buchstaben fuer '{text}' - Ersatzschrift Montserrat Bold "
