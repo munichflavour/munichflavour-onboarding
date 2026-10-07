@@ -204,7 +204,9 @@ def api_get(path, **params):
 
 # Rentman-Status "Bestaetigt" (3) und die Folgestatus Gepackt (4), Am Veranstaltungsort (5), Retour (6)
 BESTAETIGT = {3, 4, 5, 6}
-CACHE = HERE / ".cache" / "projekte.json"
+def cache_datei():
+    """Projektliste-Cache: im Webbetrieb im Datenordner (bleibt bei Neustarts erhalten), sonst <Programmordner>/.cache."""
+    return (daten_ordner() / ".cache" if einstellung("DATEN_ORDNER") else HERE / ".cache") / "projekte.json"
 CACHE_MAX_ALTER = 600          # Sekunden, danach wird im Hintergrund aktualisiert
 _projekte = dict(zeit=0, daten=[], laedt=False, fehler=None)
 _sperre = threading.Lock()
@@ -228,8 +230,8 @@ def _lade_projekte():
         with _sperre:
             _projekte.update(daten=projekte, zeit=time.time(), fehler=None)
         try:
-            CACHE.parent.mkdir(parents=True, exist_ok=True)
-            CACHE.write_text(json.dumps(dict(zeit=_projekte["zeit"], daten=projekte), ensure_ascii=False), encoding="utf-8")
+            cache_datei().parent.mkdir(parents=True, exist_ok=True)
+            cache_datei().write_text(json.dumps(dict(zeit=_projekte["zeit"], daten=projekte), ensure_ascii=False), encoding="utf-8")
         except OSError:
             pass                   # Cache ist nur eine Beschleunigung
     except KartenFehler as e:
@@ -264,9 +266,9 @@ def aktualisiere(blockierend=False):
 
 def alle_projekte():
     """Projektliste: sofort aus dem Speicher oder dem Festplatten-Cache, bei Bedarf im Hintergrund aktualisiert."""
-    if not _projekte["daten"] and CACHE.exists():
+    if not _projekte["daten"] and cache_datei().exists():
         try:
-            d = json.loads(CACHE.read_text(encoding="utf-8"))
+            d = json.loads(cache_datei().read_text(encoding="utf-8"))
             _projekte.update(daten=d["daten"], zeit=d["zeit"])
         except (OSError, ValueError, KeyError):
             pass

@@ -44,6 +44,23 @@ Der Server läuft danach auf **http://localhost:3000**
 | `COOKIE_SECURE=true` | Nur setzen, wenn die App wirklich ausschließlich über **HTTPS** erreichbar ist (z.B. hinter einem Reverse Proxy mit TLS). Läuft die App per HTTP im lokalen Netz (Standardfall laut Installationsanleitung oben), **nicht** setzen – sonst funktioniert der Login nicht, weil der Browser das Session-Cookie verwirft. |
 | `TRUST_PROXY=1` | Setzen, wenn die App hinter einem Reverse Proxy (nginx, Heroku, Render, …) mit HTTPS-Terminierung läuft – sonst erkennt Express HTTPS-Anfragen nicht korrekt. |
 
+## Kartengenerator im Portal (nur Admins)
+
+Der Kartengenerator (`tools/cocktailkarte`, Python) ist ins Portal eingebunden: Im Admin-Bereich oeffnet der Knopf **Karten**
+die Seite `/karten/`. Der Python-Prozess wird vom Portal selbst gestartet, lauscht nur auf `127.0.0.1` und ist ausschliesslich
+ueber `/karten` erreichbar, und dort nur mit Admin-Login (Mitarbeiter und nicht Angemeldete werden abgewiesen).
+Karten werden als PDF heruntergeladen (kein Ordnerdialog im Webbetrieb).
+
+**Betrieb auf Railway** (Dockerfile im Repo: Node 20 + Python mit PyMuPDF):
+1. Variable `RENTMAN_API` setzen (Rentman-API-Token, am besten von einem eigenen Benutzer mit minimalen Rechten).
+2. Das Verzeichnis `db/` (Datenbank, Uploads **und** Kartendaten in `db/karten/`) muss auf einem **Volume** liegen
+   (`/app/db`), sonst gehen Stammliste und hochgeladene Schriften bei jedem Deploy verloren.
+3. Die lizenzpflichtigen Schriften (Active, Agrandir) werden nicht ins Repository gelegt, sondern unter **Karten >
+   Schriften fuer die Karten** (unten auf der Seite) einmalig hochgeladen. Sie liegen dann im Volume.
+4. Optionale Variablen: `KARTEN_AKTIV=0` (Generator abschalten), `KARTEN_DATEN` (anderer Datenordner), `KARTEN_PORT`, `PYTHON`.
+
+Lokal ohne Docker: `pip install -r tools/cocktailkarte/requirements.txt`, dann `RENTMAN_API=... node server.js`.
+
 ## Funktionen
 
 ### Mitarbeiter

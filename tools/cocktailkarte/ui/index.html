@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Kartengenerator</title>
 <style>
-@font-face{font-family:Pinsel;src:url(/schrift.ttf)}
+@font-face{font-family:Pinsel;src:url(schrift.ttf)}
 :root{--ink:#232220;--muted:#6f6b64;--line:#dedbd4;--bg:#fff;--soft:#f4f2ee;--warn:#fff4d6;--warnb:#e5c36a;--err:#b3261e;--ok:#1d6b3a;--okbg:#e8f5ec}
 @media (prefers-color-scheme:dark){:root{--ink:#f1eee8;--muted:#a39e94;--line:#3a3834;--bg:#171614;--soft:#22211e;--warn:#3a3118;--warnb:#7a6428;--err:#ff8a80;--ok:#7fd69a;--okbg:#17301f}}
 *{box-sizing:border-box}
@@ -31,6 +31,9 @@ h2{font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:var(--mute
 .status{margin:20px 0 0;color:var(--muted)}
 .fehler{margin:20px 0 0;color:var(--err);font-weight:600}
 .stand{margin:14px 0 0;font-size:13px;color:var(--muted)}
+.schriften{margin:36px 0 0;font-size:13px;color:var(--muted)}
+.schriften summary{cursor:pointer}
+.schriften label{display:flex;align-items:center;gap:10px;margin:10px 0 0}
 .stand button{padding:2px 8px;font-size:12px;border-radius:6px;margin-left:8px}
 .leiste{display:flex;gap:10px;flex-wrap:wrap;margin:8px 0 6px}
 .designwahl{display:flex;align-items:center;gap:8px;margin:14px 0 0;font-size:13px;color:var(--muted)}
@@ -91,6 +94,7 @@ h2{font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:var(--mute
 
   <h2 id="bald-titel" hidden>Bestätigte Events der nächsten 21 Tage</h2>
   <div id="bald" class="liste"></div>
+  <details id="schriften" class="schriften" hidden></details>
 </main>
 
 <script>
@@ -115,12 +119,12 @@ let standTimer = null;
 async function stand() {
   clearTimeout(standTimer);
   try {
-    const s = await api('/api/stand');
+    const s = await api('api/stand');
     $('stand').innerHTML = (s.laedt ? 'Projektliste wird aktualisiert …' :
       s.stand ? `Projektliste: Stand ${uhr(s.stand)} Uhr (${s.anzahl} Projekte)` : '') +
       (s.laedt ? '' : ' <button class="zweit" id="aktu">Aktualisieren</button>') +
       (s.fehler ? ` <span class="fehler">${esc(s.fehler)}</span>` : '');
-    if ($('aktu')) $('aktu').onclick = async () => { await post('/api/aktualisieren'); stand(); };
+    if ($('aktu')) $('aktu').onclick = async () => { await post('api/aktualisieren'); stand(); };
     if (s.laedt) standTimer = setTimeout(stand, 1500); else if (stand.vorher && stand.vorher !== s.stand) bald();
     stand.vorher = s.stand;
   } catch (err) { $('stand').textContent = ''; }
@@ -128,7 +132,7 @@ async function stand() {
 
 async function bald() {
   try {
-    const { projekte } = await api('/api/anstehende');
+    const { projekte } = await api('api/anstehende');
     $('bald-titel').hidden = !projekte.length;
     $('bald').innerHTML = projekte.map(p => `<button class="chip" data-id="${p.id}">${esc(p.name)}<small>${datum(p.datum)}</small></button>`).join('');
     $('bald').querySelectorAll('button').forEach(b => b.onclick = () => laden(projekte.find(p => p.id == b.dataset.id)));
@@ -143,7 +147,7 @@ async function suchen(e) {
   $('auswahl').innerHTML = ''; $('ergebnis').innerHTML = ''; Z.projekt = null;
   sperre(true); status('Suche in Rentman …');
   try {
-    const { projekte, andere } = await api('/api/suche?q=' + encodeURIComponent(q));
+    const { projekte, andere } = await api('api/suche?q=' + encodeURIComponent(q));
     if (!projekte.length) {
       if (andere.length) {
         status(`Kein bestätigtes Projekt zu „${q}“ gefunden. Es gibt aber: ` + andere.map(p => `${p.name} (${p.status}, ${datum(p.datum)})`).join('; ') + '. Karten gibt es nur für bestätigte Projekte.', 'fehler');
@@ -181,7 +185,7 @@ async function laden(p, nur) {
   if (!nur) { $('auswahl').innerHTML = ''; $('ergebnis').innerHTML = ''; }
   sperre(true); status(nur ? 'Erstelle Karte …' : `Lade Material von „${p.name}“ aus Rentman …`);
   try {
-    const r = await post('/api/entwurf', { id: p.id, nur });
+    const r = await post('api/entwurf', { id: p.id, nur });
     Z.projekt = r.projekt; Z.arten = r.arten;
     const neu = r.entwuerfe.map(vorbereiten);
     Z.e = nur ? Z.e.filter(e => e.karte !== nur).concat(neu) : neu;
@@ -253,8 +257,8 @@ function ergHtml(e) {
 }
 function aktionen(e, i) {
   return `<div class="aktion">
-    <button id="sp${i}" data-a="speichern" data-e="${i}">PDF speichern</button>
-    <a class="btn zweit" id="dl${i}" href="#" download="${esc(e.datei)}" data-a="dl" data-e="${i}" aria-disabled="true">PDF downloaden</a>
+    ${EINST.web ? '' : `<button id="sp${i}" data-a="speichern" data-e="${i}">PDF speichern</button>`}
+    <a class="btn${EINST.web ? '' : ' zweit'}" id="dl${i}" href="#" download="${esc(e.datei)}" data-a="dl" data-e="${i}" aria-disabled="true">PDF downloaden</a>
     ${e._edit || !EINST.bearbeiten ? '' : `<button class="zweit" data-a="bearbeiten" data-e="${i}">Bearbeiten</button>`}</div>`;
 }
 
@@ -291,8 +295,8 @@ function zeigeVs(i) {
   $('anz' + i).textContent = e._v.anzahl || ''; $('warn' + i).innerHTML = warnHtml(e);
   const bereit = !e._v.laedt && !!e._v.token;               // PDF erst anbieten, wenn die Vorschau aktuell ist
   const dl = $('dl' + i); dl.setAttribute('aria-disabled', bereit ? 'false' : 'true');
-  dl.href = bereit ? '/api/pdf?t=' + e._v.token : '#'; dl.setAttribute('download', e.datei);
-  $('sp' + i).disabled = e._v.laedt;
+  dl.href = bereit ? 'api/pdf?t=' + e._v.token : '#'; dl.setAttribute('download', e.datei);
+  if ($('sp' + i)) $('sp' + i).disabled = e._v.laedt;
 }
 
 /* ---------- Vorschau ---------- */
@@ -304,7 +308,7 @@ async function vorschau(i) {
   const e = Z.e[i]; if (!e) return;
   const t = tokens[i] = (tokens[i] || 0) + 1;
   try {
-    const r = await post('/api/vorschau', { entwurf: sauber(e) });
+    const r = await post('api/vorschau', { entwurf: sauber(e) });
     if (t !== tokens[i]) return;
     e._v = { png: r.png, anzahl: r.anzahl, warn: r.warnungen, text: '', err: false, laedt: false, token: r.token };
     e.datei = r.datei;
@@ -319,7 +323,7 @@ async function speichern(indizes) {
   const meldung = '<div class="ok">Bitte im geöffneten Dialog den Ordner auswählen (der Dialog kann hinter dem Browserfenster liegen) …</div>';
   indizes.forEach(i => { const el = $('erg' + i); if (el) el.innerHTML = meldung; });
   let r;
-  try { r = await post('/api/speichern', { entwuerfe: indizes.map(i => sauber(Z.e[i])) }); }
+  try { r = await post('api/speichern', { entwuerfe: indizes.map(i => sauber(Z.e[i])) }); }
   catch (err) { indizes.forEach(i => { Z.e[i]._erg = { text: '', fehler: err.message }; }); zeige(); return; }
   if (r.abgebrochen) { indizes.forEach(i => { const el = $('erg' + i); if (el) el.innerHTML = '<p class="leer">Speichern abgebrochen.</p>'; }); return; }
   indizes.forEach((i, k) => {
@@ -335,7 +339,7 @@ function downloadStarten(ev, i) {
   if (e._v.laedt || !e._v.token) { ev.preventDefault(); return; }      // Vorschau noch nicht fertig
   const merken = eintraege(e).some(it => it.merken);
   if (merken) {                                                          // Stammliste bedienen, ohne den Download zu stoeren
-    navigator.sendBeacon('/api/merken', new Blob([JSON.stringify({ entwurf: sauber(e) })], { type: 'application/json' }));
+    navigator.sendBeacon('api/merken', new Blob([JSON.stringify({ entwurf: sauber(e) })], { type: 'application/json' }));
     gemerktVerbuchen(e);
   }
   e._erg = { text: `<b>Heruntergeladen:</b> ${esc(e.datei)} (in den Download-Ordner deines Browsers).${merken ? '<br>Markierte Einträge wurden in die Stammliste gemerkt.' : ''}` };
@@ -396,7 +400,7 @@ async function klick(ev) {
   else if (a === 'speichern') { await speichern([+b.dataset.e]); }
   else if (a === 'zusatz') { laden(Z.projekt, b.dataset.art); }
   else if (a === 'zeigen') {
-    try { await post('/api/zeigen', { pfad: b.dataset.pfad }); } catch (err) { status(err.message, 'fehler'); }
+    try { await post('api/zeigen', { pfad: b.dataset.pfad }); } catch (err) { status(err.message, 'fehler'); }
   }
 }
 
@@ -404,12 +408,28 @@ $('form').addEventListener('submit', suchen);
 $('ergebnis').addEventListener('input', aenderung);
 $('ergebnis').addEventListener('click', klick);
 $('designwahl').addEventListener('click', klick);
-api('/api/einstellungen').then(e => {
+api('api/einstellungen').then(e => {
   EINST = e; DESIGN = e.design || 'alt';
   try { const d = localStorage.getItem('design'); if (d === 'alt' || d === 'neu') DESIGN = d; } catch (err) { }
   zeigeDesign();
+  if (e.web && e.schriften) zeigeSchriften(e.schriften);
 }).catch(() => { zeigeDesign(); });
 bald(); stand();
+
+// Webbetrieb: lizenzpflichtige Schriften werden hier einmalig auf den Server hochgeladen (nie ins Repository)
+function zeigeSchriften(liste) {
+  const el = $('schriften'); el.hidden = false;
+  el.innerHTML = '<summary>Schriften für die Karten</summary><p>Die vollständigen Schriften sind lizenzpflichtig und liegen nicht im Programm. Ohne sie fehlen einzelne Zeichen in Überschriften (Ersatzschrift Montserrat).</p>' +
+    liste.map(f => `<label>${esc(f.titel)}: <b>${f.da ? 'vorhanden' : 'fehlt'}</b> <input type="file" accept=".otf,.ttf" data-schrift="${esc(f.name)}"></label>`).join('');
+}
+$('schriften').addEventListener('change', async ev => {
+  const inp = ev.target.closest('input[data-schrift]'); if (!inp || !inp.files[0]) return;
+  try {
+    const r = await fetch('api/schrift?name=' + encodeURIComponent(inp.dataset.schrift), { method: 'POST', body: inp.files[0] });
+    const j = await r.json(); if (!r.ok) throw new Error(j.fehler || 'Fehler');
+    const e = await api('api/einstellungen'); zeigeSchriften(e.schriften); status('Schrift gespeichert. Neu geladene Karten nutzen sie sofort.');
+  } catch (err) { status(err.message, 'fehler'); }
+});
 </script>
 </body>
 </html>

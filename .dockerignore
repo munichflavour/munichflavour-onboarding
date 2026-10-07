@@ -1,0 +1,13 @@
+node_modules
+db
+.git
+downloads
+Anleitung App
+tools/cocktailkarte/daten
+tools/cocktailkarte/.cache
+tools/cocktailkarte/.venv
+tools/cocktailkarte/.env
+tools/cocktailkarte/*.pdf
+tools/cocktailkarte/*.otf
+tools/cocktailkarte/*.ttf
+**/.DS_Store

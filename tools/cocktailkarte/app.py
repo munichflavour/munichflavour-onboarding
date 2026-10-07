@@ -22,7 +22,11 @@ import pymupdf
 
 import cocktailkarte as ck
 
-HOST, PORT = "127.0.0.1", 8765
+HOST = "127.0.0.1"
+PORT = int(os.environ.get("KARTEN_PORT") or 8765)
+WEB = os.environ.get("KARTEN_WEB") == "1"      # Betrieb hinter dem Portal (Server): kein Browser, kein Ordnerdialog
+SCHRIFTEN = {"Active-Regular": "Pinselschrift Active (altes Design)", "Agrandir-Black": "Agrandir Black (neues Design)"}
+MAX_SCHRIFT = 8 * 1024 * 1024
 UI = Path(__file__).parent / "ui"
 LOCK = threading.Lock()  # Warnungs-Sammler im Kartenmodul ist nicht threadsicher
 MAX_EINTRAEGE = 120
@@ -88,7 +92,9 @@ class Handler(BaseHTTPRequestHandler):
             elif url.path == "/api/anstehende":
                 self.senden(200, dict(projekte=[projekt_json(p) for p in ck.anstehende()]))
             elif url.path == "/api/einstellungen":
-                self.senden(200, dict(bearbeiten=ck.bearbeiten_erlaubt(), plattform=sys.platform, design=ck.standard_design()))
+                self.senden(200, dict(bearbeiten=ck.bearbeiten_erlaubt(), plattform=sys.platform, design=ck.standard_design(),
+                                      web=WEB, schriften=[dict(name=n, titel=t, da=ck.volle_schrift(n) is not None)
+                                                          for n, t in SCHRIFTEN.items()]))
             elif url.path == "/api/stand":
                 self.senden(200, ck.projektliste_stand())
             elif url.path == "/api/pdf":
@@ -114,6 +120,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self.vorschau()
             if self.path == "/api/speichern":
                 return self.speichern()
+            if self.path.startswith("/api/schrift"):
+                return self.schrift()
             if self.path == "/api/merken":
                 return self.merken()
             if self.path == "/api/zeigen":
@@ -164,8 +172,29 @@ class Handler(BaseHTTPRequestHandler):
         with LOCK:
             self.senden(200, dict(gemerkt=ck.merke_in_stammliste(e)))
 
+    def schrift(self):
+        """Webbetrieb: nimmt eine Schriftdatei (roh im Body) entgegen und legt sie im Datenordner ab."""
+        name = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query).get("name", [""])[0]
+        laenge = int(self.headers.get("Content-Length", 0))
+        daten = self.rfile.read(laenge) if 0 < laenge <= MAX_SCHRIFT else b""
+        if not WEB or name not in SCHRIFTEN:
+            raise ck.KartenFehler("Schrift unbekannt.")
+        if not daten:
+            raise ck.KartenFehler("Die Schriftdatei ist leer oder zu gross (max. 8 MB).")
+        endung = ".otf" if daten[:4] == b"OTTO" else ".ttf" if daten[:4] in (b"\x00\x01\x00\x00", b"true") else None
+        if not endung:
+            raise ck.KartenFehler("Das ist keine Schriftdatei (.otf oder .ttf).")
+        ordner = ck.daten_ordner()
+        ordner.mkdir(parents=True, exist_ok=True)
+        for alt in (".otf", ".ttf"):
+            (ordner / (name + alt)).unlink(missing_ok=True)
+        (ordner / (name + endung)).write_bytes(daten)
+        self.senden(200, dict(ok=True, name=name))
+
     def speichern(self):
         """Ordner waehlen (Dialog), PDFs der Entwuerfe dort ablegen und markierte Eintraege in die Stammliste merken."""
+        if WEB:
+            raise ck.KartenFehler("Im Webbetrieb bitte 'PDF downloaden' verwenden.")
         entwuerfe = [pruefe_entwurf(e) for e in self.body()["entwuerfe"]]
         if not entwuerfe or len(entwuerfe) > 20:
             raise ck.KartenFehler("Keine Karte zum Speichern.")
@@ -186,6 +215,8 @@ class Handler(BaseHTTPRequestHandler):
 
     def zeigen(self):
         """Zeigt eine in dieser Sitzung gespeicherte Karte im Finder."""
+        if WEB:
+            raise ck.KartenFehler("Nicht verfuegbar im Webbetrieb.")
         pfad = Path(self.body()["pfad"]).resolve()
         if os.path.normcase(str(pfad)) not in GESPEICHERT or not pfad.is_file():
             return self.senden(400, dict(fehler="Datei nicht gefunden."))
@@ -213,7 +244,8 @@ def main():
         except ck.KartenFehler:
             pass
     threading.Thread(target=vorwaermen, daemon=True).start()
-    threading.Timer(0.8, lambda: webbrowser.open(url)).start()
+    if not WEB:
+        threading.Timer(0.8, lambda: webbrowser.open(url)).start()
     try:
         server.serve_forever()
     except KeyboardInterrupt:
