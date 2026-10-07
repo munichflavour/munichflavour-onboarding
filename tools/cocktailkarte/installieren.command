@@ -20,6 +20,17 @@ cp "$QUELLE/.env.example" "$ZIEL/.env.example" 2>/dev/null || true
 if [ -f "$QUELLE/.env" ] && [ ! -f "$ZIEL/.env" ]; then cp "$QUELLE/.env" "$ZIEL/.env"; fi
 chmod +x "$ZIEL/start.command"
 
+# Pinselschrift "Active" (urheberrechtlich geschuetzt, gehoert nicht ins Repository): liegt die Datei neben dem Installer,
+# wird sie in den eigenen Datenordner uebernommen (bleibt bei Updates erhalten)
+for f in "$QUELLE"/[Aa]ctive*.otf "$QUELLE"/[Aa]ctive*.ttf; do
+  if [ -f "$f" ]; then
+    mkdir -p "$ZIEL/daten"
+    cp "$f" "$ZIEL/daten/Active-Regular.${f##*.}"
+    echo "Pinselschrift uebernommen: $(basename "$f")"
+    break
+  fi
+done
+
 printf '#!/bin/bash\nexec "%s/start.command"\n' "$ZIEL" > "$STARTER"
 chmod +x "$STARTER"
 xattr -dr com.apple.quarantine "$ZIEL" "$STARTER" 2>/dev/null || true

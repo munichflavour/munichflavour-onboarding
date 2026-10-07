@@ -8,7 +8,7 @@ import re
 
 import pymupdf
 
-from schrift import Pinsel
+from schrift import Pinsel, pdf_bytes
 
 TEXT = (0x23 / 255, 0x22 / 255, 0x20 / 255)
 NAME_SIZE, DESC_SIZE, DIET_SIZE, HEAD_SIZE = 16.2, 6.2, 8.4, 30
@@ -50,6 +50,14 @@ def wrap(text, font, size, breite):
     return zeilen
 
 
+def bold(page, fonts):
+    """Name der fetten Schrift auf der Seite; sie wird erst bei Bedarf eingebettet."""
+    if not fonts["bold_da"]:
+        page.insert_font("bold", fonts["bold_datei"])
+        fonts["bold_da"] = True
+    return "bold"
+
+
 def baue_item(item, breite, fonts, kurz):
     """Zerlegt ein Gericht in Zeilen und berechnet die Hoehe."""
     name = wrap(item["name"].upper(), fonts["mont"], NAME_SIZE, breite)
@@ -76,7 +84,7 @@ def zeichne_item(page, it, fonts, x, top, mitte=None):
         page.insert_text((px, y), zeile, fontname="mont", fontsize=NAME_SIZE, color=TEXT)
         if i == len(it["name"]) - 1 and it["diet"]:
             page.insert_text((px + w + fonts["bold"].text_length(" ", fontsize=DIET_SIZE), y), it["diet"],
-                             fontname="bold", fontsize=DIET_SIZE, color=TEXT)
+                             fontname=bold(page, fonts), fontsize=DIET_SIZE, color=TEXT)
     desc_top = top + NAME_LEAD * len(it["name"]) + 1
     for i, zeile in enumerate(it["desc"]):
         letzte = i == len(it["desc"]) - 1
@@ -88,7 +96,7 @@ def zeichne_item(page, it, fonts, x, top, mitte=None):
             page.insert_text((px, y), zeile, fontname="mont", fontsize=DESC_SIZE, color=TEXT)
         if letzte and it["allergene"]:
             ax = px + w + (fonts["mont"].text_length(" ", fontsize=DESC_SIZE) if zeile else 0)
-            page.insert_text((ax, y), it["allergene"], fontname="bold", fontsize=DESC_SIZE, color=TEXT)
+            page.insert_text((ax, y), it["allergene"], fontname=bold(page, fonts), fontsize=DESC_SIZE, color=TEXT)
 
 
 def ueberschrift(page, text, mitte, y0, fonts, warn):
@@ -103,11 +111,11 @@ def ueberschrift(page, text, mitte, y0, fonts, warn):
     w = sum(fonts["bold"].text_length(c, fontsize=size) for c in text) + spacing * (len(text) - 1)
     x = mitte - w / 2
     for c in text:
-        page.insert_text((x, y0 + 27.4), c, fontname="bold", fontsize=size, color=TEXT)
+        page.insert_text((x, y0 + 27.4), c, fontname=bold(page, fonts), fontsize=size, color=TEXT)
         x += fonts["bold"].text_length(c, fontsize=size) + spacing
 
 
-def render_essen(abschnitte, assets, warn):
+def render_essen(abschnitte, assets, warn, schrift=None):
     """abschnitte: [dict(titel, items=[dict(name, beschreibung, allergene, ernaehrung)])] in Anzeigereihenfolge.
 
     Der Abschnitt mit dem Titel DESSERT wird zentriert unter den uebrigen gesetzt. Rueckgabe: PDF-Bytes.
@@ -117,8 +125,8 @@ def render_essen(abschnitte, assets, warn):
     fonts = dict(mont=pymupdf.Font(fontfile=str(assets.parent / "Montserrat-Regular.ttf")),
                  bold=pymupdf.Font(fontfile=str(assets.parent / "Montserrat-Bold.ttf")))
     page.insert_font("mont", str(assets.parent / "Montserrat-Regular.ttf"))
-    page.insert_font("bold", str(assets.parent / "Montserrat-Bold.ttf"))
-    fonts["pinsel"] = Pinsel(page, assets)
+    fonts["bold_datei"], fonts["bold_da"] = str(assets.parent / "Montserrat-Bold.ttf"), False
+    fonts["pinsel"] = Pinsel(page, assets, schrift, warn)
     legende_ttf = assets / "legende.ttf"
     page.insert_font("legende", str(legende_ttf))
     legende = pymupdf.Font(fontfile=str(legende_ttf))
@@ -189,4 +197,4 @@ def render_essen(abschnitte, assets, warn):
         w = legende.text_length(text, fontsize=8)
         page.insert_text((PAGE_CENTER - w / 2, y), text, fontname="legende", fontsize=8, color=TEXT)
     doc.set_metadata({"title": "Speisen", "author": "Munich Flavour"})
-    return doc.tobytes(garbage=3, deflate=True)
+    return pdf_bytes(doc, warn)

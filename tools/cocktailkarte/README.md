@@ -62,8 +62,8 @@ das naechste anstehende Event genommen.
 
 Fuer **jede passende Rentman-Materialgruppe** eines Projekts entsteht eine Karte. Die senkrechte Beschriftung ist der
 **Gruppenname aus Rentman** (Pinselschrift), z. B. "Drinks", "Hot Drinks", "Aperitif", "Smoothies".
-Kuerzer stehen nur die bisherigen Karten: `Cocktails & Longdrinks` und `Cocktails` -> COCKTAILS,
-`Matcha Spezialitaeten` -> MATCHA (Liste `LABEL_NAMEN` in `cocktailkarte.py`).
+Kuerzer steht nur `Cocktails & Longdrinks` und `Cocktails` -> COCKTAILS, wie auf den bisherigen Karten
+(Liste `LABEL_NAMEN` in `cocktailkarte.py`). Zu lange Beschriftungen werden automatisch verkleinert.
 
 | Gruppenname enthaelt | Karte | Texte |
 |---|---|---|
@@ -74,10 +74,12 @@ Kuerzer stehen nur die bisherigen Karten: `Cocktails & Longdrinks` und `Cocktail
 Andere Gruppen (Auftragspauschale, Bars, Mietequipment, Getraenke mit Weinen/Bier ...) ergeben keine Karte.
 Neue Gruppennamen erkennt man an den Mustern `GRUPPE_*` in `cocktailkarte.py`.
 
-**Pinselschrift:** Sie liegt nur als Auszug vor (nur die Buchstaben, die auf den fertigen Karten vorkommen). Fehlt ein
-Buchstabe (aktuell u. a. G, J, Q, W, X, Y, Ae/Oe/Ue und das &), steht die Beschriftung ersatzweise in Montserrat Bold
-und die Oberflaeche zeigt einen Hinweis. Mit einer fertigen Karte, die den Buchstaben enthaelt, laesst sich der
-Auszug ergaenzen (`make_template.py`).
+**Pinselschrift:** Fuer die vollstaendige Schrift "Active" (alle Buchstaben, Umlaute, &) die Datei `Active-Regular.otf`
+neben `installieren.command` legen und den Installer ausfuehren. Er kopiert sie nach `~/Kartengenerator/daten/`.
+Die Schrift ist urheberrechtlich geschuetzt und gehoert **nicht ins Repository** (`.gitignore` verhindert das). In
+jede PDF wird nur ein Auszug mit den tatsaechlich verwendeten Zeichen eingebettet, nie die ganze Schrift. Ohne die
+Datei reichen die Auszuege aus den Vorlagen; fehlt dann ein Buchstabe, steht die Beschriftung ersatzweise in
+Montserrat Bold und die Oberflaeche zeigt einen Hinweis. Ohne das Paket `fonttools` wird die volle Schrift nicht benutzt.
 
 **Allergene** stehen nicht in Rentman, sondern in `stammdaten/speisen.json`. Die Angaben stammen aus den bisherigen
 Karten und sind nicht neu geprueft. Speisen ohne Eintrag werden ohne Allergene gesetzt und gemeldet.

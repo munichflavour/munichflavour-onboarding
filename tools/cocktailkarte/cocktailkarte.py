@@ -28,7 +28,7 @@ from pathlib import Path
 import pymupdf
 
 from essen import render_essen
-from schrift import Pinsel
+from schrift import Pinsel, pdf_bytes
 
 HERE = Path(__file__).parent
 ASSETS = HERE / "assets"
@@ -55,7 +55,7 @@ GRUPPE_GETRAENK = re.compile(r"cocktail|longdrink|aperitif|\bdrinks?\b|smoothie|
                              r"hei(ß|ss)getränk", re.I)
 GRUPPE_COCKTAILIG = re.compile(r"cocktail|^drinks?$", re.I)   # Layout mit Cocktail/Mocktail-Aufteilung
 # Gruppennamen, die auf der Karte bewusst kuerzer stehen (bisherige handgemachte Karten)
-LABEL_NAMEN = {"cocktails & longdrinks": "COCKTAILS", "cocktails": "COCKTAILS", "matcha spezialitäten": "MATCHA"}
+LABEL_NAMEN = {"cocktails & longdrinks": "COCKTAILS", "cocktails": "COCKTAILS"}
 KARTENARTEN = {"getraenke": "Getränke", "kaffee": "Kaffee", "essen": "Essen"}
 ZUSATZKARTEN = ["kaffee"]   # in der Oberflaeche trotz fehlender Rentman-Gruppe anforderbar (Standardliste)
 KAFFEE_STAMM = HERE / "stammdaten" / "kaffee.json"
@@ -111,6 +111,16 @@ def token():
         raise KartenFehler("Rentman API-Token fehlt: Datei tools/cocktailkarte/.env mit der Zeile "
                            "RENTMAN_API=<Token> anlegen.")
     return t
+
+
+def volle_schrift():
+    """Vollstaendige Pinselschrift (Active-Regular.otf/.ttf), falls vorhanden: Einstellung SCHRIFT_DATEI oder im
+    Datenordner. Die Datei ist urheberrechtlich geschuetzt und liegt bewusst nicht im Repository."""
+    for kandidat in (einstellung("SCHRIFT_DATEI"), daten_ordner() / "Active-Regular.otf",
+                     daten_ordner() / "Active-Regular.ttf"):
+        if kandidat and Path(kandidat).expanduser().is_file():
+            return Path(kandidat).expanduser()
+    return None
 
 
 def daten_ordner():
@@ -389,6 +399,7 @@ def resolve(drinks):
         basis = re.sub(r"\s*\(?alkoholfrei\)?\s*$", "", name, flags=re.I).strip()
         # gleicher Name wie ein alkoholischer Drink (z.B. Hugo) -> "Virgin Hugo"
         anzeige = f"Virgin {basis}" if frei and basis.lower() in alkoholisch else basis
+        anzeige = re.sub("hollunder", "Holunder", anzeige, flags=re.I)      # Tippfehler in Rentman-Namen
         out.append(dict(key=key, name=anzeige.upper(), zutaten=clean_ingredients(zutaten), alkoholfrei=frei,
                         quelle="rentman"))
     if unbekannt:
@@ -489,8 +500,7 @@ def render(layout, sections, titel, out_path=None):
     mont = pymupdf.Font(fontfile=str(ASSETS / "Montserrat-Regular.ttf"))
     bold = pymupdf.Font(fontfile=str(ASSETS / "Montserrat-Bold.ttf"))
     page.insert_font("mont", str(ASSETS / "Montserrat-Regular.ttf"))
-    page.insert_font("bold", str(ASSETS / "Montserrat-Bold.ttf"))
-    pinsel = Pinsel(page, adir)
+    pinsel, bold_da = Pinsel(page, adir, volle_schrift(), warn), set()
 
     for (title, items), b in zip(sections, bloecke):
         # Abstand pro Eintrag: mit Zusatzzeile 'pitch', ohne Zusatzzeile 'pitch_ohne' (Standard: gleich)
@@ -521,6 +531,9 @@ def render(layout, sections, titel, out_path=None):
             pinsel.schreibe(bx, b["label_center"] + laenge / 2, title, size, LABEL_SPACING, TEXT_COLOR, vertikal=True)
         else:
             warn(f"Die Pinselschrift hat nicht alle Buchstaben fuer '{title}' - Ersatzschrift Montserrat Bold.")
+            if "bold" not in bold_da:
+                bold_da.add("bold")
+                page.insert_font("bold", str(ASSETS / "Montserrat-Bold.ttf"))
             size = LABEL_SIZE * 0.8
             laenge = sum(bold.text_length(c, fontsize=size) for c in title) + LABEL_SPACING * (len(title) - 1)
             y = b["label_center"] + laenge / 2
@@ -532,9 +545,10 @@ def render(layout, sections, titel, out_path=None):
         t = trennlinie
         page.draw_line((t["x0"], t["y"]), (t["x1"], t["y"]), color=(0, 0, 0), width=t["width"])
     doc.set_metadata({"title": titel, "author": "Munich Flavour"})
+    data = pdf_bytes(doc, warn)
     if out_path is None:
-        return doc.tobytes(garbage=3, deflate=True)
-    doc.save(out_path, garbage=3, deflate=True)
+        return data
+    Path(out_path).write_bytes(data)
 
 
 def label_fuer(gruppe):
@@ -630,7 +644,7 @@ def render_entwurf(e):
         if not abschnitte:
             raise KartenFehler("Keine Speise ausgewaehlt.")
         anzahl = ", ".join(f"{len(a['items'])} {a['titel'].capitalize()}" for a in abschnitte)
-        pdf = render_essen(abschnitte, ASSETS / "essen", warn)
+        pdf = render_essen(abschnitte, ASSETS / "essen", warn, volle_schrift())
     else:
         if e["karte"] == "kaffee":
             items = [(str(i["name"]).strip().upper(), str(i.get("zusatz", "")).strip().upper())
