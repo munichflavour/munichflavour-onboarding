@@ -30,7 +30,7 @@ from pathlib import Path
 import pymupdf
 
 from essen import render_essen
-from neu import render_neu
+from neu import render_neu, render_neu_essen
 from schrift import Pinsel, pdf_bytes
 
 HERE = Path(__file__).parent
@@ -648,9 +648,9 @@ def entwuerfe_aus(project, nur=None):
 
 
 def datei_fuer(datei, design, karte):
-    """Dateiname je Design: im neuen Design mit Zusatz _NEU (die Essenkarte gibt es nur im alten Design)."""
+    """Dateiname je Design: im neuen Design mit Zusatz _NEU."""
     stem = re.sub(r"_NEU$", "", Path(datei).stem)
-    return stem + ("_NEU" if design == "neu" and karte != "essen" else "") + ".pdf"
+    return stem + ("_NEU" if design == "neu" else "") + ".pdf"
 
 
 def _buchstaben(text):
@@ -663,11 +663,8 @@ def render_entwurf(e):
     aktiv = lambda i: i.get("aktiv", True) and str(i.get("name", "")).strip()
     label = str(e.get("label", "")).strip().upper() or e.get("titel", "").upper()
     design = e.get("design") if e.get("design") in ("alt", "neu") else standard_design()
-    if design == "neu" and e["karte"] == "essen":
-        warn("Die Essenkarte gibt es noch nicht im neuen Design - sie wurde im bisherigen Design erzeugt.")
-        design = "alt"
     datei = datei_fuer(e.get("datei") or "karte.pdf", design, e["karte"])
-    if design == "neu":
+    if design == "neu" and e["karte"] != "essen":
         if e["karte"] == "kaffee":
             neu_zusatz = json.load(open(KAFFEE_STAMM, encoding="utf-8")).get("neu_zusatz", {})
             je_abschnitt = {}
@@ -701,7 +698,10 @@ def render_entwurf(e):
         if not abschnitte:
             raise KartenFehler("Keine Speise ausgewaehlt.")
         anzahl = ", ".join(f"{len(a['items'])} {a['titel'].capitalize()}" for a in abschnitte)
-        pdf = render_essen(abschnitte, ASSETS / "essen", warn, volle_schrift())
+        if design == "neu":
+            pdf = render_neu_essen(abschnitte, ASSETS / "neu", warn, volle_schrift("Agrandir-Black"), e.get("titel", label))
+        else:
+            pdf = render_essen(abschnitte, ASSETS / "essen", warn, volle_schrift())
     else:
         if e["karte"] == "kaffee":
             items = [(str(i["name"]).strip().upper(), str(i.get("zusatz", "")).strip().upper())
