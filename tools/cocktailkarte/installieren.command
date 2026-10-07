@@ -31,6 +31,16 @@ for f in "$QUELLE"/[Aa]ctive*.otf "$QUELLE"/[Aa]ctive*.ttf; do
   fi
 done
 
+# Schrift "Agrandir" fuer das neue Design (ebenfalls lizenzpflichtig, nicht im Repository)
+for f in "$QUELLE"/[Aa]grandir*.otf "$QUELLE"/[Aa]grandir*.ttf; do
+  if [ -f "$f" ]; then
+    mkdir -p "$ZIEL/daten"
+    cp "$f" "$ZIEL/daten/Agrandir-Black.${f##*.}"
+    echo "Agrandir uebernommen: $(basename "$f")"
+    break
+  fi
+done
+
 mkdir -p "$HOME/Desktop"
 printf '#!/bin/bash\nexec "%s/start.command"\n' "$ZIEL" > "$STARTER"
 chmod +x "$STARTER"

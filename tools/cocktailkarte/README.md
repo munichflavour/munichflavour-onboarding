@@ -137,3 +137,16 @@ Karten und sind nicht neu geprueft. Speisen ohne Eintrag werden ohne Allergene g
 - `stammdaten/getraenke.json`: Kartentexte (Name, Zutaten, alkoholfrei). Drinks, die hier fehlen, werden mit dem
   Rentman-Text gesetzt und auf stderr gemeldet.
 - Reihenfolge der Drinks = Reihenfolge in Rentman.
+
+## Design Alt / Neu
+
+Es gibt zwei Designs: das bisherige (Alt) und das neue (Neu, nachgebaut nach den Canva-Karten
+COCKTAILS_Standard_NEU und KAFFEE_PRICEHUBBLE_NEU). In der Oberflaeche schaltet man oben zwischen Alt und Neu um.
+Voreinstellung: `DESIGN=neu` oder `DESIGN=alt` in der `.env`. Per Kommandozeile: `--design neu`.
+Dateien im neuen Design enden auf `_NEU.pdf`.
+
+- Neu gibt es fuer Cocktails, Smoothies, Drinks, Hot Drinks, Matcha, Aperitif und Kaffee. Die Essenkarte hat noch
+  kein neues Design und wird im bisherigen Design erzeugt (mit Hinweis).
+- Die Ueberschriftschrift Agrandir ist lizenzpflichtig. Die Datei `Agrandir-Black.otf` neben den Installer legen,
+  er kopiert sie nach `daten/`. Ohne sie fehlen einzelne Buchstaben (Ersatz: Montserrat Bold mit Hinweis).
+- Code: `neu.py` (Layout), `make_template_neu.py` (baut `assets/neu/template.pdf` aus der Canva-PDF).

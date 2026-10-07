@@ -27,6 +27,14 @@ if ($schrift) {
     Write-Host "Pinselschrift uebernommen: $($schrift.Name)"
 }
 
+# Schrift "Agrandir" fuer das neue Design (lizenzpflichtig, nicht im Repository)
+$agr = Get-ChildItem -Path $quelle -File -ErrorAction SilentlyContinue | Where-Object { $_.Name -like "agrandir*.otf" -or $_.Name -like "agrandir*.ttf" } | Select-Object -First 1
+if ($agr) {
+    New-Item -ItemType Directory -Force -Path (Join-Path $ziel "daten") | Out-Null
+    Copy-Item -Force -Path $agr.FullName -Destination (Join-Path $ziel ("daten\Agrandir-Black" + $agr.Extension.ToLower()))
+    Write-Host "Agrandir uebernommen: $($agr.Name)"
+}
+
 # Dateien aus dem Internet sind in Windows "blockiert": Sperre aufheben (nur Windows)
 try { Get-ChildItem -Path $ziel -Recurse -File | Unblock-File -ErrorAction SilentlyContinue } catch { }
 

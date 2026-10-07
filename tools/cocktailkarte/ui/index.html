@@ -33,6 +33,11 @@ h2{font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:var(--mute
 .stand{margin:14px 0 0;font-size:13px;color:var(--muted)}
 .stand button{padding:2px 8px;font-size:12px;border-radius:6px;margin-left:8px}
 .leiste{display:flex;gap:10px;flex-wrap:wrap;margin:8px 0 6px}
+.designwahl{display:flex;align-items:center;gap:8px;margin:14px 0 0;font-size:13px;color:var(--muted)}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden}
+.seg button{border:0;border-radius:0;background:transparent;color:var(--ink);padding:5px 14px;font-weight:500;font-size:13px}
+.seg button.an{background:var(--ink);color:var(--bg)}
+.zeile select.abschnitt{width:112px}
 /* Karte: Ansicht = Vorschau + Aktionen, Bearbeiten = Editor + Vorschau */
 .karte{border:1px solid var(--line);border-radius:14px;padding:18px;background:var(--soft);margin-top:18px}
 .kopf{display:flex;align-items:baseline;gap:12px}
@@ -78,6 +83,7 @@ h2{font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:var(--mute
     <button id="los">Karten laden</button>
   </form>
   <div class="stand" id="stand"></div>
+  <div class="designwahl" id="designwahl"></div>
 
   <div id="meldung"></div>
   <div id="auswahl"></div>
@@ -156,13 +162,17 @@ async function suchen(e) {
 /* ---------- Karten: Zustand ---------- */
 let Z = { projekt: null, e: [], arten: [] };
 let EINST = { bearbeiten: true };
+let DESIGN = 'alt';
+function zeigeDesign() {
+  $('designwahl').innerHTML = 'Design der Karten: <span class="seg"><button data-a="design" data-d="alt" class="' + (DESIGN === 'alt' ? 'an' : '') + '">Alt</button><button data-a="design" data-d="neu" class="' + (DESIGN === 'neu' ? 'an' : '') + '">Neu</button></span>';
+}
 const timers = {}, tokens = {};
 
 function eintraege(e) { return e.karte === 'essen' ? e.abschnitte.flatMap(a => a.items) : e.items; }
 function sauber(e) { return JSON.parse(JSON.stringify(e, (k, v) => k.startsWith('_') ? undefined : v)); }
 function vorbereiten(e) {
   e._v = { png: null, anzahl: '', warn: [], text: 'Vorschau wird erstellt …', err: false, laedt: true, token: null };
-  e._erg = null; e._edit = false;
+  e._erg = null; e._edit = false; e.design = DESIGN;
   eintraege(e).forEach(i => { i.merken = i.merken || i.quelle === 'manuell'; if (e.karte === 'essen') i.allergene = Array.isArray(i.allergene) ? i.allergene.join(', ') : (i.allergene || ''); });
   return e;
 }
@@ -199,6 +209,7 @@ function zeileKaffee(it, i, j) {
     <input type="checkbox" data-f="aktiv" ${it.aktiv ? 'checked' : ''} title="steht auf der Karte">
     <input class="name" data-f="name" value="${esc(it.name)}" placeholder="Name">
     <input class="zut" data-f="zusatz" value="${esc(it.zusatz)}" placeholder="Zusatzzeile (optional)">
+    ${Z.e[i].design === 'neu' ? `<select class="abschnitt" data-f="abschnitt" title="Abschnitt auf der Karte (neues Design)">${['COFFEE', 'HOT DRINKS', 'TEA'].map(v => `<option value="${v}" ${(it.abschnitt || 'COFFEE') === v ? 'selected' : ''}>${v}</option>`).join('')}</select>` : ''}
     ${knoepfe}${badge(it.quelle)}</div>`;
 }
 function zeileSpeise(it, i, s, j) {
@@ -281,7 +292,7 @@ function zeigeVs(i) {
   $('anz' + i).textContent = e._v.anzahl || ''; $('warn' + i).innerHTML = warnHtml(e);
   const bereit = !e._v.laedt && !!e._v.token;               // PDF erst anbieten, wenn die Vorschau aktuell ist
   const dl = $('dl' + i); dl.setAttribute('aria-disabled', bereit ? 'false' : 'true');
-  dl.href = bereit ? '/api/pdf?t=' + e._v.token : '#';
+  dl.href = bereit ? '/api/pdf?t=' + e._v.token : '#'; dl.setAttribute('download', e.datei);
   $('sp' + i).disabled = e._v.laedt;
 }
 
@@ -297,6 +308,7 @@ async function vorschau(i) {
     const r = await post('/api/vorschau', { entwurf: sauber(e) });
     if (t !== tokens[i]) return;
     e._v = { png: r.png, anzahl: r.anzahl, warn: r.warnungen, text: '', err: false, laedt: false, token: r.token };
+    e.datei = r.datei;
   } catch (err) { if (t !== tokens[i]) return; e._v.text = err.message; e._v.err = true; e._v.laedt = false; e._v.token = null; }
   zeigeVs(i);
 }
@@ -365,7 +377,11 @@ function bewege(info, richtung) {
 async function klick(ev) {
   const b = ev.target.closest('[data-a]'); if (!b) return;
   const a = b.dataset.a, y = window.scrollY, neuZeichnen = () => { zeige(); window.scrollTo(0, y); };
-  if (a === 'dl') { downloadStarten(ev, +b.dataset.e); return; }        // normaler Link-Download, nicht abbrechen
+  if (a === 'dl') { downloadStarten(ev, +b.dataset.e); return; }
+  if (a === 'design') {
+    DESIGN = b.dataset.d; try { localStorage.setItem('design', DESIGN); } catch (err) { }
+    zeigeDesign(); Z.e.forEach((e, i) => { e.design = DESIGN; e._erg = null; }); neuZeichnen(); Z.e.forEach((e, i) => plane(i)); return;
+  }        // normaler Link-Download, nicht abbrechen
   if (a === 'auf' || a === 'ab' || a === 'weg') {
     const info = zeileInfo(b); if (!info) return;
     if (a === 'weg') info.liste.splice(info.j, 1); else if (!bewege(info, a === 'auf' ? -1 : 1)) return;
@@ -390,7 +406,12 @@ async function klick(ev) {
 $('form').addEventListener('submit', suchen);
 $('ergebnis').addEventListener('input', aenderung);
 $('ergebnis').addEventListener('click', klick);
-api('/api/einstellungen').then(e => { EINST = e; }).catch(() => {});
+$('designwahl').addEventListener('click', klick);
+api('/api/einstellungen').then(e => {
+  EINST = e; DESIGN = e.design || 'alt';
+  try { const d = localStorage.getItem('design'); if (d === 'alt' || d === 'neu') DESIGN = d; } catch (err) { }
+  zeigeDesign();
+}).catch(() => { zeigeDesign(); });
 bald(); stand();
 </script>
 </body>

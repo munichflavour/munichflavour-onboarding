@@ -30,6 +30,7 @@ from pathlib import Path
 import pymupdf
 
 from essen import render_essen
+from neu import render_neu
 from schrift import Pinsel, pdf_bytes
 
 HERE = Path(__file__).parent
@@ -117,11 +118,17 @@ def token():
     return t
 
 
-def volle_schrift():
-    """Vollstaendige Pinselschrift (Active-Regular.otf/.ttf), falls vorhanden: Einstellung SCHRIFT_DATEI oder im
-    Datenordner. Die Datei ist urheberrechtlich geschuetzt und liegt bewusst nicht im Repository."""
-    for kandidat in (einstellung("SCHRIFT_DATEI"), daten_ordner() / "Active-Regular.otf",
-                     daten_ordner() / "Active-Regular.ttf"):
+def standard_design():
+    """Design der Karten: 'alt' (Ananas-Design) oder 'neu' (Rahmen, grosser Titel). Einstellung DESIGN, Standard 'alt'."""
+    return "neu" if str(einstellung("DESIGN") or "alt").strip().lower() == "neu" else "alt"
+
+
+def volle_schrift(name="Active-Regular"):
+    """Vollstaendige Schrift ('Active-Regular' fuers alte, 'Agrandir-Black' fuers neue Design), falls vorhanden:
+    Einstellung SCHRIFT_DATEI bzw. SCHRIFT_AGRANDIR oder als .otf/.ttf im Datenordner. Die Dateien sind
+    urheberrechtlich geschuetzt und liegen bewusst nicht im Repository."""
+    schluessel = "SCHRIFT_DATEI" if name == "Active-Regular" else "SCHRIFT_AGRANDIR"
+    for kandidat in (einstellung(schluessel), daten_ordner() / f"{name}.otf", daten_ordner() / f"{name}.ttf"):
         if kandidat and Path(kandidat).expanduser().is_file():
             return Path(kandidat).expanduser()
     return None
@@ -171,11 +178,11 @@ def _seite(path, params, offset):
                 time.sleep(1.5 * (versuch + 1))
                 continue
             raise KartenFehler(f"Rentman antwortet mit Fehler {e.code} (Token gueltig?).") from e
-        except urllib.error.URLError as e:
+        except (OSError, ValueError) as e:           # URLError, Zeitueberschreitung, Verbindungsabbruch, defekte Antwort
             if versuch < 2:
                 time.sleep(1)
                 continue
-            raise KartenFehler(f"Rentman nicht erreichbar: {e.reason}") from e
+            raise KartenFehler(f"Rentman nicht erreichbar: {getattr(e, 'reason', e)}") from e
 
 
 def api_get(path, **params):
@@ -243,8 +250,8 @@ def aktualisiere(blockierend=False):
     def lauf():
         try:
             _lade_projekte()
-        except KartenFehler:
-            pass
+        except Exception as e:                     # im Hintergrund nie abstuerzen; Fehler in der Anzeige melden
+            _projekte["fehler"] = str(e)
     if blockierend:
         _lade_projekte()
     else:
@@ -411,6 +418,16 @@ def resolve(drinks):
     return out
 
 
+def kaffee_abschnitt(name):
+    """Abschnitt im neuen Design: COFFEE, HOT DRINKS oder TEA (nach dem Namen des Eintrags)."""
+    low = name.lower()
+    if re.search(r"\btee\b|\btea\b|teevariation", low):
+        return "TEA"
+    if re.search(r"chocolate|schokolade|kakao|gluehwein|glühwein|punsch|milch\b", low):
+        return "HOT DRINKS"
+    return "COFFEE"
+
+
 def kaffee_aus(rows, groups, gruppe=None, erzwingen=False):
     """[dict(key, name, zusatz, quelle)] der Kaffeekarte. Ohne Rentman-Gruppe 'Kaffee': Standardliste, wenn
     Kaffee-Equipment gebucht ist (oder erzwungen)."""
@@ -422,14 +439,15 @@ def kaffee_aus(rows, groups, gruppe=None, erzwingen=False):
             continue
         seen.add(p["name"].lower())
         zusatz = re.sub(r"\s*/\s*", "/", p["remark"]).strip()
-        items.append(dict(key=norm_key(p["name"]), name=umb.get(p["name"].lower(), p["name"]).upper(),
-                          zusatz=zusatz.upper(), quelle="rentman"))
+        name = umb.get(p["name"].lower(), p["name"]).upper()
+        items.append(dict(key=norm_key(p["name"]), name=name, zusatz=zusatz.upper(), quelle="rentman",
+                          abschnitt=kaffee_abschnitt(name)))
     reihenfolge = [e["name"].upper() for e in stamm["standard"]]
     items.sort(key=lambda i: reihenfolge.index(i["name"]) if i["name"] in reihenfolge else len(reihenfolge))
     if not items and (erzwingen or any(KAFFEE_MATERIAL.search(plain(r["name"])) for r in rows)):
         warn("In Rentman sind keine Kaffeespezialitaeten gebucht (Gruppe 'Kaffee') - Standardliste wird verwendet.")
         items = [dict(key=norm_key(e["name"]), name=e["name"].upper(), zusatz=e.get("zusatz", "").upper(),
-                      quelle="standard") for e in stamm["standard"]]
+                      quelle="standard", abschnitt=kaffee_abschnitt(e["name"])) for e in stamm["standard"]]
     return items
 
 
@@ -624,9 +642,15 @@ def entwuerfe_aus(project, nur=None):
             n += 1
             datei = f"{basis}_{n}.pdf"
         benutzt.add(datei)
-        e.update(datei=datei, warnungen=list(WARNUNGEN))
+        e.update(datei=datei, warnungen=list(WARNUNGEN), design=standard_design())
         entwuerfe.append(e)
     return entwuerfe
+
+
+def datei_fuer(datei, design, karte):
+    """Dateiname je Design: im neuen Design mit Zusatz _NEU (die Essenkarte gibt es nur im alten Design)."""
+    stem = re.sub(r"_NEU$", "", Path(datei).stem)
+    return stem + ("_NEU" if design == "neu" and karte != "essen" else "") + ".pdf"
 
 
 def _buchstaben(text):
@@ -638,6 +662,33 @@ def render_entwurf(e):
     del WARNUNGEN[:]
     aktiv = lambda i: i.get("aktiv", True) and str(i.get("name", "")).strip()
     label = str(e.get("label", "")).strip().upper() or e.get("titel", "").upper()
+    design = e.get("design") if e.get("design") in ("alt", "neu") else standard_design()
+    if design == "neu" and e["karte"] == "essen":
+        warn("Die Essenkarte gibt es noch nicht im neuen Design - sie wurde im bisherigen Design erzeugt.")
+        design = "alt"
+    datei = datei_fuer(e.get("datei") or "karte.pdf", design, e["karte"])
+    if design == "neu":
+        if e["karte"] == "kaffee":
+            neu_zusatz = json.load(open(KAFFEE_STAMM, encoding="utf-8")).get("neu_zusatz", {})
+            je_abschnitt = {}
+            for i in e["items"]:
+                if aktiv(i):
+                    name = str(i["name"]).strip().upper()
+                    zusatz = str(i.get("zusatz", "")).strip().upper() or neu_zusatz.get(name.lower(), "").upper()
+                    je_abschnitt.setdefault(str(i.get("abschnitt") or "COFFEE").strip().upper(), []).append((name, zusatz))
+            rang = lambda t: (["COFFEE", "HOT DRINKS", "TEA"].index(t) if t in ("COFFEE", "HOT DRINKS", "TEA") else 3)
+            sections = [(t, je_abschnitt[t]) for t in sorted(je_abschnitt, key=rang)]
+        else:
+            paar = lambda i: (str(i["name"]).strip().upper(), str(i.get("zutaten", "")).strip().upper())
+            mit = [paar(i) for i in e["items"] if aktiv(i) and not i.get("alkoholfrei")]
+            frei = [paar(i) for i in e["items"] if aktiv(i) and i.get("alkoholfrei")]
+            label2 = str(e.get("label2", "")).strip().upper() or "ALKOHOLFREI"
+            sections = [(label, mit), (label2, frei)] if mit and frei else [(label, mit + frei)]
+        if not any(i for _, i in sections):
+            raise KartenFehler("Kein Eintrag ausgewaehlt.")
+        anzahl = ", ".join(f"{len(i)} {t.capitalize()}" for t, i in sections if i)
+        pdf = render_neu(sections, ASSETS / "neu", warn, volle_schrift("Agrandir-Black"), e.get("titel", label))
+        return dict(pdf=pdf, anzahl=anzahl, warnungen=list(WARNUNGEN), datei=datei)
     if e["karte"] == "essen":
         abschnitte = []
         for a in e["abschnitte"]:
@@ -668,7 +719,7 @@ def render_entwurf(e):
             raise KartenFehler("Kein Eintrag ausgewaehlt.")
         anzahl = ", ".join(f"{len(i)} {t.capitalize()}" for t, i in sections if i)
         pdf = render(layout, sections, e.get("titel", label))
-    return dict(pdf=pdf, anzahl=anzahl, warnungen=list(WARNUNGEN))
+    return dict(pdf=pdf, anzahl=anzahl, warnungen=list(WARNUNGEN), datei=datei)
 
 
 def bearbeiten_erlaubt():
@@ -701,15 +752,17 @@ def merke_in_stammliste(e):
     return n
 
 
-def erstelle_karten(project, nur=None):
+def erstelle_karten(project, nur=None, design=None):
     """Erzeugt fuer jede passende Materialgruppe des Projekts eine Karte (oder nur die Art `nur`), ohne Bearbeitung.
 
     Rueckgabe: [dict(karte, gruppe, titel, datei, anzahl, pdf, warnungen)]
     """
     ergebnis = []
     for e in entwuerfe_aus(project, nur):
+        if design:
+            e["design"] = design
         r = render_entwurf(e)
-        ergebnis.append(dict(karte=e["karte"], gruppe=e["gruppe"], titel=e["titel"], datei=e["datei"],
+        ergebnis.append(dict(karte=e["karte"], gruppe=e["gruppe"], titel=e["titel"], datei=r["datei"],
                              anzahl=r["anzahl"], pdf=r["pdf"], warnungen=e["warnungen"] + r["warnungen"]))
     return ergebnis
 
@@ -863,12 +916,13 @@ def main():
     ap.add_argument("projekt", help="Projektnummer oder Teil des Projektnamens")
     ap.add_argument("-k", "--karte", choices=list(KARTENARTEN), help="nur diese Kartenart (Standard: alle gebuchten)")
     ap.add_argument("-o", "--out", help="Ausgabedatei (nur zusammen mit --karte)")
+    ap.add_argument("--design", choices=["alt", "neu"], help="Design der Karten (Standard: Einstellung DESIGN, sonst alt)")
     ap.add_argument("--auch-unbestaetigt", action="store_true", help="auch Projekte mit Status Option/Anfrage/Konzept")
     args = ap.parse_args()
     try:
         project = find_project(args.projekt, nur_bestaetigt=not args.auch_unbestaetigt)
         print(f"Projekt: Nr. {project['number']} {project['name'].strip()} ({(project['planperiod_start'] or 'ohne Datum')[:10]})")
-        karten = erstelle_karten(project, args.karte)
+        karten = erstelle_karten(project, args.karte, args.design)
     except KartenFehler as e:
         sys.exit(str(e))
     if not karten:

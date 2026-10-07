@@ -39,9 +39,10 @@ def teilschrift(pfad, text):
 
 
 class Pinsel:
-    def __init__(self, page, vorlage_dir, volle_schrift=None, warn=None):
+    def __init__(self, page, vorlage_dir, volle_schrift=None, warn=None, nachbarn=True):
         eigene = sorted(vorlage_dir.glob("label*.ttf"))
-        fremde = [p for p in sorted(vorlage_dir.parent.glob("*/label*.ttf")) if p.parent != vorlage_dir]
+        # Auszuege anderer Vorlagen als Reserve (gleiche Schrift); beim neuen Design (andere Schrift) nicht
+        fremde = [p for p in sorted(vorlage_dir.parent.glob("*/label*.ttf")) if p.parent != vorlage_dir] if nachbarn else []
         pfade = eigene + fremde
         if volle_schrift:                       # vollstaendige Schrift hat Vorrang, die Auszuege bleiben als Reserve
             if teilschrift(volle_schrift, "A"):  # nur nutzen, wenn sie sich verkleinern laesst (Lizenz: nie komplett einbetten)
@@ -64,8 +65,9 @@ class Pinsel:
         return all(c == " " or self._font(c) for c in text)
 
     def _schritt(self, c, size):
-        if c == " ":
-            return size * 0.35
+        if c == " ":                           # Leerzeichen-Breite der Schrift, falls sie eines enthaelt
+            f = next((f for _, f, z in self.fonts if " " in z), None)
+            return f.text_length(" ", fontsize=size) if f else size * 0.35
         return self._font(c)[1].text_length(c, fontsize=size)
 
     def laenge(self, text, size, abstand):

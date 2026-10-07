@@ -43,6 +43,8 @@ def pruefe_entwurf(e):
     if sum(len(g) for g in gruppen if isinstance(g, list)) > MAX_EINTRAEGE or \
             not all(isinstance(g, list) and all(isinstance(i, dict) for i in g) for g in gruppen):
         raise ck.KartenFehler("Ungueltiger Entwurf (Eintraege).")
+    if e.get("design") not in ("alt", "neu"):
+        e["design"] = ck.standard_design()
     name = re.sub(r"[\\/:*?\"<>|]+", "-", Path(str(e.get("datei") or "karte.pdf")).name)
     e["datei"] = name if name.lower().endswith(".pdf") else name + ".pdf"
     return e
@@ -86,7 +88,7 @@ class Handler(BaseHTTPRequestHandler):
             elif url.path == "/api/anstehende":
                 self.senden(200, dict(projekte=[projekt_json(p) for p in ck.anstehende()]))
             elif url.path == "/api/einstellungen":
-                self.senden(200, dict(bearbeiten=ck.bearbeiten_erlaubt(), plattform=sys.platform))
+                self.senden(200, dict(bearbeiten=ck.bearbeiten_erlaubt(), plattform=sys.platform, design=ck.standard_design()))
             elif url.path == "/api/stand":
                 self.senden(200, ck.projektliste_stand())
             elif url.path == "/api/pdf":
@@ -150,11 +152,11 @@ class Handler(BaseHTTPRequestHandler):
         with LOCK:
             r = ck.render_entwurf(e)
         token = uuid.uuid4().hex
-        PDFS[token] = (e["datei"], r["pdf"])
+        PDFS[token] = (r["datei"], r["pdf"])
         while len(PDFS) > 60:
             PDFS.popitem(last=False)
         self.senden(200, dict(png=base64.b64encode(vorschau_png(r["pdf"])).decode(), anzahl=r["anzahl"],
-                              warnungen=r["warnungen"], token=token))
+                              warnungen=r["warnungen"], token=token, datei=r["datei"]))
 
     def merken(self):
         """Traegt die markierten Eintraege in die eigene Stammliste ein (auch beim Download aufgerufen)."""
@@ -172,7 +174,7 @@ class Handler(BaseHTTPRequestHandler):
             return self.senden(200, dict(abgebrochen=True))
         with LOCK:
             renders = [ck.render_entwurf(e) for e in entwuerfe]
-            pfade = ck.speichere_pdfs(ordner, [(e["datei"], r["pdf"]) for e, r in zip(entwuerfe, renders)])
+            pfade = ck.speichere_pdfs(ordner, [(r["datei"], r["pdf"]) for r in renders])
             gemerkt, fehler = 0, None
             try:
                 gemerkt = sum(ck.merke_in_stammliste(e) for e in entwuerfe)
@@ -180,7 +182,7 @@ class Handler(BaseHTTPRequestHandler):
                 fehler = str(ex)
         GESPEICHERT.update(os.path.normcase(str(p.resolve())) for p in pfade)
         self.senden(200, dict(ordner=str(ordner), gemerkt=gemerkt, speicherfehler=fehler, dateien=[
-            dict(datei=p.name, pfad=str(p), umbenannt=p.name != e["datei"]) for p, e in zip(pfade, entwuerfe)]))
+            dict(datei=p.name, pfad=str(p), umbenannt=p.name != r["datei"]) for p, r in zip(pfade, renders)]))
 
     def zeigen(self):
         """Zeigt eine in dieser Sitzung gespeicherte Karte im Finder."""
