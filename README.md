@@ -46,20 +46,25 @@ Der Server läuft danach auf **http://localhost:3000**
 
 ## Kartengenerator im Portal (nur Admins)
 
-Der Kartengenerator (`tools/cocktailkarte`, Python) ist ins Portal eingebunden: Im Admin-Bereich oeffnet der Knopf **Karten**
-die Seite `/karten/`. Der Python-Prozess wird vom Portal selbst gestartet, lauscht nur auf `127.0.0.1` und ist ausschliesslich
-ueber `/karten` erreichbar, und dort nur mit Admin-Login (Mitarbeiter und nicht Angemeldete werden abgewiesen).
-Karten werden als PDF heruntergeladen (kein Ordnerdialog im Webbetrieb).
+Der Kartengenerator (`tools/cocktailkarte`, Python) laeuft als **eigener Dienst** und ist ins Portal eingebunden: Im
+Admin-Bereich oeffnet der Knopf **Karten** die Seite `/karten/`. Das Portal prueft den Admin-Login und reicht die Anfrage
+an den Kartengenerator weiter (Reverse Proxy, `server.js`). Mitarbeiter und nicht Angemeldete werden abgewiesen. Der
+Kartengenerator selbst akzeptiert im Webbetrieb nur Anfragen mit dem gemeinsamen Token (`KARTEN_TOKEN`) und hat keine
+oeffentliche Adresse. Karten werden als PDF heruntergeladen (kein Ordnerdialog im Webbetrieb).
 
-**Betrieb auf Railway** (Dockerfile im Repo: Node 20 + Python mit PyMuPDF):
-1. Variable `RENTMAN_API` setzen (Rentman-API-Token, am besten von einem eigenen Benutzer mit minimalen Rechten).
-2. Das Verzeichnis `db/` (Datenbank, Uploads **und** Kartendaten in `db/karten/`) muss auf einem **Volume** liegen
-   (`/app/db`), sonst gehen Stammliste und hochgeladene Schriften bei jedem Deploy verloren.
-3. Die lizenzpflichtigen Schriften (Active, Agrandir) werden nicht ins Repository gelegt, sondern unter **Karten >
-   Schriften fuer die Karten** (unten auf der Seite) einmalig hochgeladen. Sie liegen dann im Volume.
-4. Optionale Variablen: `KARTEN_AKTIV=0` (Generator abschalten), `KARTEN_DATEN` (anderer Datenordner), `KARTEN_PORT`, `PYTHON`.
+**Einrichtung auf Railway** (das Portal bleibt unveraendert, nur Variablen kommen dazu):
+1. Im Railway-Projekt **New > GitHub Repo** (dasselbe Repo, Branch `main`) = zweiter Dienst, Name z. B. `karten`.
+2. Im neuen Dienst unter **Settings > Source > Add Root Directory**: `/tools/cocktailkarte` (dort liegt ein `Dockerfile`).
+3. Im Dienst `karten` unter **Variables**: `RENTMAN_API` (Rentman-Token, am besten eigener Benutzer mit minimalen Rechten)
+   und `KARTEN_TOKEN` (lange zufaellige Zeichenfolge).
+4. Im Dienst `karten` ein **Volume** mit Mount Path `/data` anlegen (Stammliste, Schriften, Cache bleiben erhalten).
+   Keine oeffentliche Domain erzeugen (**Generate Domain** nicht klicken).
+5. Im **Portal-Dienst** unter **Variables**: `KARTEN_URL` = `http://karten.railway.internal:8765`
+   (Name des Dienstes + `.railway.internal`) und `KARTEN_TOKEN` mit demselben Wert wie bei `karten`.
+6. Danach im Portal **Karten** oeffnen, unten die Schriften Active und Agrandir hochladen und eine Karte testen.
 
-Lokal ohne Docker: `pip install -r tools/cocktailkarte/requirements.txt`, dann `RENTMAN_API=... node server.js`.
+Ohne `KARTEN_URL` zeigt `/karten/` nur den Hinweis "nicht eingerichtet"; das Portal laeuft normal weiter.
+Lokal zum Testen: `KARTEN_LOKAL=1 node server.js` startet den Generator als Kindprozess (Python + PyMuPDF noetig).
 
 ## Funktionen
 

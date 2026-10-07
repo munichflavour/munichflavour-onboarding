@@ -1,0 +1,10 @@
+daten
+.cache
+.venv
+.env
+*.pdf
+*.otf
+*.ttf
+!assets/**/*.ttf
+!assets/*.ttf
+__pycache__

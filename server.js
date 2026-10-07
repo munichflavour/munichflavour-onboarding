@@ -11,7 +11,6 @@ const http = require('http');
 const { spawn } = require('child_process');
 const webpush = require('web-push');
 
-console.log(`Start: Node ${process.version}, PORT=${process.env.PORT || '(nicht gesetzt, Standard 3000)'}, NODE_ENV=${process.env.NODE_ENV || '-'}`);
 const app = express();
 
 const dbDir = path.join(__dirname, 'db');
@@ -247,18 +246,24 @@ function requireAdmin(req, res, next) {
 }
 
 // ===== KARTENGENERATOR (Python, tools/cocktailkarte) =====
-// Läuft als eigener Prozess nur auf 127.0.0.1 und ist ausschließlich über /karten erreichbar, und dort nur für
-// angemeldete Admins. Der Rentman-Token (RENTMAN_API) steht als Umgebungsvariable auf dem Server.
+// Der Kartengenerator läuft als eigener Dienst (eigener Railway-Service) und ist ausschließlich über /karten erreichbar,
+// und dort nur für angemeldete Admins. Das Portal reicht die Anfragen weiter (Reverse Proxy):
+//   KARTEN_URL    Adresse des Dienstes, z. B. http://karten.railway.internal:8765 (privates Netz)
+//   KARTEN_TOKEN  gemeinsames Geheimnis; der Kartengenerator lehnt Anfragen ohne dieses Token ab
+// Lokal ohne eigenen Dienst: KARTEN_LOKAL=1 startet den Generator als Kindprozess (Python + PyMuPDF nötig).
 const KARTEN_DIR = path.join(__dirname, 'tools', 'cocktailkarte');
-const KARTEN_PORT = Number(process.env.KARTEN_PORT) || 8765;
+const KARTEN_TOKEN = process.env.KARTEN_TOKEN || crypto.randomBytes(24).toString('hex');
+let kartenZiel = null;
+try { if (process.env.KARTEN_URL) { const u = new URL(process.env.KARTEN_URL); kartenZiel = { host: u.hostname, port: Number(u.port) || 80 }; } }
+catch (e) { console.error('KARTEN_URL ungültig:', e.message); }
 let kartenProzess = null, kartenNeustarts = 0;
 function starteKarten() {
-  if (process.env.KARTEN_AKTIV === '0' || !fs.existsSync(path.join(KARTEN_DIR, 'app.py'))) return;
-  const python = process.env.PYTHON || (fs.existsSync('/opt/venv/bin/python') ? '/opt/venv/bin/python' : 'python3');
+  const port = Number(process.env.KARTEN_PORT) || 8765;
+  const python = process.env.PYTHON || 'python3';
   const startZeit = Date.now();
   kartenProzess = spawn(python, ['app.py'], {
     cwd: KARTEN_DIR, stdio: 'inherit',
-    env: { ...process.env, KARTEN_WEB: '1', KARTEN_PORT: String(KARTEN_PORT), PYTHONUNBUFFERED: '1',
+    env: { ...process.env, KARTEN_WEB: '1', KARTEN_PORT: String(port), KARTEN_TOKEN, PYTHONUNBUFFERED: '1',
            DATEN_ORDNER: process.env.KARTEN_DATEN || path.join(dbDir, 'karten') }
   });
   kartenProzess.on('error', err => { console.error('Kartengenerator konnte nicht gestartet werden:', err.message); kartenProzess = null; });
@@ -267,29 +272,30 @@ function starteKarten() {
     if (Date.now() - startZeit > 60000) kartenNeustarts = 0;
     if (++kartenNeustarts <= 5) { console.error(`Kartengenerator beendet (Code ${code}), Neustart ...`); setTimeout(starteKarten, 2000); }
   });
+  kartenZiel = { host: '127.0.0.1', port };
+  process.on('exit', () => { if (kartenProzess) kartenProzess.kill(); });
 }
-starteKarten();
-process.on('exit', () => { if (kartenProzess) kartenProzess.kill(); });
-['SIGTERM', 'SIGINT'].forEach(sig => process.on(sig, () => { console.log(`Signal ${sig} empfangen, beende.`); process.exit(0); }));
+if (!kartenZiel && process.env.KARTEN_LOKAL === '1') starteKarten();
 
 app.use('/karten', (req, res) => {
   if (!req.session.userId || req.session.role !== 'admin') {
     if (req.method === 'GET' && !req.path.startsWith('/api/')) return res.redirect('/login.html');
     return res.status(403).json({ fehler: 'Kein Zugriff' });
   }
+  if (!kartenZiel) return res.status(503).type('text/plain; charset=utf-8').send('Der Kartengenerator ist nicht eingerichtet (Variable KARTEN_URL fehlt).');
   if (req.originalUrl === '/karten') return res.redirect('/karten/');
-  const header = { ...req.headers, host: `127.0.0.1:${KARTEN_PORT}` };
+  const header = { ...req.headers, host: `${kartenZiel.host}:${kartenZiel.port}`, 'x-karten-token': KARTEN_TOKEN };
   delete header.cookie; delete header.origin; delete header.referer;
   let body = null;
   if (req.is('application/json') && req.body !== undefined) {        // vom Portal schon gelesen: neu serialisieren
     body = Buffer.from(JSON.stringify(req.body));
     header['content-length'] = String(body.length);
   }
-  const pr = http.request({ host: '127.0.0.1', port: KARTEN_PORT, path: req.url, method: req.method, headers: header }, r => {
+  const pr = http.request({ host: kartenZiel.host, port: kartenZiel.port, path: req.url, method: req.method, headers: header }, r => {
     res.writeHead(r.statusCode, r.headers);
     r.pipe(res);
   });
-  pr.on('error', () => { if (!res.headersSent) res.status(503).json({ fehler: 'Der Kartengenerator startet gerade oder ist nicht verfügbar. Bitte in einer Minute erneut versuchen.' }); });
+  pr.on('error', () => { if (!res.headersSent) res.status(503).json({ fehler: 'Der Kartengenerator ist nicht erreichbar. Bitte in einer Minute erneut versuchen.' }); });
   if (body) pr.end(body);
   else if (req._body) { pr.destroy(); res.status(415).json({ fehler: 'Inhaltstyp nicht unterstützt.' }); }   // Portal hat den Body schon gelesen
   else req.pipe(pr);
@@ -490,6 +496,4 @@ app.delete('/api/admin/announcements/:id', requireAdmin, (req, res) => {
 
 app.get('/', (req, res) => res.redirect('/login.html'));
 const PORT = process.env.PORT || 3000;
-const httpServer = app.listen(PORT, '0.0.0.0', () => console.log(`Munich Flavour Portal läuft auf http://0.0.0.0:${PORT}`));
-httpServer.on('error', err => { console.error('Server konnte nicht starten:', err.message); process.exit(1); });
-process.on('uncaughtException', err => { console.error('Unbehandelter Fehler:', err); process.exit(1); });
+app.listen(PORT, () => console.log(`Munich Flavour Portal läuft auf http://localhost:${PORT}`));

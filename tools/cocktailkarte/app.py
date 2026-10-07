@@ -4,6 +4,9 @@
 Start: python3 app.py   (oeffnet http://127.0.0.1:8765 im Browser; lauscht nur auf diesem Rechner)
 """
 import base64
+import errno
+import hmac
+import socket
 import json
 import os
 import re
@@ -22,7 +25,8 @@ import pymupdf
 
 import cocktailkarte as ck
 
-HOST = "127.0.0.1"
+HOST = os.environ.get("KARTEN_HOST") or "127.0.0.1"   # im eigenen Dienst "::" (privates Netz von Railway)
+TOKEN = os.environ.get("KARTEN_TOKEN") or ""           # Webbetrieb: gemeinsames Geheimnis mit dem Portal (Pflicht)
 PORT = int(os.environ.get("KARTEN_PORT") or 8765)
 WEB = os.environ.get("KARTEN_WEB") == "1"      # Betrieb hinter dem Portal (Server): kein Browser, kein Ordnerdialog
 SCHRIFTEN = {"Active-Regular": "Pinselschrift Active (altes Design)", "Agrandir-Black": "Agrandir Black (neues Design)"}
@@ -58,6 +62,20 @@ def vorschau_png(pdf):
     return pymupdf.open(stream=pdf, filetype="pdf")[0].get_pixmap(dpi=80).tobytes("png")
 
 
+class Server(ThreadingHTTPServer):
+    daemon_threads = True
+
+    def __init__(self, adresse, handler):
+        if ":" in adresse[0]:
+            self.address_family = socket.AF_INET6
+        super().__init__(adresse, handler)
+
+    def server_bind(self):
+        if self.address_family == socket.AF_INET6:
+            self.socket.setsockopt(socket.IPPROTO_IPV6, socket.IPV6_V6ONLY, 0)   # auch IPv4 annehmen
+        super().server_bind()
+
+
 class Handler(BaseHTTPRequestHandler):
     def log_message(self, fmt, *args):
         pass
@@ -76,7 +94,18 @@ class Handler(BaseHTTPRequestHandler):
     def body(self):
         return json.loads(self.rfile.read(int(self.headers.get("Content-Length", 0))) or b"{}")
 
+    def zugriff_ok(self):
+        """Webbetrieb: nur Anfragen mit dem gemeinsamen Token (vom Portal) werden beantwortet."""
+        if not WEB:
+            return True
+        ok = bool(TOKEN) and hmac.compare_digest(self.headers.get("X-Karten-Token", ""), TOKEN)
+        if not ok:
+            self.senden(403, dict(fehler="Kein Zugriff"))
+        return ok
+
     def do_GET(self):
+        if not self.zugriff_ok():
+            return
         url = urllib.parse.urlparse(self.path)
         try:
             if url.path == "/":
@@ -110,6 +139,8 @@ class Handler(BaseHTTPRequestHandler):
             self.senden(400, dict(fehler=str(e)))
 
     def do_POST(self):
+        if not self.zugriff_ok():
+            return
         try:
             if self.path == "/api/aktualisieren":
                 ck.aktualisiere()
@@ -227,7 +258,12 @@ class Handler(BaseHTTPRequestHandler):
 def main():
     url = f"http://{HOST}:{PORT}"
     try:
-        server = ThreadingHTTPServer((HOST, PORT), Handler)
+        try:
+            server = Server((HOST, PORT), Handler)
+        except OSError as ex:
+            if HOST != "::" or ex.errno not in (errno.EAFNOSUPPORT, errno.EADDRNOTAVAIL, errno.EPROTONOSUPPORT):
+                raise
+            server = Server(("0.0.0.0", PORT), Handler)      # Rechner ohne IPv6
     except OSError:                       # Port belegt: laeuft der Kartengenerator vielleicht schon?
         try:
             urllib.request.urlopen(url + "/api/einstellungen", timeout=3).read()
@@ -236,7 +272,9 @@ def main():
         print("Der Kartengenerator laeuft bereits - der Browser wird geoeffnet.")
         webbrowser.open(url)
         return
-    print(f"Kartengenerator laeuft auf {url}  (beenden mit Ctrl+C)")
+    print(f"Kartengenerator laeuft auf {url}  (beenden mit Ctrl+C)" if not WEB else f"Kartengenerator (Webbetrieb) lauscht auf Port {PORT}")
+    if WEB and not TOKEN:
+        print("ACHTUNG: KARTEN_TOKEN ist nicht gesetzt - im Webbetrieb werden alle Anfragen abgewiesen.")
 
     def vorwaermen():          # Projektliste schon beim Start laden (aus dem Cache sofort)
         try:
