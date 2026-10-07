@@ -153,3 +153,13 @@ Dateien im neuen Design enden auf `_NEU.pdf`.
   Mit der vollstaendigen Datei `Agrandir-Black.otf` (neben den Installer legen, er kopiert sie nach `daten/`) gibt es
   keine Ersatzschrift.
 - Code: `neu.py` (Layout inkl. Essenkarte), `make_template_neu.py` (baut `assets/neu/template.pdf` aus der Canva-PDF; `template_essen.pdf` entstand analog aus ESSEN_NEU).
+
+## Hot Drinks und Tee auf der Kaffeekarte
+
+Hot Drinks und Tee bekommen keine eigene Karte, sondern stehen als Abschnitt HOT DRINKS bzw. TEA auf der Kaffeekarte,
+und zwar nur, wenn sie im Projekt gebucht sind:
+- Gruppen `Hot Drinks`, `Heissgetraenke` und `Tee` in Rentman werden komplett uebernommen.
+- Unabhaengig von der Gruppe wird `Hot Chocolate` (auch Kakao, Trinkschokolade) und `Tee` (auch `10l Tee`) erkannt.
+  `Teeloeffel` und Eistee (`Ice Tea`) zaehlen nicht.
+- Die Standardliste (wenn nur Kaffee-Equipment gebucht ist) enthaelt nur noch die Kaffeespezialitaeten; Hot Chocolate
+  und Tee kommen nur bei Buchung dazu. Muster stehen in `cocktailkarte.py` (`GRUPPE_HEISS`, `TEE_MATERIAL`, `HEISS_MATERIAL`).

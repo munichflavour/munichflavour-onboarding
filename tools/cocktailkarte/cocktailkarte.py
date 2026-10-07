@@ -58,6 +58,10 @@ GRUPPE_ESSEN = re.compile(r"^catering\b", re.I)
 GRUPPE_KAFFEE = re.compile(r"^(kaffee|coffee)", re.I)
 GRUPPE_GETRAENK = re.compile(r"cocktail|longdrink|aperitif|\bdrinks?\b|smoothie|matcha|shake|shot|slush|limonade|"
                              r"hei(ß|ss)getränk", re.I)
+GRUPPE_HEISS = re.compile(r"^(hot\s*drinks?|hei(ß|ss)getränke?|te[ea]\b|tee\b)", re.I)   # gehoeren auf die Kaffeekarte
+# Einzelne Positionen, die auf die Kaffeekarte gehoeren, auch wenn sie in Rentman anders einsortiert sind
+TEE_MATERIAL = re.compile(r"^(\d+([.,]\d+)?\s*l\s+)?(verschiedene\s+)?te[ea](variationen|sorten)?$", re.I)   # nicht Teeloeffel, Ice Tea
+HEISS_MATERIAL = re.compile(r"hot\s*chocolate|hei(ß|ss)e\s+schokolade|trinkschokolade|kakao", re.I)
 GRUPPE_COCKTAILIG = re.compile(r"cocktail|^drinks?$", re.I)   # Layout mit Cocktail/Mocktail-Aufteilung
 # Gruppennamen, die auf der Karte bewusst kuerzer stehen (bisherige handgemachte Karten)
 LABEL_NAMEN = {"cocktails & longdrinks": "COCKTAILS", "cocktails": "COCKTAILS"}
@@ -423,31 +427,60 @@ def kaffee_abschnitt(name):
     low = name.lower()
     if re.search(r"\btee\b|\btea\b|teevariation", low):
         return "TEA"
-    if re.search(r"chocolate|schokolade|kakao|gluehwein|glühwein|punsch|milch\b", low):
+    if re.search(r"chocolate|schokolade|kakao|gl(ü|ue)h|punsch|milch\b", low):
         return "HOT DRINKS"
     return "COFFEE"
 
 
+def heisse_getraenke(rows, groups):
+    """Hot Drinks und Tee, die auf die Kaffeekarte gehoeren: [dict(name, zusatz)] aus Gruppen 'Hot Drinks'/'Tee' und aus
+    einzelnen Positionen (Hot Chocolate, Tee), egal in welcher Materialgruppe sie gebucht sind."""
+    gefunden = {}
+    for gruppe in dict.fromkeys(groups.values()):
+        if GRUPPE_HEISS.search(gruppe):
+            for p in positionen_aus(rows, groups, gruppe):
+                gefunden.setdefault(p["name"].lower(), dict(name=p["name"], zusatz=re.sub(r"\s*/\s*", "/", p["remark"]).strip()))
+    for r in rows:
+        n = plain(r["name"]).strip()
+        if not ((r["quantity"] or 0) > 0 or r["parent"]):
+            continue
+        if TEE_MATERIAL.search(n):
+            gefunden.setdefault("tee", dict(name="Tee", zusatz=""))
+        elif HEISS_MATERIAL.search(n) and len(n) < 30:
+            gefunden.setdefault("hot chocolate", dict(name="Hot Chocolate", zusatz=""))
+    return list(gefunden.values())
+
+
 def kaffee_aus(rows, groups, gruppe=None, erzwingen=False):
     """[dict(key, name, zusatz, quelle)] der Kaffeekarte. Ohne Rentman-Gruppe 'Kaffee': Standardliste, wenn
-    Kaffee-Equipment gebucht ist (oder erzwungen)."""
+    Kaffee-Equipment gebucht ist (oder erzwungen). Hot Drinks und Tee kommen nur auf die Karte, wenn sie im Projekt
+    gebucht sind (auch ausserhalb der Kaffee-Gruppe)."""
     stamm = json.load(open(KAFFEE_STAMM, encoding="utf-8"))
     umb = stamm["umbenennung"]
     items, seen = [], set()
-    for p in positionen_aus(rows, groups, gruppe) if gruppe else []:
-        if p["name"].lower() in seen:
-            continue
-        seen.add(p["name"].lower())
-        zusatz = re.sub(r"\s*/\s*", "/", p["remark"]).strip()
-        name = umb.get(p["name"].lower(), p["name"]).upper()
-        items.append(dict(key=norm_key(p["name"]), name=name, zusatz=zusatz.upper(), quelle="rentman",
+
+    def neu(name, zusatz, quelle, key=None):
+        name = umb.get(name.lower(), name).upper()
+        if name.lower() in seen:
+            return
+        seen.add(name.lower())
+        items.append(dict(key=key or norm_key(name), name=name, zusatz=zusatz.upper(), quelle=quelle,
                           abschnitt=kaffee_abschnitt(name)))
+
+    for p in positionen_aus(rows, groups, gruppe) if gruppe else []:
+        neu(p["name"], re.sub(r"\s*/\s*", "/", p["remark"]).strip(), "rentman", norm_key(p["name"]))
+    heiss = heisse_getraenke(rows, groups)
+    kaffee_da = bool(items) or erzwingen or any(KAFFEE_MATERIAL.search(plain(r["name"])) for r in rows)
+    if not items and kaffee_da:
+        warn("In Rentman sind keine Kaffeespezialitaeten gebucht (Gruppe 'Kaffee') - Standardliste wird verwendet.")
+        for e in stamm["standard"]:
+            if kaffee_abschnitt(e["name"]) == "COFFEE":
+                neu(e["name"], e.get("zusatz", ""), "standard")
+    if items or heiss:
+        for h in heiss:
+            neu(h["name"], h["zusatz"], "rentman")
     reihenfolge = [e["name"].upper() for e in stamm["standard"]]
     items.sort(key=lambda i: reihenfolge.index(i["name"]) if i["name"] in reihenfolge else len(reihenfolge))
-    if not items and (erzwingen or any(KAFFEE_MATERIAL.search(plain(r["name"])) for r in rows)):
-        warn("In Rentman sind keine Kaffeespezialitaeten gebucht (Gruppe 'Kaffee') - Standardliste wird verwendet.")
-        items = [dict(key=norm_key(e["name"]), name=e["name"].upper(), zusatz=e.get("zusatz", "").upper(),
-                      quelle="standard", abschnitt=kaffee_abschnitt(e["name"])) for e in stamm["standard"]]
     return items
 
 
@@ -591,6 +624,8 @@ def kartengruppen(rows, groups):
             ergebnis.append((name, "essen"))
         elif GRUPPE_KAFFEE.search(name):
             ergebnis.append((name, "kaffee"))
+        elif GRUPPE_HEISS.search(name):
+            continue                      # Hot Drinks / Tee: Teil der Kaffeekarte (kaffee_aus)
         elif GRUPPE_GETRAENK.search(name):
             ergebnis.append((name, "getraenke"))
     return ergebnis
@@ -605,7 +640,8 @@ def entwuerfe_aus(project, nur=None):
     rows, groups = lade_material(project["id"])
     gruppen = kartengruppen(rows, groups)
     if (nur == "kaffee" or not nur) and not any(a == "kaffee" for _, a in gruppen) and \
-            (nur == "kaffee" or any(KAFFEE_MATERIAL.search(plain(r["name"])) for r in rows)):
+            (nur == "kaffee" or any(KAFFEE_MATERIAL.search(plain(r["name"])) for r in rows)
+             or any(GRUPPE_HEISS.search(g) and positionen_aus(rows, groups, g) for g in set(groups.values()))):
         gruppen.append((None, "kaffee"))      # Kaffee-Equipment gebucht, aber keine Kaffee-Gruppe: Standardliste
     entwuerfe, benutzt = [], set()
     for gruppe, art in gruppen:
