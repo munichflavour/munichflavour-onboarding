@@ -31,6 +31,7 @@ for f in "$QUELLE"/[Aa]ctive*.otf "$QUELLE"/[Aa]ctive*.ttf; do
   fi
 done
 
+mkdir -p "$HOME/Desktop"
 printf '#!/bin/bash\nexec "%s/start.command"\n' "$ZIEL" > "$STARTER"
 chmod +x "$STARTER"
 xattr -dr com.apple.quarantine "$ZIEL" "$STARTER" 2>/dev/null || true

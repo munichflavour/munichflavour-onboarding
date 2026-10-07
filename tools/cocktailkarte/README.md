@@ -1,5 +1,10 @@
 # Kartengenerator (Rentman -> PDF)
 
+**Download-Pakete** (bei GitHub angemeldet sein; fertige Pakete im Ordner `downloads/` des Repositorys):
+Mac: `downloads/Kartengenerator-Mac.zip`, Windows: `downloads/Kartengenerator-Windows.zip`.
+Nach dem Entpacken liegen `installieren.command` (Mac) bzw. `installieren.bat` (Windows) direkt im entpackten Ordner.
+Neu bauen nach Aenderungen am Programm: `python3 tools/cocktailkarte/zip_bauen.py`.
+
 ## Oberflaeche auf Windows (z. B. Mitarbeiter-PC im Lager)
 
 Voraussetzung: Windows 10/11 (Surface mit Intel/AMD oder ARM) und beim ersten Start eine Internetverbindung.
@@ -8,8 +13,8 @@ Voraussetzung: Windows 10/11 (Surface mit Intel/AMD oder ARM) und beim ersten St
 **Installieren (auch fuer Updates):**
 1. ZIP des Branches von GitHub laden. **Rechtsklick auf die ZIP-Datei > Eigenschaften > unten "Zulassen" anhaken > OK**
    (hebt die Windows-Sperre fuer Dateien aus dem Internet auf), dann **Alle extrahieren**.
-2. Optional die Datei `active-regular.otf` (Pinselschrift) neben `installieren.bat` legen (Ordner `tools\cocktailkarte`).
-3. `tools\cocktailkarte\installieren.bat` doppelklicken. Der Installer kopiert das Programm nach
+2. Optional die Datei `active-regular.otf` (Pinselschrift) neben `installieren.bat` legen (im entpackten Ordner).
+3. `installieren.bat` doppelklicken. Der Installer kopiert das Programm nach
    `C:\Users\<Name>\Kartengenerator` und legt auf dem Desktop die Verknuepfung **Kartengenerator** an.
    Eigene Daten (Token, Stammliste, Schrift, Einstellungen) bleiben bei Updates erhalten.
 4. Beim ersten Start (der Installer bietet ihn an) wird Python bei Bedarf installiert, die Programmumgebung
@@ -41,7 +46,7 @@ setzen) und den Starter noch einmal ausfuehren.
 1. ZIP des Branches von GitHub laden und entpacken.
 2. Falls macOS blockiert: im Terminal `xattr -dr com.apple.quarantine ` tippen, den entpackten Ordner ins Fenster
    ziehen, Enter.
-3. `tools/cocktailkarte/installieren.command` doppelklicken. Das kopiert das Programm nach `~/Kartengenerator` und
+3. `installieren.command` doppelklicken. Das kopiert das Programm nach `~/Kartengenerator` und
    legt auf dem Schreibtisch den Starter **Kartengenerator** an. Token und Einstellungen bleiben bei Updates erhalten.
 
 **Benutzen:** Starter **Kartengenerator** auf dem Schreibtisch doppelklicken. Beim ersten Start wird nach dem
