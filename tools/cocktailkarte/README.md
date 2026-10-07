@@ -30,9 +30,10 @@ wieder frei. (Die Sperre schuetzt vor Versehen, nicht vor gezielter Umgehung dur
 Zugriff auf Projekt- und Kundendaten. Besser einen **eigenen Rentman-Benutzer mit eingeschraenkten Rechten** und dessen
 Token verwenden, nicht den Token der Geschaeftsfuehrung.
 
-**Probleme?** `start.bat` im Ordner `C:\Users\<Name>\Kartengenerator` per Rechtsklick > "Als Administrator..." ist nicht
-noetig; stattdessen ein Eingabeaufforderung-Fenster oeffnen, `start.bat` hineinziehen und Enter druecken: Die Fehlermeldung
-bleibt dann sichtbar. Notfalls Python selbst von python.org installieren (Haken "Add python.exe to PATH" setzen).
+**Probleme?** Eine Eingabeaufforderung oeffnen (Windows-Taste, "cmd", Enter), die Datei `start.bat` aus dem Ordner
+`C:\Users\<Name>\Kartengenerator` in das Fenster ziehen und Enter druecken: Dann bleibt die Fehlermeldung sichtbar und
+kann weitergegeben werden. Notfalls Python selbst von python.org installieren (dabei den Haken "Add python.exe to PATH"
+setzen) und den Starter noch einmal ausfuehren.
 
 ## Oberflaeche auf dem Mac
 
