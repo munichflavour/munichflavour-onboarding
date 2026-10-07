@@ -11,6 +11,7 @@ const http = require('http');
 const { spawn } = require('child_process');
 const webpush = require('web-push');
 
+console.log(`Start: Node ${process.version}, PORT=${process.env.PORT || '(nicht gesetzt, Standard 3000)'}, NODE_ENV=${process.env.NODE_ENV || '-'}`);
 const app = express();
 
 const dbDir = path.join(__dirname, 'db');
@@ -269,7 +270,7 @@ function starteKarten() {
 }
 starteKarten();
 process.on('exit', () => { if (kartenProzess) kartenProzess.kill(); });
-['SIGTERM', 'SIGINT'].forEach(sig => process.on(sig, () => process.exit(0)));
+['SIGTERM', 'SIGINT'].forEach(sig => process.on(sig, () => { console.log(`Signal ${sig} empfangen, beende.`); process.exit(0); }));
 
 app.use('/karten', (req, res) => {
   if (!req.session.userId || req.session.role !== 'admin') {
@@ -489,4 +490,6 @@ app.delete('/api/admin/announcements/:id', requireAdmin, (req, res) => {
 
 app.get('/', (req, res) => res.redirect('/login.html'));
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`Munich Flavour Portal läuft auf http://localhost:${PORT}`));
+const httpServer = app.listen(PORT, '0.0.0.0', () => console.log(`Munich Flavour Portal läuft auf http://0.0.0.0:${PORT}`));
+httpServer.on('error', err => { console.error('Server konnte nicht starten:', err.message); process.exit(1); });
+process.on('uncaughtException', err => { console.error('Unbehandelter Fehler:', err); process.exit(1); });
