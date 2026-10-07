@@ -277,8 +277,7 @@ function zeige() {
   const fehlend = Z.arten.filter(a => !Z.e.some(e => e.karte === a.karte));
   let h = `<h2>${kopf}</h2>`;
   if (!Z.e.length) h += '<p class="leer">In diesem Projekt ist weder Getränke-, Kaffee- noch Catering-Material gebucht, daher wurde keine Karte erzeugt.</p>';
-  else h += `<div class="leiste"><button data-a="alle">Alle PDFs speichern</button><button class="zweit" data-a="neu">Neu aus Rentman laden</button></div>` +
-    Z.e.map(panel).join('') +
+  else h += Z.e.map(panel).join('') +
     `<div class="schritt"><b>Nächster Schritt:</b> Die PDFs in Rentman im Projekt „${esc(p.name)}“ (Nr. ${p.nummer}) unter <i>Dateien</i> hochladen. Die Rentman-API erlaubt keinen automatischen Upload.</div>`;
   if (fehlend.length) h += `<h2>Weitere Karte erstellen</h2><div class="liste">` + fehlend.map(a => `<button class="chip" data-a="zusatz" data-art="${a.karte}">${esc(a.titel)}</button>`).join('') + '</div>';
   $('ergebnis').innerHTML = h;
@@ -395,8 +394,6 @@ async function klick(ev) {
   } else if (a === 'bearbeiten') { Z.e[+b.dataset.e]._edit = true; neuZeichnen(); }
   else if (a === 'fertig') { Z.e[+b.dataset.e]._edit = false; neuZeichnen(); }
   else if (a === 'speichern') { await speichern([+b.dataset.e]); }
-  else if (a === 'alle') { await speichern(Z.e.map((e, i) => i)); }
-  else if (a === 'neu') { laden(Z.projekt); }
   else if (a === 'zusatz') { laden(Z.projekt, b.dataset.art); }
   else if (a === 'zeigen') {
     try { await post('/api/zeigen', { pfad: b.dataset.pfad }); } catch (err) { status(err.message, 'fehler'); }
