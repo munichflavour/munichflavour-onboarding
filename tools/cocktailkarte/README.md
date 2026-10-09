@@ -64,7 +64,6 @@ angezeigt. Dabei wird noch **nichts gespeichert**.
   Die Vorschau aktualisiert sich live, **Bearbeiten beenden** schliesst den Editor.
 - Mit dem Haken **merken** landet ein Eintrag in deiner eigenen Stammliste und gilt ab dann fuer alle Projekte
   (geaenderte Texte werden automatisch zum Merken vorgeschlagen; uebernommen wird beim Speichern oder Downloaden).
-- Fehlende Karten lassen sich unter "Weitere Karte erstellen" anfordern.
 
 **Eigene Stammliste:** Aenderungen aus der Oberflaeche stehen in `~/Kartengenerator/daten/getraenke.json` und
 `speisen.json`. Sie haben Vorrang vor den mitgelieferten Listen in `stammdaten/` und werden bei Updates nie

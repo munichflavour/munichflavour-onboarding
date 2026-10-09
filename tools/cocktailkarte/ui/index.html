@@ -322,12 +322,9 @@ function panel(e, i) {
 function zeige() {
   const p = Z.projekt; if (!p) return;
   const kopf = `${esc(p.name)} <span class="leer">&middot; Nr. ${p.nummer} &middot; ${datum(p.datum)}</span>`;
-  const fehlend = Z.arten.filter(a => !Z.e.some(e => e.karte === a.karte));
   let h = `<h2>${kopf}</h2>`;
   if (!Z.e.length) h += '<p class="leer">In diesem Projekt ist weder Getränke-, Kaffee- noch Catering-Material gebucht, daher wurde keine Karte erzeugt.</p>';
-  else h += Z.e.map(panel).join('') +
-    `<div class="schritt"><b>Nächster Schritt:</b> Die PDFs in Rentman im Projekt „${esc(p.name)}“ (Nr. ${p.nummer}) unter <i>Dateien</i> hochladen. Die Rentman-API erlaubt keinen automatischen Upload.</div>`;
-  if (fehlend.length) h += `<h2>Weitere Karte erstellen</h2><div class="liste">` + fehlend.map(a => `<button class="chip" data-a="zusatz" data-art="${a.karte}">${esc(a.titel)}</button>`).join('') + '</div>';
+  else h += Z.e.map(panel).join('');
   $('ergebnis').innerHTML = h;
   Z.e.forEach((e, i) => zeigeVs(i));
 }

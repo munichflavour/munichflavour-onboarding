@@ -183,8 +183,7 @@ class Handler(BaseHTTPRequestHandler):
         if nur and not entwuerfe:
             raise ck.KartenFehler(f"Für dieses Projekt ist kein Material für die Karte '{ck.KARTENARTEN[nur]}' gebucht.")
         self.senden(200, dict(projekt=projekt_json(projekt), entwuerfe=entwuerfe,
-                              arten=[dict(karte=k, titel=ck.KARTENARTEN[k] + "karte (Standardliste)")
-                                     for k in ck.ZUSATZKARTEN]))
+                              arten=[]))
 
     def vorschau(self):
         e = pruefe_entwurf(self.body()["entwurf"])
