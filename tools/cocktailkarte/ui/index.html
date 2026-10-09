@@ -2,13 +2,15 @@
 <html lang="de">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#232220">
 <title>Kartengenerator</title>
 <style>
 @font-face{font-family:Pinsel;src:url(schrift.ttf)}
 :root{--ink:#232220;--muted:#6f6b64;--line:#dedbd4;--bg:#fff;--soft:#f4f2ee;--warn:#fff4d6;--warnb:#e5c36a;--err:#b3261e;--ok:#1d6b3a;--okbg:#e8f5ec}
 @media (prefers-color-scheme:dark){:root{--ink:#f1eee8;--muted:#a39e94;--line:#3a3834;--bg:#171614;--soft:#22211e;--warn:#3a3118;--warnb:#7a6428;--err:#ff8a80;--ok:#7fd69a;--okbg:#17301f}}
 *{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
 body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif}
 main{max-width:1180px;margin:0 auto;padding:36px 24px 80px}
 h1{font-family:Pinsel,sans-serif;font-weight:400;font-size:46px;letter-spacing:.06em;margin:0;line-height:1.1}
@@ -37,9 +39,7 @@ h2{font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:var(--mute
 .stand button{padding:2px 8px;font-size:12px;border-radius:6px;margin-left:8px}
 .leiste{display:flex;gap:10px;flex-wrap:wrap;margin:8px 0 6px}
 .designwahl{display:flex;align-items:center;gap:8px;margin:14px 0 0;font-size:13px;color:var(--muted)}
-.seg{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden}
-.seg button{border:0;border-radius:0;background:transparent;color:var(--ink);padding:5px 14px;font-weight:500;font-size:13px}
-.seg button.an{background:var(--ink);color:var(--bg)}
+.designwahl button{background:none;border:0;color:var(--muted);text-decoration:underline;padding:4px 0;font-size:13px;font-weight:400;border-radius:0}
 .zeile select.abschnitt{width:112px}
 /* Karte: Ansicht = Vorschau + Aktionen, Bearbeiten = Editor + Vorschau */
 .karte{border:1px solid var(--line);border-radius:14px;padding:18px;background:var(--soft);margin-top:18px}
@@ -74,6 +74,48 @@ h2{font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:var(--mute
 .info .hinweis{color:var(--muted);font-size:14px;margin:6px 0 0}
 .schritt{margin-top:22px;padding:12px 14px;border-radius:10px;border:1px solid var(--line);background:var(--soft);font-size:14px;max-width:920px}
 .leer{color:var(--muted)}
+
+/* ---------- Handy ---------- */
+@media (max-width:640px){
+  main{padding:20px 16px max(64px,env(safe-area-inset-bottom))}
+  h1{font-size:30px}
+  .sub{margin-bottom:18px;font-size:14px}
+  form{flex-direction:column}
+  input,select,textarea{font-size:16px}               /* verhindert das Hineinzoomen in iOS */
+  #q{width:100%;min-height:50px}
+  button,a.btn{min-height:46px}
+  form button{width:100%}
+  .stand{line-height:2}
+  .stand button{min-height:36px;padding:4px 12px;font-size:13px}
+  .designwahl{margin-top:6px}
+  .designwahl button{min-height:36px;font-size:14px}
+  .treffer button{flex-direction:column;gap:2px}
+  .treffer small{white-space:normal}
+  .chip{padding:11px 16px;font-size:15px}
+  .karte{padding:14px;border-radius:12px}
+  .kopf{flex-wrap:wrap;gap:4px 12px}
+  .spalten{gap:14px}
+  .spalten.edit{grid-template-areas:"editor" "vorschau"}      /* beim Bearbeiten zuerst die Eintraege */
+  .aktion{flex-direction:column}
+  .aktion>*{width:100%;text-align:center}
+  .leiste button{width:100%}
+  .ok{word-break:break-word}
+  .schritt{font-size:13px}
+  /* Editor: Name und Text jeweils auf voller Breite, Schalter darunter */
+  .zeile{gap:8px;padding:10px 0}
+  .zeile input[type=checkbox]{width:24px;height:24px;flex:0 0 24px}
+  .zeile .name{flex:1 1 calc(100% - 40px)}
+  .zeile .zut,.zeile .besch{flex:1 1 100%}
+  .zeile .all{flex:1 1 90px;width:auto}
+  .zeile select,.zeile select.abschnitt{flex:1 1 110px;width:auto}
+  .zeile input,.zeile select{min-height:44px}
+  .mini{font-size:14px;gap:6px}
+  .mini input{width:22px;height:22px}
+  button.klein{padding:9px 14px;font-size:15px}
+  .editor h4{flex-wrap:wrap}
+  .editor h4 input{flex:1 1 100%}
+  .schriften label{flex-direction:column;align-items:flex-start;gap:6px}
+}
 </style>
 </head>
 <body>
@@ -82,7 +124,7 @@ h2{font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:var(--mute
   <p class="sub">Kartengenerator &middot; Daten direkt aus Rentman</p>
 
   <form id="form">
-    <input id="q" autocomplete="off" autofocus placeholder="Name oder Nummer eines bestätigten Projekts, z. B. Böttcher">
+    <input id="q" autocomplete="off" autocapitalize="off" spellcheck="false" enterkeyhint="search" placeholder="Name oder Nummer eines bestätigten Projekts, z. B. Böttcher">
     <button id="los">Karten laden</button>
   </form>
   <div class="stand" id="stand"></div>
@@ -166,9 +208,11 @@ async function suchen(e) {
 /* ---------- Karten: Zustand ---------- */
 let Z = { projekt: null, e: [], arten: [] };
 let EINST = { bearbeiten: true };
-let DESIGN = 'alt';
+let DESIGN = 'neu';       // neues Design ist der Standard, das alte nur noch als Option
 function zeigeDesign() {
-  $('designwahl').innerHTML = 'Design der Karten: <span class="seg"><button data-a="design" data-d="alt" class="' + (DESIGN === 'alt' ? 'an' : '') + '">Alt</button><button data-a="design" data-d="neu" class="' + (DESIGN === 'neu' ? 'an' : '') + '">Neu</button></span>';
+  $('designwahl').innerHTML = DESIGN === 'neu'
+    ? '<button data-a="design" data-d="alt">Altes Design verwenden</button>'
+    : 'Altes Design aktiv. <button data-a="design" data-d="neu">Zum neuen Design wechseln</button>';
 }
 const timers = {}, tokens = {};
 
@@ -382,7 +426,7 @@ async function klick(ev) {
   const a = b.dataset.a, y = window.scrollY, neuZeichnen = () => { zeige(); window.scrollTo(0, y); };
   if (a === 'dl') { downloadStarten(ev, +b.dataset.e); return; }
   if (a === 'design') {
-    DESIGN = b.dataset.d; try { localStorage.setItem('design', DESIGN); } catch (err) { }
+    DESIGN = b.dataset.d; try { localStorage.setItem('design2', DESIGN); } catch (err) { }
     zeigeDesign(); Z.e.forEach((e, i) => { e.design = DESIGN; e._erg = null; }); neuZeichnen(); Z.e.forEach((e, i) => plane(i)); return;
   }        // normaler Link-Download, nicht abbrechen
   if (a === 'auf' || a === 'ab' || a === 'weg') {
@@ -409,11 +453,12 @@ $('ergebnis').addEventListener('input', aenderung);
 $('ergebnis').addEventListener('click', klick);
 $('designwahl').addEventListener('click', klick);
 api('api/einstellungen').then(e => {
-  EINST = e; DESIGN = e.design || 'alt';
-  try { const d = localStorage.getItem('design'); if (d === 'alt' || d === 'neu') DESIGN = d; } catch (err) { }
+  EINST = e; DESIGN = e.design || 'neu';
+  try { const d = localStorage.getItem('design2'); if (d === 'alt' || d === 'neu') DESIGN = d; } catch (err) { }
   zeigeDesign();
   if (e.web && e.schriften) zeigeSchriften(e.schriften);
 }).catch(() => { zeigeDesign(); });
+if (!matchMedia('(pointer:coarse)').matches) $('q').focus();      // am Handy nicht sofort die Tastatur aufklappen
 bald(); stand();
 
 // Webbetrieb: lizenzpflichtige Schriften werden hier einmalig auf den Server hochgeladen (nie ins Repository)

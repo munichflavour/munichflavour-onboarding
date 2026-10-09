@@ -123,8 +123,8 @@ def token():
 
 
 def standard_design():
-    """Design der Karten: 'alt' (Ananas-Design) oder 'neu' (Rahmen, grosser Titel). Einstellung DESIGN, Standard 'alt'."""
-    return "neu" if str(einstellung("DESIGN") or "alt").strip().lower() == "neu" else "alt"
+    """Design der Karten: 'alt' (Ananas-Design) oder 'neu' (Rahmen, grosser Titel). Einstellung DESIGN, Standard 'neu'."""
+    return "alt" if str(einstellung("DESIGN") or "neu").strip().lower() == "alt" else "neu"
 
 
 def volle_schrift(name="Active-Regular"):
@@ -686,9 +686,9 @@ def entwuerfe_aus(project, nur=None):
 
 
 def datei_fuer(datei, design, karte):
-    """Dateiname je Design: im neuen Design mit Zusatz _NEU."""
-    stem = re.sub(r"_NEU$", "", Path(datei).stem)
-    return stem + ("_NEU" if design == "neu" else "") + ".pdf"
+    """Dateiname je Design: das neue Design (Standard) ohne Zusatz, das alte Design mit Zusatz _ALT."""
+    stem = re.sub(r"_(NEU|ALT)$", "", Path(datei).stem)
+    return stem + ("_ALT" if design == "alt" else "") + ".pdf"
 
 
 def _buchstaben(text):
@@ -954,7 +954,7 @@ def main():
     ap.add_argument("projekt", help="Projektnummer oder Teil des Projektnamens")
     ap.add_argument("-k", "--karte", choices=list(KARTENARTEN), help="nur diese Kartenart (Standard: alle gebuchten)")
     ap.add_argument("-o", "--out", help="Ausgabedatei (nur zusammen mit --karte)")
-    ap.add_argument("--design", choices=["alt", "neu"], help="Design der Karten (Standard: Einstellung DESIGN, sonst alt)")
+    ap.add_argument("--design", choices=["alt", "neu"], help="Design der Karten (Standard: Einstellung DESIGN, sonst neu)")
     ap.add_argument("--auch-unbestaetigt", action="store_true", help="auch Projekte mit Status Option/Anfrage/Konzept")
     args = ap.parse_args()
     try:

@@ -140,10 +140,10 @@ Karten und sind nicht neu geprueft. Speisen ohne Eintrag werden ohne Allergene g
 
 ## Design Alt / Neu
 
-Es gibt zwei Designs: das bisherige (Alt) und das neue (Neu, nachgebaut nach den Canva-Karten
-COCKTAILS_Standard_NEU und KAFFEE_PRICEHUBBLE_NEU). In der Oberflaeche schaltet man oben zwischen Alt und Neu um.
-Voreinstellung: `DESIGN=neu` oder `DESIGN=alt` in der `.env`. Per Kommandozeile: `--design neu`.
-Dateien im neuen Design enden auf `_NEU.pdf`.
+Das **neue Design ist der Standard**. Das bisherige Design (Alt) gibt es weiter als Option: In der Oberflaeche unter der
+Suche auf "Altes Design verwenden" klicken (gilt pro Geraet), oder per Einstellung `DESIGN=alt` in der `.env` bzw. als
+Umgebungsvariable, oder auf der Kommandozeile mit `--design alt`.
+Dateinamen: neues Design ohne Zusatz (`COCKTAILS_Name.pdf`), altes Design mit `_ALT` (`COCKTAILS_Name_ALT.pdf`).
 
 - Neu gibt es fuer alle Karten: Cocktails, Smoothies, Drinks, Hot Drinks, Matcha, Aperitif, Kaffee und Essen
   (Essen: zwei Spalten Salate/Brotzeit, Dessert zentriert darunter, Allergen-Legende fest in der Vorlage).
