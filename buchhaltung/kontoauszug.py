@@ -23,7 +23,7 @@ def text_aus_pdf(pfad):
 
 def lese(pfad):
     text = text_aus_pdf(pfad)
-    jahr = re.search(r"Kontoauszug vom \d\d\.\d\d\.(\d{4})", text) or re.search(r"(\d{4})", text)
+    jahr = re.search(r"Kontoauszug vom \d\d\.\d\d\.(\d{4})", text) or re.search(r"\b(20\d\d)\b", text)
     jahr = jahr.group(1)
     alt = re.search(r"Alter Saldo.*?([+-])\s*([\d.]+,\d\d)", text, re.S)
     neu = re.search(r"Neuer Saldo.*?EUR\s+([+-])\s*([\d.]+,\d\d)", text, re.S)
