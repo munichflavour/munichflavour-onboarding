@@ -2,7 +2,7 @@
 """Soll-Liste der Rentman-Rechnungen eines Monats (nur lesend).
 
 Aufruf:
-  RENTMAN_API_TOKEN=... python3 rentman_soll_liste.py 2026-09 [vorhanden.txt]
+  RENTMAN_API_TOKEN=... python3 rentman_soll_liste.py 2026-09 [vorhanden.txt] [--json rentman.json]
 
 vorhanden.txt: ein Dateiname pro Zeile (Inhalt des Ordners Rechnungsausgang).
 Regeln:
@@ -24,8 +24,10 @@ def get(path, token):
 def lade_rechnungen(monat, token):
     jahr, mon = map(int, monat.split("-"))
     start = f"{jahr}-{mon:02d}-01"
-    # Vormonat mitladen, damit Stornopaare ueber die Monatsgrenze erkannt werden
-    vj, vm = (jahr, mon - 1) if mon > 1 else (jahr - 1, 12)
+    # 3 Monate zurueck mitladen: Stornopaare ueber die Monatsgrenze und Zahlungen fuer aeltere Rechnungen
+    vj, vm = jahr, mon - 3
+    if vm < 1:
+        vj, vm = jahr - 1, vm + 12
     von = f"{vj}-{vm:02d}-01"
     bis = f"{jahr + (mon == 12)}-{(mon % 12) + 1:02d}-01"
     out, offset = [], 0
@@ -53,12 +55,20 @@ def stornopaare(rechnungen):
 
 
 def main():
-    monat = sys.argv[1]
+    args = sys.argv[1:]
+    json_out = None
+    if "--json" in args:
+        i = args.index("--json")
+        json_out = args[i + 1]
+        del args[i:i + 2]
+    monat = args[0]
     token = os.environ["RENTMAN_API_TOKEN"]
     vorhanden = set()
-    if len(sys.argv) > 2:
-        vorhanden = {z.strip() for z in open(sys.argv[2], encoding="utf-8") if z.strip()}
+    if len(args) > 1:
+        vorhanden = {z.strip() for z in open(args[1], encoding="utf-8") if z.strip()}
     alle, start = lade_rechnungen(monat, token)
+    if json_out:
+        json.dump(alle, open(json_out, "w", encoding="utf-8"), ensure_ascii=False)
     monatsdok = [r for r in alle if r["date"][:7] == monat]
     entfallen = set()
     for f, c in stornopaare(alle):

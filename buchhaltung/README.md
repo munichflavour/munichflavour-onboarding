@@ -29,6 +29,19 @@ Die Struktur bleibt unveraendert. Der Monatsordner ist das fertige DATEV-Paket.
 - `rentman_soll_liste.py` berechnet, welche PDFs im Rechnungsausgang liegen muessen, und markiert fehlende. Nur lesend.
 - Der Zugangstoken liegt **nie** im Repo, sondern als `RENTMAN_API_TOKEN` in der Umgebung (nur Lesezugriff).
 
+## Bausteine
+
+| Datei | Zweck |
+|---|---|
+| `kontoauszug.py` | liest den Kontoauszug (PDF) in Buchungen und prueft den Saldo |
+| `indexiere.py` | macht aus heruntergeladenen Belegen einen Textindex (auch Scans, lokale Texterkennung) |
+| `rentman_soll_liste.py` | Soll-Liste der Rentman-Rechnungen, Stornopaare, JSON-Export |
+| `abgleich.py` | gleicht Buchungen, Belege, Rentman und Mails ab und schreibt den Abgleichbericht (CSV) |
+
+Der Ablauf fuer Claude steht in `.claude/skills/monatsabschluss/SKILL.md` (Aufruf: `/monatsabschluss 2026-10`).
+
+Test mit September 2026: 135 von 140 Buchungen kommen automatisch zum selben Ergebnis wie die Handpruefung, die uebrigen fuenf sind vorsichtiger (Vorschlag statt OK oder Beleg noch nicht gelesen), keine falschen Treffer.
+
 ## Aufruf
 
 ```
