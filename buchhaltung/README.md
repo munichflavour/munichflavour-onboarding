@@ -23,6 +23,13 @@ Die Struktur bleibt unveraendert. Der Monatsordner ist das fertige DATEV-Paket.
    Status: OK, FEHLT, KEIN BELEG NOETIG, EINNAHME, PRIVAT, INTERN, PORTAL (manuell nachliefern), OFFEN (Beleg ohne Zahlung), KLAEREN.
    Manuelle Notizen bleiben beim naechsten Lauf erhalten.
 
+## Sammelordner Mail-Eingang
+
+Ein Power-Automate-Flow legt jeden Anhang aus dem Mailordner `Eingang` mit Originalnamen in `01 Finanzen/Buchhaltung/Mail-Eingang` ab (Anleitung: `anleitung-power-automate.md`). Der Ordner wird **nie geleert**. Beim Monatsabschluss gilt:
+1. Claude liest alle Dateien und erstellt mit `mail_eingang.py` eine Liste (KOPIEREN, SCHON DA, VORMONAT, ANDERER MONAT, MAHNUNG, KEINE RECHNUNG, UNKLAR).
+2. Der Nutzer gibt die Liste frei (Trockenlauf), dann werden die Rechnungen mit Rechnungsdatum im Monat **kopiert** (Originalname) in den Rechnungseingang.
+3. Nach dem Abschluss und nur mit Okay werden verarbeitete Dateien nach `Mail-Eingang/Verarbeitet/{JJJJ-MM}` verschoben. Geloescht wird nie (Aufbewahrung 8 Jahre).
+
 ## Technische Erkenntnisse
 
 - Die Rentman-API liefert die Rechnungsdaten, aber **keine PDFs**. Die PDFs haengen als Anhang an den Rentman-Mails (Gesendete Elemente von `rechnungen@`). Der Connector gibt Anhaenge nicht als Datei heraus ("binary attachment"), die PDFs muessen deshalb vorerst aus Rentman manuell exportiert werden.
@@ -36,6 +43,7 @@ Die Struktur bleibt unveraendert. Der Monatsordner ist das fertige DATEV-Paket.
 | `kontoauszug.py` | liest den Kontoauszug (PDF) in Buchungen und prueft den Saldo |
 | `indexiere.py` | macht aus heruntergeladenen Belegen einen Textindex (auch Scans, lokale Texterkennung) |
 | `rentman_soll_liste.py` | Soll-Liste der Rentman-Rechnungen, Stornopaare, JSON-Export |
+| `mail_eingang.py` | plant, welche Anhaenge aus dem Sammelordner Mail-Eingang in den Rechnungseingang des Monats kopiert werden (Trockenlauf-Liste, kopiert selbst nichts) |
 | `abgleich.py` | gleicht Buchungen, Belege, Rentman und Mails ab und schreibt den Abgleichbericht (CSV) |
 
 Der Ablauf fuer Claude steht in `.claude/skills/monatsabschluss/SKILL.md` (Aufruf: `/monatsabschluss 2026-10`).
