@@ -28,6 +28,8 @@ Dauer: ca. 30 Minuten, am Rechner. Voraussetzungen: Microsoft-365-Konto mit Zugr
 
 Hinweis zur Lizenz: Der Google-Drive-Connector kann je nach Lizenz als Premium-Connector gelten. Das siehst du direkt im Editor (Raute-Symbol). Falls ja, gibt es zwei Auswege: Zapier oder Make (gleiches Prinzip: Outlook-Trigger, Drive-Aktion; die kostenlosen Tarife reichen fuer etwa 50 Mails mit Anhang im Monat knapp aus) oder die Lizenz klaeren.
 
+Getestet am 17.10.2026: Das **Verschieben** einer Mail vom Posteingang in den Ordner Eingang loest den Flow aus, die PDF landet mit Originalnamen im Sammelordner. Der Flow muss dafuer **eingeschaltet** sein (nicht nur im Testmodus).
+
 ## 3. Pruefen
 - Im Flow unter **Ausfuehrungsverlauf** muss der Lauf **Erfolgreich** sein.
 - Im Drive muss die PDF mit dem Originalnamen im Ordner `Mail-Eingang` liegen.
