@@ -1,0 +1,106 @@
+# Catering-Kalkulator: Bestandsaufnahme und Umsetzungsvorschlag
+
+Stand: 2026-10-19. Es wurde noch kein Code geändert. Alle Aussagen unten stammen aus dem Repository.
+
+## 1. Bestehende Architektur
+
+| Bereich | Befund | Fundstelle |
+|---|---|---|
+| Backend | Node.js (>= 18), Express 4, eine Datei `server.js` (ca. 500 Zeilen), CommonJS | `server.js`, `package.json` |
+| Datenbank | SQLite über `better-sqlite3`, Datei `db/onboarding.db`. Tabellen werden per `CREATE TABLE IF NOT EXISTS` in `server.js` angelegt und zusätzlich in `seed.js` dupliziert. Es gibt kein Migrationssystem. | `server.js:22`, `seed.js` |
+| Sessions | `express-session` mit SQLite-Store, Cookie 7 Tage, Secret aus `SESSION_SECRET` oder DB | `server.js:196` |
+| CSRF | Origin/Referer-Prüfung für alle ändernden Requests | `server.js:183` |
+| Login | `bcryptjs`, Rate-Limit pro IP (5 Fehlversuche, 15 min Sperre) | `server.js:329` |
+| Rollen | `users.role` kennt nur `admin` und `employee`. Prüfung über `requireAuth` und `requireAdmin` (`req.session.role`). Es gibt keine Modulrechte. | `server.js:239-246` |
+| Frontend | Reines HTML, CSS und Vanilla-JS, kein Framework, kein Build-Schritt. Seiten: `login.html`, `admin.html`, `employee.html`. Eine gemeinsame `style.css` mit CSS-Variablen (schwarz/weiß, Touch-Ziele 48 px). PWA mit `sw.js` und `manifest.json`. | `public/` |
+| Push | Web-Push (VAPID), Versand an Rolle `admin` oder `employee` | `server.js:118-155` |
+| Tools | Kartengenerator als **eigener Python-Dienst** (`tools/cocktailkarte`, eigenes Dockerfile), im Portal nur per Reverse Proxy unter `/karten` und nur für Admins erreichbar. Gemeinsames Token `KARTEN_TOKEN`. | `server.js:248-302` |
+| Tests, Lint | Keine vorhanden | |
+| Deployment | Railway (Hinweise im Code), Konfiguration über Umgebungsvariablen | `server.js` |
+
+### Konsequenzen für die Rollen
+`role` wird an mehreren Stellen hart auf `'admin'` bzw. `'employee'` geprüft (Push-Versand, Mitarbeiterliste, Anlegen von Mitarbeitern). Neue globale Rollen wie "kueche" oder "einkauf" würden diese Stellen still brechen. Deshalb: **Modulberechtigungen in einer eigenen Tabelle**, die globale Rolle bleibt unverändert.
+
+## 2. Bestehende Rentman-Anbindung
+
+Es gibt **keine** Rentman-Integration im Node-Portal. Es gibt aber eine ausgereifte im Kartengenerator (`tools/cocktailkarte/cocktailkarte.py`):
+
+- Token aus Umgebungsvariable `RENTMAN_API`, Aufruf `https://api.rentman.net` mit `Authorization: Bearer`.
+- Paginierung (`limit=300`, `offset`), Wiederholung bei HTTP 429, Timeouts.
+- Verwendete Ressourcen: `/projects` (Felder `id, number, name, planperiod_start`), `/subprojects` (Felder `id, project, status`), `/statuses`, `/projects/{id}/projectequipment`, `/projects/{id}/projectequipmentgroup`.
+- Der **Projektstatus hängt am Unterprojekt**, nicht am Projekt. Bestätigt sind die Status-IDs 3 bis 6.
+- Projektequipment hat u. a. `id, name, quantity, parent, equipment_group, external_remark`. Speisen hängen als Kinder unter Blöcken (`parent`) in einer Materialgruppe, deren Name mit "Catering" beginnt.
+- Projektliste wird 10 Minuten gecacht (Speicher plus Datei).
+- Die API ist dort als Version 1.16.0 vermerkt und kann keine Dateien hochladen.
+
+### Noch nicht belegt (muss vor der Umsetzung geprüft werden)
+Die Rentman-Doku (api.rentman.net) ist eine JavaScript-Seite und war hier nicht lesbar. Folgendes ist daher **unbestätigt** und wird nicht angenommen:
+
+1. Wo die Gästezahl liegt (Projektfeld, Custom Field, Menge einer Position, Planning).
+2. Felder für Kunde und Veranstaltungsort am Projekt (Verknüpfungen auf Kontakt bzw. Location).
+3. Ob Positionen eine Referenz auf Equipment-Stammdaten (Artikel-ID, Artikelnummer) tragen und ob Einheiten mitgeliefert werden.
+4. Ob Custom Fields über die API lesbar sind.
+5. Unterprojekte: jedes Projekt hat laut vorhandenem Code genau eine Zeile, Fälle mit mehreren sind ungeklärt.
+
+Vorgehen: Ein kleiner **Diagnose-Endpunkt** (nur Admin, nur lesend) gibt die Rohfelder eines gewählten Projekts aus. So klären wir die Punkte an euren echten Daten, ohne zu raten.
+
+## 3. Architekturentscheidung (Empfehlung)
+
+**Eigenes Node-Modul im Portal**, nicht als zweiter Python-Dienst.
+
+Gründe: Login, Sessions, CSRF, Rollen und SQLite sind schon da. Eine zweite Benutzerverwaltung wird ausgeschlossen. Die Kalkulation braucht Transaktionen und Verknüpfungen (Rezeptur, Zutat, Snapshot, Einkaufsliste), das passt zu SQLite. Der Python-Dienst bleibt unverändert.
+
+Der Rentman-Client wird in Node neu geschrieben (nach dem Vorbild des Python-Clients: Paginierung, 429-Retry, Cache). Der Python-Client bleibt unangetastet.
+
+Vorgeschlagene Struktur (neue Dateien, `server.js` bekommt nur eine Einbindungszeile):
+
+```
+modules/catering/
+  index.js          Router, mountet unter /api/catering
+  schema.js         Tabellen (idempotent, mit Schema-Version)
+  permissions.js    Modulrechte + Middleware
+  rentman.js        Lese-Client, Cache, Sync
+  units.js          Einheiten und Umrechnung
+  calc.js           Kalkulationsmodi, Puffer, Verlust, Rundung
+  shopping.js       Einkaufsliste
+  export.js         PDF und Excel
+public/catering/    Frontend (HTML/JS/CSS im Stil des Portals)
+test/               Unit-Tests für units.js und calc.js (node:test)
+```
+
+### Berechtigungen
+Neue Tabelle `catering_permissions(user_id, level)` mit Stufen `none`, `einkauf`, `kueche`, `manager`, plus Flag `sieht_preise`. Admins des Portals haben automatisch `manager`. Geprüft wird serverseitig in einer Middleware pro Route, das Frontend blendet nur zusätzlich aus. Preisfelder werden für Nutzer ohne Recht **serverseitig aus der Antwort entfernt**.
+
+Hinweis: Die Verwaltung der Stufen bräuchte eine kleine Erweiterung der Mitarbeiterverwaltung (Dropdown pro Mitarbeiter). Das ist die einzige Änderung an bestehender Oberfläche.
+
+### Rechnen
+- Dezimalarithmetik: `decimal.js` als neue Abhängigkeit (Mengen und Geld nie als Float).
+- Rechenkette strikt getrennt: Bedarf je Speise (Modus A bis F) → Sicherheitspuffer → Zubereitungsverlust (Menge / (1 - Verlust)) → Summe je Zutaten-ID → Gebinderundung (nur für die Einkaufsliste, fließt nie zurück).
+- Einheiten: g/kg, ml/l fest; Stück und Packung nur mit hinterlegter Regel; Gewicht und Volumen nur mit expliziter Dichte je Zutat.
+- Freigegebene Kalkulationen speichern einen **Snapshot** (Rezeptur-Version, Zutaten, Faktoren, Rentman-Werte). Spätere Rezepturänderungen verändern ihn nicht.
+- Rechenweg wird je Position als Text/JSON gespeichert und auf Wunsch angezeigt.
+
+### Sync
+Rentman-Daten landen in lokalen Tabellen (`rentman_project_cache`, `rentman_item_cache`) mit Hash und Zeitstempel. Beim erneuten Abgleich wird verglichen: Änderungen an Projekten mit manuellen Anpassungen oder abgeschlossener Einkaufsliste werden **nicht angewendet**, sondern als Konflikt mit Gegenüberstellung angezeigt. Rentman wird nur gelesen (nur GET-Aufrufe im Client, per Test abgesichert).
+
+### Ohne Token
+Fehlt `RENTMAN_API`, zeigt das Modul einen deutlichen Hinweis und nutzt ausschließlich ausdrücklich als **Beispieldaten** gekennzeichnete Projekte, abschaltbar.
+
+## 4. Umsetzung in Schritten
+
+1. Schema, Modulrechte, leere Startseite (Navigation im Portal, Rechteprüfung testbar)
+2. Einheiten und Rechenkern mit Unit-Tests (ohne UI)
+3. Zutaten und Rezepturen (Editor, Versionen, Duplizieren, Archiv)
+4. Rentman-Client, Diagnose-Endpunkt, Projektübersicht mit Cache
+5. Mapping Rentman-Position zu Rezeptur (Vorschläge, Bestätigung, Ausschluss)
+6. Kalkulation je Projekt (Modi A bis F, Rechenweg, Snapshots)
+7. Einkaufsliste (Gebinde, Gruppierung, Abhaken, Ist-Mengen, Status)
+8. Konfliktanzeige beim Sync, Exporte (PDF, Excel)
+
+## 5. Offene Punkte (Entscheidung bzw. Zuarbeit nötig)
+
+1. **Der Projektauftrag bricht in Abschnitt 10 ab** (nach "Backwaren"). Es fehlen mindestens Rest der Einkaufsliste, Exporte, UI-Details und eventuell Abnahmekriterien. Bitte den Rest nachreichen.
+2. Zustimmung zur Architektur (Node-Modul im Portal, Modulrechte statt neuer Rollen).
+3. Zustimmung zu neuen Abhängigkeiten: `decimal.js`, für PDF `pdfkit`, für Excel `exceljs`.
+4. Zugriff auf die Rentman-Felder: Wer kann mir einen Auszug (JSON) eines echten Catering-Projekts über den Diagnose-Endpunkt oder aus der Rentman-API-Doku bereitstellen?
+5. Wer soll in der Praxis welche Stufe bekommen (Küche, Einkauf)? Gibt es Mitarbeiter ohne eigenen Portal-Login, die einkaufen?
