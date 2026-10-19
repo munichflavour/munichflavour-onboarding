@@ -1,0 +1,31 @@
+.hdr-link { color:#fff; text-decoration:none; border:1.5px solid rgba(255,255,255,0.3); border-radius:8px; font-size:14px; padding:8px 12px; }
+.tabs { overflow-x:auto; }
+.tab-btn { white-space:nowrap; padding:10px 12px; }
+.toolbar { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:12px; align-items:center; }
+.toolbar input[type="search"], .toolbar input[type="text"] { flex:1; min-width:160px; }
+.toolbar select { width:auto; min-width:140px; }
+.row { display:flex; justify-content:space-between; align-items:center; gap:12px; padding:12px 0; border-bottom:1px solid var(--gray-mid); cursor:pointer; min-height:var(--min-touch); }
+.row:last-child { border-bottom:none; }
+.row:active { background:var(--gray-light); }
+.row-main { min-width:0; flex:1; }
+.row-title { font-weight:600; overflow-wrap:anywhere; }
+.row-meta { font-size:12px; color:var(--gray-dark); }
+.pill { display:inline-block; font-size:11px; padding:2px 8px; border-radius:10px; background:var(--gray-mid); white-space:nowrap; }
+.pill.warn { background:#ffe9a8; }
+.pill.sample { background:#ffe9a8; }
+.note { font-size:13px; color:var(--gray-dark); }
+.warn-box { background:#fff4d6; border-radius:8px; padding:10px 12px; font-size:13px; margin-bottom:12px; }
+.grid2 { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+@media (max-width:520px) { .grid2 { grid-template-columns:1fr; } }
+.line { border:1.5px solid var(--gray-mid); border-radius:var(--radius); padding:10px; margin-bottom:10px; background:var(--white); }
+.line-grid { display:grid; grid-template-columns:2fr 1fr 1fr 1fr; gap:8px; align-items:end; }
+@media (max-width:640px) { .line-grid { grid-template-columns:1fr 1fr; } .line-grid .span2 { grid-column:1 / -1; } }
+.line label { font-size:11px; margin-bottom:3px; }
+.line input, .line select { padding:10px 10px; }
+.sticky-bar { position:sticky; bottom:0; background:var(--white); padding:10px 0; display:flex; gap:10px; flex-wrap:wrap; border-top:1px solid var(--gray-mid); margin-top:12px; }
+.sticky-bar .btn { flex:1; min-width:120px; }
+details.adv { margin:8px 0 16px; }
+details.adv summary { cursor:pointer; font-size:13px; font-weight:600; padding:8px 0; }
+.pre { background:#111; color:#eee; padding:12px; border-radius:8px; overflow:auto; max-height:420px; font-size:12px; }
+.hint { font-size:12px; color:var(--gray-dark); margin-top:4px; }
+.toast { position:fixed; left:50%; bottom:24px; transform:translateX(-50%); background:#000; color:#fff; padding:10px 16px; border-radius:8px; font-size:14px; z-index:300; max-width:90vw; }

@@ -99,17 +99,28 @@ Fehlt `RENTMAN_API`, zeigt das Modul einen deutlichen Hinweis und nutzt ausschli
 
 1. **Der Projektauftrag bricht in Abschnitt 10 ab** (nach "Backwaren"). Es fehlen mindestens Rest der Einkaufsliste, Exporte, UI-Details und eventuell Abnahmekriterien. Bitte den Rest nachreichen.
 2. ~~Zustimmung zur Architektur~~ erledigt: Node-Modul im Portal, nur Admins.
-3. Zustimmung zu neuen Abhängigkeiten: `decimal.js`, für PDF `pdfkit`, für Excel `exceljs`.
+3. Neue Abhängigkeiten: `decimal.js` (vorhanden), für PDF später `pdfkit`. Kein Excel/CSV, kein `exceljs`.
 4. Zugriff auf die Rentman-Felder: Wer kann mir einen Auszug (JSON) eines echten Catering-Projekts über den Diagnose-Endpunkt oder aus der Rentman-API-Doku bereitstellen?
 5. ~~Stufen für Küche und Einkauf~~ entfallen (nur Admins). Wie kommt die Einkaufsliste später zum Einkäufer, wenn dieser keinen Admin-Zugang hat (PDF, Excel)?
 
-## 6. Stand der Umsetzung
+## 6. Entscheidungen des Auftraggebers
 
-Fertig (Schritt 1 und 2, Teil von 4):
-- `modules/catering/schema.js`: Schema mit Versionierung, 10 Standardkategorien
-- `modules/catering/units.js`, `calc.js`: Einheiten und Rechenkern (Modi A bis F, Puffer, Verlust, Zusammenführen, Gebinderundung), 18 Tests (`npm test`)
-- `modules/catering/rentman.js`: lesender Client (nur GET), Cache, Diagnose
-- Startseite `/catering/` mit Projektliste, Suche, Abgleich und Diagnose; ohne Token nur gekennzeichnete Testdaten
-- Einbindung: eine Zeile in `server.js`, Link in `admin.html`, Ausnahme im Service Worker
+- Das Modul ist nur für Portal-Admins zugänglich (wie `/karten`).
+- **Kein CSV/XLSX-Import oder -Export.** Rezepturen und Zutaten werden im Editor gepflegt. Export ausschließlich als **PDF** (Einkaufsliste, Phase 4, vorgesehen mit `pdfkit`).
 
-Offen: Rezeptur- und Zutatenverwaltung, Mapping, Kalkulationsansicht, Einkaufsliste, Sync-Konflikte, Exporte.
+## 7. Stand der Umsetzung
+
+**Phase 1 (fertig):** Schema mit Versionierung, Einheiten und Rechenkern, lesender Rentman-Client mit Diagnose, Startseite, Einbindung ins Portal.
+
+**Phase 2 (fertig, ohne Import):**
+- Zutatenverwaltung: Warengruppe, Basis- und Einkaufseinheit, Gebinde, Lieferant, Preis, Verlust, Dichte, Umrechnung Stück/Packung. Keine Duplikate (Name, ohne Groß-/Kleinschreibung), Archivierung statt Löschen.
+- Lieferanten (Name, Kontakt, Bemerkung). Gebindegrößen je Lieferant sind als Tabelle vorbereitet (Phase 5).
+- Rezepturen mit unveränderlichen Versionen: jede Änderung erzeugt eine neue Version, ältere bleiben les- und reproduzierbar. Duplizieren (ohne Rentman-Zuordnung), Archivieren, eindeutige Zuordnung über Rentman-Artikel-ID bzw. Artikelnummer.
+- Paralleles Bearbeiten: Zutaten und Lieferanten über Versionszähler `rev`, Rezepturen über `baseVersion`. Veraltete Stände werden mit 409 abgelehnt, nichts wird unbemerkt überschrieben.
+- Serverseitige Prüfung aller Eingaben, nicht umrechenbare Einheiten werden mit verständlicher Meldung abgelehnt.
+- Änderungsprotokoll (`catering_audit_log`) mit Benutzer und Zeitpunkt.
+- Tests: `npm test` (28 Tests: Rechenkern, API, Berechtigungen, Versionierung, Konflikte, Beispiel aus dem Auftrag 11 / 13,75 / 15 kg). Zusätzlich manuell im Browser (mobil) durchgespielt.
+
+**Noch offen:** Phase 3 (Rentman-Projektimport, Artikelzuordnung, Kalkulation, Snapshots), Phase 4 (Einkaufsliste, PDF), Phase 5 (Lieferantengebinde, Wareneinsatz, Sammelbestellung), Einstellungsseite, Foto-Upload der Rezeptur (Feld vorhanden, Upload fehlt).
+
+**Bekannte Einschränkungen:** Der Rentman-Zugang ist ungetestet gegen echte Daten (Token fehlt). Die Felder für Gästezahl, Kunde und Ort sind unbestätigt (siehe Abschnitt 2).

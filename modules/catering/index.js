@@ -7,6 +7,10 @@ const { migrate } = require('./schema');
 const rentman = require('./rentman');
 const { UNITS } = require('./units');
 const { MODES } = require('./calc');
+const { createAudit } = require('./audit');
+const { ApiError } = require('./validate');
+const { createMasterdataRouter } = require('./routes/masterdata');
+const { createRecipesRouter } = require('./routes/recipes');
 
 // Beispielprojekte nur für Oberfläche und Tests, nie als echte Daten ausgeben.
 const SAMPLE_PROJECTS = [
@@ -16,6 +20,7 @@ const SAMPLE_PROJECTS = [
 function mount(app, db, { requireAdmin }) {
   const schemaVersion = migrate(db);
   const projectCache = rentman.createProjectCache(db);
+  const audit = createAudit(db);
 
   // Seite: ohne Admin-Login Weiterleitung zum Login
   const gate = (req, res, next) => {
@@ -58,6 +63,24 @@ function mount(app, db, { requireAdmin }) {
     } catch (e) {
       res.status(e.status === 400 ? 400 : 502).json({ error: e.message });
     }
+  });
+
+  api.use(createMasterdataRouter(db, audit));
+  api.use(createRecipesRouter(db, audit));
+
+  // Änderungsprotokoll eines Datensatzes
+  api.get('/audit', (req, res) => {
+    const rows = db.prepare('SELECT at, user_name, action, detail FROM catering_audit_log WHERE entity = ? AND entity_id = ? ORDER BY id DESC LIMIT 100')
+      .all(String(req.query.entity || ''), String(req.query.id || ''));
+    res.json(rows.map(r => ({ at: r.at, userName: r.user_name, action: r.action, detail: r.detail ? JSON.parse(r.detail) : null })));
+  });
+
+  // Fehlerbehandlung: verständliche Meldungen, keine internen Details oder Geheimnisse nach außen
+  api.use((req, res) => res.status(404).json({ error: 'Nicht gefunden.' }));
+  api.use((err, req, res, next) => {   // eslint-disable-line no-unused-vars
+    if (err instanceof ApiError) return res.status(err.status).json({ error: err.message, ...(err.extra || {}) });
+    console.error('Catering-Fehler:', err && err.code ? err.code : '', err && err.message);
+    res.status(500).json({ error: 'Interner Fehler. Bitte erneut versuchen; bestehende Daten wurden nicht verändert.' });
   });
 
   app.use('/api/catering', api);

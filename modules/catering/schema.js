@@ -165,8 +165,54 @@ const MIGRATIONS = [
     fetched_at TEXT NOT NULL
   );
   `,
+  // 2: Phase 2 (Zutaten, Lieferanten, Rezepturen): Audit-Log, Warengruppen, Gebinde, Versionszähler
+  `
+  ALTER TABLE catering_ingredients ADD COLUMN rev INTEGER NOT NULL DEFAULT 1;
+  ALTER TABLE catering_ingredients ADD COLUMN updated_at TEXT;
+  ALTER TABLE catering_ingredients ADD COLUMN updated_by INTEGER;
+  ALTER TABLE catering_suppliers ADD COLUMN contact TEXT;
+  ALTER TABLE catering_suppliers ADD COLUMN rev INTEGER NOT NULL DEFAULT 1;
+  ALTER TABLE catering_suppliers ADD COLUMN updated_at TEXT;
+
+  -- keine zwei aktiven Zutaten mit gleichem Namen, keine zwei aktiven Rezepturen mit gleicher Zuordnung
+  CREATE UNIQUE INDEX uq_ingredients_name ON catering_ingredients(lower(name)) WHERE archived = 0;
+  CREATE UNIQUE INDEX uq_recipes_rentman ON catering_recipes(rentman_item_id) WHERE archived = 0 AND rentman_item_id IS NOT NULL;
+  CREATE UNIQUE INDEX uq_recipes_article ON catering_recipes(article_no) WHERE archived = 0 AND article_no IS NOT NULL;
+
+  CREATE TABLE catering_goods_groups (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL UNIQUE,
+    sort INTEGER NOT NULL DEFAULT 0
+  );
+
+  -- Gebindegrößen und Preise je Lieferant und Zutat (Phase 5 nutzt sie für die Auswahl)
+  CREATE TABLE catering_supplier_packages (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    supplier_id INTEGER NOT NULL REFERENCES catering_suppliers(id),
+    ingredient_id INTEGER NOT NULL REFERENCES catering_ingredients(id),
+    pack_size TEXT NOT NULL,
+    unit TEXT NOT NULL,
+    price TEXT,
+    article_no TEXT,
+    archived INTEGER NOT NULL DEFAULT 0
+  );
+
+  CREATE TABLE catering_audit_log (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    at TEXT NOT NULL DEFAULT (datetime('now')),
+    user_id INTEGER,
+    user_name TEXT,
+    entity TEXT NOT NULL,
+    entity_id TEXT,
+    action TEXT NOT NULL,
+    detail TEXT
+  );
+  CREATE INDEX idx_audit_entity ON catering_audit_log(entity, entity_id);
+  `,
 ];
 
+const DEFAULT_GOODS_GROUPS = ['Obst und Gemüse', 'Fleisch', 'Fisch', 'Milchprodukte', 'Backwaren', 'Trockenwaren',
+  'Tiefkühlprodukte', 'Sonstiges'];
 const DEFAULT_CATEGORIES = ['Fingerfood', 'Vorspeisen', 'Hauptgerichte', 'Beilagen', 'Salate', 'Desserts',
   'Brotzeit', 'Frühstück', 'Buffetkomponenten', 'Sonstige'];
 
@@ -183,6 +229,10 @@ function migrate(db) {
       if (version === 1) {
         const ins = db.prepare('INSERT OR IGNORE INTO catering_categories (name, sort) VALUES (?, ?)');
         DEFAULT_CATEGORIES.forEach((n, i) => ins.run(n, i));
+      }
+      if (version === 2) {
+        const ins = db.prepare('INSERT OR IGNORE INTO catering_goods_groups (name, sort) VALUES (?, ?)');
+        DEFAULT_GOODS_GROUPS.forEach((n, i) => ins.run(n, i));
       }
     })();
   }
