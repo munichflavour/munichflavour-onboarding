@@ -68,10 +68,8 @@ public/catering/    Frontend (HTML/JS/CSS im Stil des Portals)
 test/               Unit-Tests für units.js und calc.js (node:test)
 ```
 
-### Berechtigungen
-Neue Tabelle `catering_permissions(user_id, level)` mit Stufen `none`, `einkauf`, `kueche`, `manager`, plus Flag `sieht_preise`. Admins des Portals haben automatisch `manager`. Geprüft wird serverseitig in einer Middleware pro Route, das Frontend blendet nur zusätzlich aus. Preisfelder werden für Nutzer ohne Recht **serverseitig aus der Antwort entfernt**.
-
-Hinweis: Die Verwaltung der Stufen bräuchte eine kleine Erweiterung der Mitarbeiterverwaltung (Dropdown pro Mitarbeiter). Das ist die einzige Änderung an bestehender Oberfläche.
+### Berechtigungen (Entscheidung vom 2026-10-19)
+Das Modul ist wie der Kartengenerator **nur für angemeldete Portal-Admins** zugänglich. Seite (`/catering/`) und API (`/api/catering/*`) prüfen serverseitig die Admin-Rolle, ohne Login erfolgt eine Weiterleitung bzw. 403. Eigene Stufen für Küche und Einkauf sowie die Preis-Filterung entfallen vorerst. Sollten sie später nötig werden, kommen sie als Modulberechtigungen (Tabelle), nicht als neue globale Rollen.
 
 ### Rechnen
 - Dezimalarithmetik: `decimal.js` als neue Abhängigkeit (Mengen und Geld nie als Float).
@@ -100,7 +98,18 @@ Fehlt `RENTMAN_API`, zeigt das Modul einen deutlichen Hinweis und nutzt ausschli
 ## 5. Offene Punkte (Entscheidung bzw. Zuarbeit nötig)
 
 1. **Der Projektauftrag bricht in Abschnitt 10 ab** (nach "Backwaren"). Es fehlen mindestens Rest der Einkaufsliste, Exporte, UI-Details und eventuell Abnahmekriterien. Bitte den Rest nachreichen.
-2. Zustimmung zur Architektur (Node-Modul im Portal, Modulrechte statt neuer Rollen).
+2. ~~Zustimmung zur Architektur~~ erledigt: Node-Modul im Portal, nur Admins.
 3. Zustimmung zu neuen Abhängigkeiten: `decimal.js`, für PDF `pdfkit`, für Excel `exceljs`.
 4. Zugriff auf die Rentman-Felder: Wer kann mir einen Auszug (JSON) eines echten Catering-Projekts über den Diagnose-Endpunkt oder aus der Rentman-API-Doku bereitstellen?
-5. Wer soll in der Praxis welche Stufe bekommen (Küche, Einkauf)? Gibt es Mitarbeiter ohne eigenen Portal-Login, die einkaufen?
+5. ~~Stufen für Küche und Einkauf~~ entfallen (nur Admins). Wie kommt die Einkaufsliste später zum Einkäufer, wenn dieser keinen Admin-Zugang hat (PDF, Excel)?
+
+## 6. Stand der Umsetzung
+
+Fertig (Schritt 1 und 2, Teil von 4):
+- `modules/catering/schema.js`: Schema mit Versionierung, 10 Standardkategorien
+- `modules/catering/units.js`, `calc.js`: Einheiten und Rechenkern (Modi A bis F, Puffer, Verlust, Zusammenführen, Gebinderundung), 18 Tests (`npm test`)
+- `modules/catering/rentman.js`: lesender Client (nur GET), Cache, Diagnose
+- Startseite `/catering/` mit Projektliste, Suche, Abgleich und Diagnose; ohne Token nur gekennzeichnete Testdaten
+- Einbindung: eine Zeile in `server.js`, Link in `admin.html`, Ausnahme im Service Worker
+
+Offen: Rezeptur- und Zutatenverwaltung, Mapping, Kalkulationsansicht, Einkaufsliste, Sync-Konflikte, Exporte.
