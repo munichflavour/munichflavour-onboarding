@@ -274,6 +274,10 @@ const MIGRATIONS = [
     sort INTEGER NOT NULL DEFAULT 0
   );
   `,
+  // 4: Artikelnummer der Speise beim Lieferanten (für die Bestellung)
+  `
+  ALTER TABLE catering_dishes ADD COLUMN article_no TEXT;
+  `,
 ];
 
 const DEFAULT_GOODS_GROUPS = ['Obst und Gemüse', 'Fleisch', 'Fisch', 'Milchprodukte', 'Backwaren', 'Trockenwaren',

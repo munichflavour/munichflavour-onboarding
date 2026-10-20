@@ -116,7 +116,7 @@ function renderOrderPdf({ order, computed, kind, logoPath }) {
         doc.font('Helvetica-Bold').fontSize(12).fillColor(COLOR.text).text(supplier, M, doc.y, { width: W });
         doc.moveDown(0.3); head();
         for (const s of items) {
-          const sources = s.sources && s.sources.length ? `für: ${s.sources.join(', ')}` : '';
+          const sources = [s.articleNo ? `Art.-Nr. ${s.articleNo}` : null, s.sources && s.sources.length && s.kind === 'garnitur' ? `für: ${s.sources.join(', ')}` : null].filter(Boolean).join('  |  ');
           const buy = s.qty === null ? 'Menge offen' : qtyUnit(s.qty, s.unit) + (s.packs && s.packSize ? ` (${num(s.packs, 0)} × ${qtyUnit(s.packSize, s.unit)})` : '');
           const label = s.kind === 'garnitur' ? `${s.name} (Garnitur)` : s.name;
           doc.font('Helvetica').fontSize(10);

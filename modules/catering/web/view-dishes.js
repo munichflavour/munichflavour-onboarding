@@ -19,9 +19,9 @@ CAT.register('speisen', async root => {
   const render = () => {
     const q = $('#q').value.trim().toLowerCase();
     const list = dishes.filter(d => !q || d.name.toLowerCase().includes(q));
-    $('#hint').innerHTML = dishes.length ? '' : `<div class="warn-box">Noch keine Speisen angelegt. Du kannst die fünf Salate aus der Bestellübersicht vom 20.10. anlegen
-      (Füllmengen daraus zurückgerechnet, bitte prüfen) oder eine neue Speise erfassen.
-      <div style="margin-top:8px"><button class="btn btn-secondary btn-sm" id="exampleBtn">Salate aus der Bestellübersicht anlegen</button></div></div>`;
+    $('#hint').innerHTML = dishes.length ? '' : `<div class="warn-box">Noch keine Speisen angelegt. Du kannst die Salate der Menükarte vom 20.10. anlegen
+      (Gebinde und Artikelnummern aus dem Kugler-Shop, Füllmengen aus der Bestellübersicht zurückgerechnet, bitte prüfen) oder eine neue Speise erfassen.
+      <div style="margin-top:8px"><button class="btn btn-secondary btn-sm" id="exampleBtn">Salate (Kugler) anlegen</button></div></div>`;
     const ex = $('#exampleBtn');
     if (ex) ex.onclick = async () => {
       ex.disabled = true;
@@ -31,7 +31,7 @@ CAT.register('speisen', async root => {
       <div class="row" data-id="${d.id}">
         <div class="row-main">
           <div class="row-title">${esc(d.name)} ${d.archived ? '<span class="pill">archiviert</span>' : ''}</div>
-          <div class="row-meta">${esc(d.supplierName || 'ohne Lieferant')} · ${d.garnish.length ? 'Garnitur: ' + esc(d.garnish.map(g => g.name).join(', ')) : 'ohne Garnitur'}</div>
+          <div class="row-meta">${esc(d.supplierName || 'ohne Lieferant')}${d.articleNo ? ' (Art. ' + esc(d.articleNo) + ')' : ''} · ${d.garnish.length ? 'Garnitur: ' + esc(d.garnish.map(g => g.name).join(', ')) : 'ohne Garnitur'}</div>
         </div>
         <div style="text-align:right">
           <span class="pill ${d.fillGrams ? '' : 'warn'}">${d.fillGrams ? esc(fmt(d.fillGrams)) + ' g pro Glas' : 'Füllmenge fehlt'}</span>
@@ -60,6 +60,7 @@ CAT.register('speisen', async root => {
       ${field('Name der Speise', `<input type="text" id="d-name" value="${esc(d.name)}" maxlength="120">`)}
       <div class="grid2">
         ${field('Lieferant', `<select id="d-supplier">${options(suppliers.map(s => [s.id, s.name]), d.supplierId, 'ohne')}</select>`)}
+        ${field('Artikelnummer beim Lieferanten', `<input type="text" id="d-article" value="${esc(d.articleNo)}" maxlength="40">`, 'Erscheint auf der Einkaufsliste.')}
         ${field('Füllmenge pro Glas (g)', `<input type="text" inputmode="decimal" id="d-fill" value="${esc(fmt(d.fillGrams))}" placeholder="z. B. 40">`, 'Ohne Füllmenge kann nicht gerechnet werden.')}
         ${field('Gebinde / Bestellschritt (g)', `<input type="text" inputmode="decimal" id="d-step" value="${esc(fmt(d.stepGrams))}" placeholder="leer = nicht runden">`, 'Die Bestellmenge wird auf ein Vielfaches aufgerundet.')}
       </div>
@@ -77,7 +78,7 @@ CAT.register('speisen', async root => {
           const f = k => $(`[data-g="${k}"]`, g).value.trim();
           return { name: f('name'), qtyPerGlass: f('qtyPerGlass') || null, unit: f('unit'), packSize: f('packSize') || null };
         });
-        const body = { name: v('d-name'), supplierId: v('d-supplier') || null, fillGrams: v('d-fill') || null, stepGrams: v('d-step') || null,
+        const body = { name: v('d-name'), supplierId: v('d-supplier') || null, articleNo: v('d-article') || null, fillGrams: v('d-fill') || null, stepGrams: v('d-step') || null,
           note: v('d-note') || null, aliases: v('d-alias').split('\n').map(s => s.trim()).filter(Boolean), garnish, category: 'weckglas', rev: d.rev };
         await (isNew ? api('POST', '/dishes', body) : api('PUT', '/dishes/' + d.id, body));
         toast('Gespeichert'); await load(); return true;

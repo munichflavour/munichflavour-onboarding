@@ -16,21 +16,32 @@ function loadDish(db, id) {
     WHERE g.dish_id = ? ORDER BY g.sort, g.id`).all(id);
   const aliases = db.prepare('SELECT alias FROM catering_dish_aliases WHERE dish_id = ? ORDER BY alias').all(id).map(a => a.alias);
   return {
-    id: d.id, name: d.name, category: d.category, supplierId: d.supplier_id, supplierName: d.supplier_name, fillGrams: d.fill_grams,
+    id: d.id, name: d.name, category: d.category, supplierId: d.supplier_id, supplierName: d.supplier_name, articleNo: d.article_no, fillGrams: d.fill_grams,
     stepGrams: d.step_grams, note: d.note, archived: !!d.archived, rev: d.rev, aliases,
     garnish: garnish.map(g => ({ id: g.id, name: g.name, qtyPerGlass: g.qty_per_glass, unit: g.unit, packSize: g.pack_size, supplierId: g.supplier_id, supplierName: g.supplier_name })),
   };
 }
 
-// Beispieldaten aus der Bestellübersicht vom 20.10.2026. Füllmenge = Gesamtmenge / Gläser, abgerundet.
-// Menge der Garnitur ist nur dort eingetragen, wo sie bekannt ist (Radieschen, Cherrytomate, Tomate, Fleischpflanzerl).
-const OVERVIEW_NOTE = 'Füllmenge aus der Bestellübersicht vom 20.10.2026 zurückgerechnet (Gesamtmenge geteilt durch Gläser, abgerundet). Bitte prüfen.';
+// Beispieldaten: Namen, Artikelnummern und Gebinde laut Kugler-Shop (kugler.de, abgerufen am 20.10.2026), Füllmengen aus der
+// Bestellübersicht vom 20.10.2026 zurückgerechnet (Gesamtmenge geteilt durch Gläser, abgerundet). Als Gebinde (Bestellschritt)
+// ist das Hauptgebinde eingetragen, mit dem die Mengen der Bestellübersicht exakt aufgehen. Weitere Gebinde stehen in der Bemerkung.
+// Die Menge der Garnitur ist nur dort eingetragen, wo sie bekannt ist (Radieschen, Cherrytomate, Tomate, Fleischpflanzerl).
+const note = (fill, gebinde) => `${fill ? 'Füllmenge aus der Bestellübersicht vom 20.10.2026 zurückgerechnet, bitte prüfen. ' : 'Füllmenge noch nicht bekannt. '}`
+  + `Kugler-Shop (Stand 20.10.2026): ${gebinde}. Eingetragen ist das Hauptgebinde als Bestellschritt.`;
 const EXAMPLE_DISHES = [
-  { name: 'Schweizer Wurstsalat', fillGrams: '40', garnish: [{ name: 'Radieschen', qtyPerGlass: '0.5', unit: 'stk' }] },
-  { name: 'Pikanter Couscous', fillGrams: '52', garnish: [{ name: 'Cherrytomate', qtyPerGlass: '1', unit: 'stk' }] },
-  { name: 'Garnelen Coco Ginger', fillGrams: '38', garnish: [{ name: 'Dill', qtyPerGlass: null, unit: 'g' }] },
-  { name: 'Penne Rucola', fillGrams: '58', garnish: [{ name: 'Rucola', qtyPerGlass: null, unit: 'g' }, { name: 'Tomate', qtyPerGlass: '0.5', unit: 'stk' }] },
-  { name: 'Kartoffel-Gurkensalat', fillGrams: '51', garnish: [{ name: 'Mini-Fleischpflanzerl am Spieß', qtyPerGlass: '2', unit: 'stk' }] },
+  { name: 'Wurstsalat "Schweizer Art"', articleNo: '3271', fillGrams: '40', stepGrams: '900', garnish: [{ name: 'Radieschen', qtyPerGlass: '0.5', unit: 'stk' }],
+    note: note(true, 'Gebinde 900 g (Art. 3271), Becher ca. 410 g, Becher ca. 210 g') },
+  { name: 'Pikanter Couscous-Salat', articleNo: '4310', fillGrams: '52', stepGrams: '1000', garnish: [{ name: 'Cherrytomate', qtyPerGlass: '1', unit: 'stk' }],
+    note: note(true, 'Gebinde 1000 g (Art. 4310), Gebinde 500 g (Art. 4319), Gebinde 270 g') },
+  { name: 'Gambas "Coco-Ginger"', articleNo: '6741', fillGrams: '38', stepGrams: '1000', garnish: [{ name: 'Dill', qtyPerGlass: null, unit: 'g' }],
+    note: note(true, 'Gebinde 1000 g (Art. 6741), Becher ca. 570 g, Becher ca. 370 g') },
+  { name: 'Penne "Rucola"', articleNo: '360', fillGrams: '58', stepGrams: '1000', garnish: [{ name: 'Rucola', qtyPerGlass: null, unit: 'g' }, { name: 'Tomate', qtyPerGlass: '0.5', unit: 'stk' }],
+    note: note(true, 'Gebinde 1000 g (Art. 360), Becher ca. 530 g, Gebinde 270 g') },
+  { name: 'Kartoffel-Gurken-Salat', articleNo: '3591', fillGrams: '51', stepGrams: '1500', garnish: [{ name: 'Mini-Fleischpflanzerl am Spieß', qtyPerGlass: '2', unit: 'stk' }],
+    note: note(true, 'Gebinde 1500 g (Art. 3591), Gebinde 5000 g, Becher ca. 550 g, Becher ca. 350 g') },
+  // Steht auf der Menükarte und in Rentman, aber nicht in der Bestellübersicht: Füllmenge und Garnitur sind unbekannt.
+  { name: 'Bulgursalat "grüne Minze"', articleNo: '6790', fillGrams: null, stepGrams: '1000', garnish: [],
+    note: note(false, 'Gebinde 1000 g (Art. 6790), Becher ca. 450 g, Becher ca. 270 g') },
 ];
 
 function createDishesRouter(db, audit) {
@@ -47,6 +58,7 @@ function createDishesRouter(db, audit) {
     }
     const fillGrams = V.dec(b.fillGrams, 'Füllmenge pro Glas', { minExclusive: 0, max: 100000 });
     const stepGrams = V.dec(b.stepGrams, 'Gebinde', { minExclusive: 0, max: 1000000 });
+    const articleNo = V.str(b.articleNo, 'Artikelnummer', { max: 40 });
     const note = V.str(b.note, 'Bemerkung', { max: 1000 });
     const aliasList = Array.isArray(b.aliases) ? b.aliases : [];
     if (aliasList.length > 30) throw V.bad('Zu viele Rentman-Namen (höchstens 30).');
@@ -65,7 +77,7 @@ function createDishesRouter(db, audit) {
       return { name: gname, unit, qtyPerGlass: V.dec(g.qtyPerGlass, `${where}: Menge pro Glas`, { minExclusive: 0, max: 100000 }),
         packSize: V.dec(g.packSize, `${where}: Gebinde`, { minExclusive: 0, max: 1000000 }), supplierId: gSupplier };
     });
-    return { name, category, supplierId, fillGrams, stepGrams, note, aliases, garnish };
+    return { name, category, supplierId, articleNo, fillGrams, stepGrams, note, aliases, garnish };
   }
 
   function writeChildren(dishId, b) {
@@ -96,8 +108,8 @@ function createDishesRouter(db, audit) {
     let id;
     try {
       db.transaction(() => {
-        id = db.prepare("INSERT INTO catering_dishes (name, category, supplier_id, fill_grams, step_grams, note, updated_at) VALUES (?, ?, ?, ?, ?, ?, datetime('now'))")
-          .run(b.name, b.category, b.supplierId, b.fillGrams, b.stepGrams, b.note).lastInsertRowid;
+        id = db.prepare("INSERT INTO catering_dishes (name, category, supplier_id, article_no, fill_grams, step_grams, note, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'))")
+          .run(b.name, b.category, b.supplierId, b.articleNo, b.fillGrams, b.stepGrams, b.note).lastInsertRowid;
         writeChildren(id, b);
       })();
     } catch (e) {
@@ -114,8 +126,8 @@ function createDishesRouter(db, audit) {
     const rev = V.id(req.body.rev, 'Versionsstand');
     try {
       db.transaction(() => {
-        const info = db.prepare(`UPDATE catering_dishes SET name = ?, category = ?, supplier_id = ?, fill_grams = ?, step_grams = ?, note = ?,
-          rev = rev + 1, updated_at = datetime('now') WHERE id = ? AND rev = ?`).run(b.name, b.category, b.supplierId, b.fillGrams, b.stepGrams, b.note, id, rev);
+        const info = db.prepare(`UPDATE catering_dishes SET name = ?, category = ?, supplier_id = ?, article_no = ?, fill_grams = ?, step_grams = ?, note = ?,
+          rev = rev + 1, updated_at = datetime('now') WHERE id = ? AND rev = ?`).run(b.name, b.category, b.supplierId, b.articleNo, b.fillGrams, b.stepGrams, b.note, id, rev);
         if (!info.changes) {
           if (!db.prepare('SELECT 1 FROM catering_dishes WHERE id = ?').get(id)) throw new ApiError(404, 'Speise nicht gefunden.');
           throw conflictChanged();
@@ -152,8 +164,8 @@ function createDishesRouter(db, audit) {
       if (!supplier) supplier = { id: db.prepare("INSERT INTO catering_suppliers (name, updated_at) VALUES ('Kugler', datetime('now'))").run().lastInsertRowid };
       for (const ex of EXAMPLE_DISHES) {
         if (db.prepare('SELECT 1 FROM catering_dishes WHERE lower(name) = lower(?) AND archived = 0').get(ex.name)) continue;
-        const id = db.prepare("INSERT INTO catering_dishes (name, category, supplier_id, fill_grams, note, updated_at) VALUES (?, 'weckglas', ?, ?, ?, datetime('now'))")
-          .run(ex.name, supplier.id, ex.fillGrams, OVERVIEW_NOTE).lastInsertRowid;
+        const id = db.prepare("INSERT INTO catering_dishes (name, category, supplier_id, article_no, fill_grams, step_grams, note, updated_at) VALUES (?, 'weckglas', ?, ?, ?, ?, ?, datetime('now'))")
+          .run(ex.name, supplier.id, ex.articleNo, ex.fillGrams, ex.stepGrams, ex.note).lastInsertRowid;
         const ins = db.prepare('INSERT INTO catering_dish_garnish (dish_id, name, qty_per_glass, unit, sort) VALUES (?, ?, ?, ?, ?)');
         ex.garnish.forEach((g, i) => ins.run(id, g.name, g.qtyPerGlass, g.unit, i));
         created.push(ex.name);

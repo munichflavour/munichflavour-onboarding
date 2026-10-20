@@ -16,7 +16,7 @@ const empty = v => v === undefined || v === null || v === '';
 const keyOf = (name, unit) => `${String(name).trim().toLowerCase().replace(/\s+/g, ' ')}|${unit}`;
 
 // input: { guests, glassesPerPerson, lines: [{ id, glasses, rentmanName, dish }] }
-// dish: { id, name, fillGrams, stepGrams, supplierName, garnish: [{ name, qtyPerGlass, unit, packSize, supplierName }] } oder null
+// dish: { id, name, articleNo, fillGrams, stepGrams, supplierName, garnish: [{ name, qtyPerGlass, unit, packSize, supplierName }] } oder null
 function computeOrder({ guests, glassesPerPerson, lines }) {
   const warnings = [];
   const warn = (code, text, lineId) => warnings.push({ code, text, lineId: lineId ?? null });
@@ -63,7 +63,7 @@ function computeOrder({ guests, glassesPerPerson, lines }) {
           res.weg.push('kein Gebinde hinterlegt: keine Rundung');
         }
         res.orderGrams = order.toFixed();
-        shoppingMain.push({ kind: 'speise', name: dish.name, supplier: dish.supplierName || null, qty: res.orderGrams, unit: 'g',
+        shoppingMain.push({ kind: 'speise', name: dish.name, articleNo: dish.articleNo || null, supplier: dish.supplierName || null, qty: res.orderGrams, unit: 'g',
           need: res.needGrams, packSize: res.stepGrams, open: false, sources: [label] });
       }
 

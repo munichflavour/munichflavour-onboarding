@@ -41,19 +41,44 @@ test('Speisen: anlegen, Duplikat, Prüfungen, Konflikt bei paralleler Bearbeitun
   } finally { t.close(); }
 });
 
-test('Beispiel aus der Bestellübersicht wird nur auf Knopfdruck und nur einmal angelegt', async () => {
+test('Beispielkatalog (Kugler) wird nur auf Knopfdruck und nur einmal angelegt', async () => {
   const t = await setup();
   try {
     assert.equal((await t.admin('GET', '/api/catering/dishes')).json.length, 0);       // nichts vorbelegt
     const first = await t.admin('POST', '/api/catering/dishes/import-example');
-    assert.equal(first.json.created.length, 5);
+    assert.equal(first.json.created.length, 6);
     assert.equal((await t.admin('POST', '/api/catering/dishes/import-example')).json.created.length, 0);
     const dishes = (await t.admin('GET', '/api/catering/dishes')).json;
-    const penne = dishes.find(d => d.name === 'Penne Rucola');
+    const penne = dishes.find(d => d.name === 'Penne "Rucola"');
     assert.equal(penne.fillGrams, '58');
-    assert.equal(penne.stepGrams, null);                                              // Gebinde unbekannt: nicht erfunden
+    assert.equal(penne.stepGrams, '1000');
+    assert.equal(penne.articleNo, '360');
     assert.equal(penne.supplierName, 'Kugler');
     assert.equal(penne.garnish.find(g => g.name === 'Rucola').qtyPerGlass, null);      // unbekannte Menge bleibt offen
+    const bulgur = dishes.find(d => d.name === 'Bulgursalat "grüne Minze"');
+    assert.equal(bulgur.fillGrams, null);                                              // Füllmenge unbekannt: nicht erfunden
+    assert.equal(bulgur.stepGrams, '1000');
+  } finally { t.close(); }
+});
+
+test('Mit dem Kugler-Katalog ergeben sich genau die Mengen der Bestellübersicht vom 20.10.', async () => {
+  const t = await setup();
+  try {
+    await t.admin('POST', '/api/catering/dishes/import-example');
+    const dishes = (await t.admin('GET', '/api/catering/dishes')).json;
+    const byName = n => dishes.find(d => d.name === n).id;
+    const plan = [['Wurstsalat "Schweizer Art"', 22, 900], ['Pikanter Couscous-Salat', 19, 1000], ['Gambas "Coco-Ginger"', 26, 1000],
+      ['Penne "Rucola"', 34, 2000], ['Kartoffel-Gurken-Salat', 29, 1500]];
+    const o = (await t.admin('POST', '/api/catering/orders', { name: 'Hausbau (Testdaten)', guests: 50, glassesPerPerson: '2,6' })).json;
+    const saved = (await t.admin('PUT', `/api/catering/orders/${o.id}`, { name: o.name, guests: '50', glassesPerPerson: '2.6', rev: o.rev,
+      lines: plan.map(([n, g]) => ({ rentmanName: n, dishId: byName(n), glasses: String(g) })) })).json;
+    assert.deepEqual(saved.computed.lines.map(l => Number(l.orderGrams)), plan.map(p => p[2]));
+    assert.equal(saved.computed.totalGlasses, '130');
+    assert.equal(saved.computed.warnings.filter(w => w.code === 'summe').length, 0);
+    // Rucola und Dill sind offen: Bestellung bleibt unvollständig, Artikelnummern stehen in der Einkaufsliste
+    assert.equal(saved.computed.complete, false);
+    assert.equal(saved.computed.shopping.find(s => s.name === 'Penne "Rucola"').articleNo, '360');
+    assert.equal(saved.computed.shopping.find(s => s.name === 'Radieschen').qty, '11');
   } finally { t.close(); }
 });
 
