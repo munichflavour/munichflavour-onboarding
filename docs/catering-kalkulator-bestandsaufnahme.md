@@ -108,19 +108,28 @@ Fehlt `RENTMAN_API`, zeigt das Modul einen deutlichen Hinweis und nutzt ausschli
 - Das Modul ist nur für Portal-Admins zugänglich (wie `/karten`).
 - **Kein CSV/XLSX-Import oder -Export.** Rezepturen und Zutaten werden im Editor gepflegt. Export ausschließlich als **PDF** (Einkaufsliste, Phase 4, vorgesehen mit `pdfkit`).
 
-## 7. Stand der Umsetzung
+## 7. Kurswechsel: schlanker Bestellrechner (2026-10-20)
 
-**Phase 1 (fertig):** Schema mit Versionierung, Einheiten und Rechenkern, lesender Rentman-Client mit Diagnose, Startseite, Einbindung ins Portal.
+Der Betrieb besteht aus einer Anrichteküche. Fertige Salate werden bei einem Großhändler (Kugler) gekauft, in Gläser abgefüllt und garniert. Rezepturen mit Zutatenlisten werden nicht gebraucht. Daher gilt ab jetzt der schlanke Weg. Die Bausteine aus Phase 2 (Zutatenkatalog, Rezepturen) bleiben im Code, sind aber aus der Navigation entfernt.
 
-**Phase 2 (fertig, ohne Import):**
-- Zutatenverwaltung: Warengruppe, Basis- und Einkaufseinheit, Gebinde, Lieferant, Preis, Verlust, Dichte, Umrechnung Stück/Packung. Keine Duplikate (Name, ohne Groß-/Kleinschreibung), Archivierung statt Löschen.
-- Lieferanten (Name, Kontakt, Bemerkung). Gebindegrößen je Lieferant sind als Tabelle vorbereitet (Phase 5).
-- Rezepturen mit unveränderlichen Versionen: jede Änderung erzeugt eine neue Version, ältere bleiben les- und reproduzierbar. Duplizieren (ohne Rentman-Zuordnung), Archivieren, eindeutige Zuordnung über Rentman-Artikel-ID bzw. Artikelnummer.
-- Paralleles Bearbeiten: Zutaten und Lieferanten über Versionszähler `rev`, Rezepturen über `baseVersion`. Veraltete Stände werden mit 409 abgelehnt, nichts wird unbemerkt überschrieben.
-- Serverseitige Prüfung aller Eingaben, nicht umrechenbare Einheiten werden mit verständlicher Meldung abgelehnt.
-- Änderungsprotokoll (`catering_audit_log`) mit Benutzer und Zeitpunkt.
-- Tests: `npm test` (28 Tests: Rechenkern, API, Berechtigungen, Versionierung, Konflikte, Beispiel aus dem Auftrag 11 / 13,75 / 15 kg). Zusätzlich manuell im Browser (mobil) durchgespielt.
+**Rechnung:**
+- Gläser gesamt (Soll) = Gäste x Gläser pro Person. Gläser pro Person werden vom Benutzer festgelegt, es gibt keinen Standardwert.
+- Je Speise: Gläser x Füllmenge pro Glas (g), aufgerundet auf das Gebinde (Bestellschritt), falls hinterlegt. Ohne Gebinde wird nicht gerundet.
+- Garnitur pro Glas (z. B. ½ Radieschen) kommt auf die Einkaufsliste. Gleiche Garnitur aus mehreren Speisen wird zusammengefasst und erst danach auf das Gebinde gerundet.
+- Fehlende Angaben (Füllmenge, Zuordnung, Garnitur-Menge, Gästezahl) werden nie als 0 gerechnet. Die Bestellung gilt dann als unvollständig, das PDF trägt eine rote Warnung, Abschließen ist gesperrt.
 
-**Noch offen:** Phase 3 (Rentman-Projektimport, Artikelzuordnung, Kalkulation, Snapshots), Phase 4 (Einkaufsliste, PDF), Phase 5 (Lieferantengebinde, Wareneinsatz, Sammelbestellung), Einstellungsseite, Foto-Upload der Rezeptur (Feld vorhanden, Upload fehlt).
+**Herleitung der Füllmengen:** Aus der Bestellübersicht vom 20.10.2026 (Gesamtmenge geteilt durch Gläser, abgerundet): Wurstsalat 40 g, Couscous 52 g, Garnelen 38 g, Penne 58 g, Kartoffel-Gurken 51 g. Mit 100-g-Gebinden ergibt das exakt die Mengen der Übersicht (900 g, 1 kg, 1 kg, 2 kg, 1,5 kg). Die Werte sind Näherungen und im Katalog zu prüfen. Das Gebinde bei Kugler ist noch nicht bekannt und daher nicht hinterlegt.
 
-**Bekannte Einschränkungen:** Der Rentman-Zugang ist ungetestet gegen echte Daten (Token fehlt). Die Felder für Gästezahl, Kunde und Ort sind unbestätigt (siehe Abschnitt 2).
+**Rentman:** Blöcke der Materialgruppe "Catering" mit ihrer Menge (Personen) und die Speisen direkt darunter. Der Benutzer wählt die Blöcke und sieht die Quelle der Gästezahl. Namen werden nur vorgeschlagen (Ähnlichkeit), zugeordnet wird erst nach Bestätigung, die für künftige Importe gespeichert wird.
+
+**Ausgabe:** PDF "Bestellübersicht" (Anzahl, Gericht, Menge, Garnitur, Gesamt) und PDF "Einkaufsliste" nach Lieferant mit Abhak-Kästchen. Optional `assets/logo-pdf.jpg` als kleineres Logo (das vorhandene `logo.jpg` macht jedes PDF ca. 2 MB groß).
+
+**Noch nicht umgesetzt:** Brotzeit und Desserts (Entscheidung: später), mehrere Projekte zusammen, Wareneinsatz, Lieferantengebinde je Artikel.
+
+## 8. Stand der Umsetzung
+
+- Phase 1 und 2 fertig (siehe oben), Phase 2 liegt brach.
+- Schlanker Bestellrechner fertig: Speisenkatalog, Bestellungen mit Rentman-Import, PDF, Abschließen mit eingefrorenem Ergebnis, Konflikterkennung bei paralleler Bearbeitung, Änderungsprotokoll.
+- Tests: `npm test` (49 Tests). Zusätzlich im Browser mit dem Live-Projekt vom 20.10. durchgespielt (nur lesend aus Rentman).
+
+**Bekannte Einschränkungen:** Rucola- und Dill-Menge pro Glas sind unbekannt und offen. Die Rentman-Anbindung liest nur Blöcke und Speisen. Der Abgleich mit geänderten Rentman-Daten nach der Anlage (Sync) ist noch nicht gebaut.

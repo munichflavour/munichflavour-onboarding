@@ -11,6 +11,8 @@ const { createAudit } = require('./audit');
 const { ApiError } = require('./validate');
 const { createMasterdataRouter } = require('./routes/masterdata');
 const { createRecipesRouter } = require('./routes/recipes');
+const { createDishesRouter } = require('./routes/dishes');
+const { createOrdersRouter } = require('./routes/orders');
 
 // Beispielprojekte nur für Oberfläche und Tests, nie als echte Daten ausgeben.
 const SAMPLE_PROJECTS = [
@@ -67,6 +69,8 @@ function mount(app, db, { requireAdmin }) {
 
   api.use(createMasterdataRouter(db, audit));
   api.use(createRecipesRouter(db, audit));
+  api.use(createDishesRouter(db, audit));
+  api.use(createOrdersRouter(db, audit));
 
   // Änderungsprotokoll eines Datensatzes
   api.get('/audit', (req, res) => {

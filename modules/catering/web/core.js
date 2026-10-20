@@ -75,7 +75,7 @@ const CAT = (() => {
 
   async function route() {
     const [name, arg] = (location.hash.replace(/^#\/?/, '') || 'start').split('/');
-    const tab = name === 'rezept' ? 'rezepte' : name;
+    const tab = name === 'bestellung' ? 'start' : name;
     $$('#nav .tab-btn').forEach(b => b.classList.toggle('active', b.dataset.view === tab));
     const root = $('#view');
     const fn = views[name] || views.start;

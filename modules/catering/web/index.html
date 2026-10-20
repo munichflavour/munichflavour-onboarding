@@ -17,18 +17,20 @@
 
   <main>
     <nav class="tabs" id="nav">
-      <button class="tab-btn" data-view="start">Projekte</button>
-      <button class="tab-btn" data-view="rezepte">Rezepturen</button>
-      <button class="tab-btn" data-view="zutaten">Zutaten</button>
+      <button class="tab-btn" data-view="start">Bestellungen</button>
+      <button class="tab-btn" data-view="speisen">Speisen</button>
       <button class="tab-btn" data-view="lieferanten">Lieferanten</button>
+      <button class="tab-btn" data-view="rentman">Rentman</button>
     </nav>
     <div id="view"></div>
   </main>
 
   <script src="/catering/core.js"></script>
+  <script src="/catering/view-orders.js"></script>
+  <script src="/catering/view-dishes.js"></script>
+  <script src="/catering/view-suppliers.js"></script>
   <script src="/catering/view-projects.js"></script>
   <script src="/catering/view-ingredients.js"></script>
-  <script src="/catering/view-suppliers.js"></script>
   <script src="/catering/view-recipes.js"></script>
   <script>CAT.start();</script>
 </body>

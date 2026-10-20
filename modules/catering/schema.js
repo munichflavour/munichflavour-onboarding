@@ -209,6 +209,71 @@ const MIGRATIONS = [
   );
   CREATE INDEX idx_audit_entity ON catering_audit_log(entity, entity_id);
   `,
+  // 3: Schlanker Bestellrechner (Speisen im Glas): Speisenkatalog, Garnitur, bestätigte Rentman-Namen, Bestellungen
+  `
+  CREATE TABLE catering_dishes (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    category TEXT NOT NULL DEFAULT 'weckglas',
+    supplier_id INTEGER REFERENCES catering_suppliers(id),
+    fill_grams TEXT,                       -- Füllmenge pro Glas in Gramm
+    step_grams TEXT,                       -- Gebinde bzw. Bestellschritt in Gramm (NULL = nicht runden)
+    note TEXT,
+    archived INTEGER NOT NULL DEFAULT 0,
+    rev INTEGER NOT NULL DEFAULT 1,
+    created_at TEXT DEFAULT (datetime('now')),
+    updated_at TEXT
+  );
+  CREATE UNIQUE INDEX uq_dishes_name ON catering_dishes(lower(name)) WHERE archived = 0;
+
+  -- Bestätigte Zuordnung: dieser (normalisierte) Rentman-Name gehört zu dieser Speise
+  CREATE TABLE catering_dish_aliases (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    dish_id INTEGER NOT NULL REFERENCES catering_dishes(id),
+    alias TEXT NOT NULL UNIQUE,
+    confirmed_at TEXT DEFAULT (datetime('now'))
+  );
+
+  CREATE TABLE catering_dish_garnish (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    dish_id INTEGER NOT NULL REFERENCES catering_dishes(id),
+    name TEXT NOT NULL,
+    qty_per_glass TEXT,                    -- NULL = Menge noch offen (wird nicht als 0 gerechnet)
+    unit TEXT NOT NULL DEFAULT 'stk',
+    pack_size TEXT,                        -- Gebinde in der Einheit der Zeile, NULL = nicht runden
+    supplier_id INTEGER REFERENCES catering_suppliers(id),
+    sort INTEGER NOT NULL DEFAULT 0
+  );
+
+  CREATE TABLE catering_orders (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    rentman_project_id TEXT,
+    number TEXT,
+    name TEXT NOT NULL,
+    event_date TEXT,
+    guests TEXT,
+    guests_source TEXT,                    -- woher die Gästezahl stammt
+    glasses_per_person TEXT,
+    status TEXT NOT NULL DEFAULT 'entwurf' CHECK (status IN ('entwurf','abgeschlossen')),
+    snapshot TEXT,                         -- eingefrorenes Ergebnis beim Abschließen
+    rev INTEGER NOT NULL DEFAULT 1,
+    created_at TEXT DEFAULT (datetime('now')),
+    created_by INTEGER,
+    updated_at TEXT
+  );
+  CREATE UNIQUE INDEX uq_orders_open_project ON catering_orders(rentman_project_id) WHERE status = 'entwurf' AND rentman_project_id IS NOT NULL;
+
+  CREATE TABLE catering_order_lines (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    order_id INTEGER NOT NULL REFERENCES catering_orders(id) ON DELETE CASCADE,
+    dish_id INTEGER REFERENCES catering_dishes(id),
+    rentman_row_id TEXT,
+    rentman_name TEXT,
+    block_name TEXT,
+    glasses TEXT,
+    sort INTEGER NOT NULL DEFAULT 0
+  );
+  `,
 ];
 
 const DEFAULT_GOODS_GROUPS = ['Obst und Gemüse', 'Fleisch', 'Fisch', 'Milchprodukte', 'Backwaren', 'Trockenwaren',

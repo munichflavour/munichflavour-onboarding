@@ -123,4 +123,41 @@ async function diagnoseProject(id) {
   return out;
 }
 
-module.exports = { RentmanError, isConfigured, get, getAll, fetchProjects, createProjectCache, diagnoseProject };
+
+// ---- Speisenblöcke eines Projekts ----
+// Aufbau in Rentman (siehe Diagnose): In der Materialgruppe "Catering" stehen Blockzeilen (z. B. "Speisen im
+// Weckglas", Menge = Personenzahl der Pauschale). Darunter hängen die einzelnen Speisen mit Menge 0, und
+// darunter wiederum Bestandteile. Gerechnet wird nur mit den Blöcken und den Speisen direkt darunter.
+const plain = t => String(t || '').replace(/<[^>]+>/g, ' ').replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/\s+/g, ' ').trim();
+const CATERING_GROUP = /^catering\b/i;
+
+function extractCateringBlocks(rows, groups) {
+  const groupName = {};
+  groups.forEach(g => { groupName[`/projectequipmentgroup/${g.id}`] = String(g.name || '').trim(); });
+  const blocks = rows
+    .filter(r => !r.parent && CATERING_GROUP.test(groupName[r.equipment_group] || '') && (Number(r.quantity) || 0) > 0)
+    .map(r => ({ rowId: String(r.id), name: plain(r.name), quantity: String(r.quantity), remark: plain(r.external_remark), dishes: [] }));
+  const byUrl = Object.fromEntries(blocks.map(b => [`/projectequipment/${b.rowId}`, b]));
+  rows.forEach(r => {
+    const block = byUrl[r.parent];
+    if (block) block.dishes.push({ rowId: String(r.id), name: plain(r.name), equipmentId: idOf(r.equipment), remark: plain(r.external_remark) });
+  });
+  return blocks;
+}
+
+async function fetchProjectCatering(id) {
+  if (!/^\d+$/.test(String(id))) throw new RentmanError('Projekt-ID muss eine Zahl sein', 400);
+  const [project, rows, groups] = await Promise.all([
+    get(`/projects/${id}`),
+    getAll(`/projects/${id}/projectequipment`),
+    getAll(`/projects/${id}/projectequipmentgroup`),
+  ]);
+  const p = project.data;
+  return {
+    project: { id: String(p.id), number: p.number === null || p.number === undefined ? null : String(p.number), name: plain(p.name),
+      start: p.planperiod_start || null },
+    blocks: extractCateringBlocks(rows, groups),
+  };
+}
+
+module.exports = { extractCateringBlocks, fetchProjectCatering, plain, RentmanError, isConfigured, get, getAll, fetchProjects, createProjectCache, diagnoseProject };

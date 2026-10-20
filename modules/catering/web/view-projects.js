@@ -1,5 +1,5 @@
-// Projektübersicht (Rentman). Ohne Token nur gekennzeichnete Testdaten.
-CAT.register('start', async root => {
+// Rentman-Übersicht: Projektliste und Diagnose. Ohne Token nur gekennzeichnete Testdaten.
+CAT.register('rentman', async root => {
   const { $, esc, api } = CAT;
   root.innerHTML = `
     <div id="rentmanWarn" class="warn-box hidden"></div>
