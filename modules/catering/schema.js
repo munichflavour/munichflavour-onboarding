@@ -278,6 +278,19 @@ const MIGRATIONS = [
   `
   ALTER TABLE catering_dishes ADD COLUMN article_no TEXT;
   `,
+  // 5: Manuelle Gesamtmenge einer Garnitur je Bestellung
+  `
+  CREATE TABLE catering_order_garnish_overrides (
+    order_id INTEGER NOT NULL REFERENCES catering_orders(id) ON DELETE CASCADE,
+    key TEXT NOT NULL,                     -- Name und Einheit der Garnitur, normalisiert
+    name TEXT NOT NULL,
+    qty TEXT NOT NULL,
+    unit TEXT NOT NULL,
+    note TEXT,
+    updated_at TEXT DEFAULT (datetime('now')),
+    PRIMARY KEY (order_id, key)
+  );
+  `,
 ];
 
 const DEFAULT_GOODS_GROUPS = ['Obst und Gemüse', 'Fleisch', 'Fisch', 'Milchprodukte', 'Backwaren', 'Trockenwaren',

@@ -134,7 +134,7 @@ CAT.register('bestellung', async (root, arg) => {
   const { $, $$, esc, fmt, api, options, toast, confirmDialog } = CAT;
   let o = await api('GET', '/orders/' + encodeURIComponent(arg));
   const dishes = o.status === 'entwurf' ? await api('GET', '/dishes') : [];
-  const locked = o.status === 'abgeschlossen';
+  let locked = o.status === 'abgeschlossen';
   let dirty = false;
   const dishOpts = sel => options(dishes.map(d => [d.id, d.name]), sel, 'Speise wählen');
 
@@ -158,6 +158,7 @@ CAT.register('bestellung', async (root, arg) => {
   const qty = (q, unit) => q === null ? 'offen' : unit === 'g' ? (Number(q) >= 1000 ? fmt(String(Number(q) / 1000)) + ' kg' : fmt(q) + ' g') : fmt(q) + ' ' + (CAT.meta.units[unit] || unit);
 
   function draw() {
+    locked = o.status === 'abgeschlossen';      // nach Abschließen oder Wieder öffnen neu bestimmen
     const c = o.computed;
     root.innerHTML = `
       <a href="#/start" class="back-btn" style="display:inline-flex;margin-bottom:12px;">← Zurück zu den Bestellungen</a>
@@ -185,9 +186,10 @@ CAT.register('bestellung', async (root, arg) => {
         <h3 style="font-size:15px;margin-bottom:10px;">Ergebnis</h3>
         ${c.warnings.length ? `<div class="${c.complete ? 'warn-box' : 'alert alert-error'}"><b>${c.complete ? 'Hinweise' : 'Unvollständig, nicht zum Bestellen verwenden'}</b><ul style="margin:6px 0 0 18px">${c.warnings.map(w => `<li>${esc(w.text)}</li>`).join('')}</ul></div>` : ''}
         ${c.shopping.length ? `<div class="note" style="margin-bottom:6px">Einkaufsliste${c.complete ? '' : ' (unvollständig)'}</div>` + c.shopping.map(s => `
-          <div class="row" style="cursor:default"><div class="row-main"><div class="row-title">${esc(s.name)}${s.kind === 'garnitur' ? ' <span class="pill">Garnitur</span>' : ''}</div>
-          <div class="row-meta">${esc(s.supplier || 'ohne Lieferant')}${s.sources && s.sources.length ? ' · für ' + esc(s.sources.join(', ')) : ''}</div></div>
-          <div style="text-align:right"><b ${s.qty === null ? 'style="color:#cc0000"' : ''}>${esc(qty(s.qty, s.unit))}</b>${s.need !== null && s.qty !== null && s.need !== s.qty ? `<div class="row-meta">Bedarf ${esc(qty(s.need, s.unit))}</div>` : ''}</div></div>`).join('')
+          <div class="row" style="cursor:default"><div class="row-main"><div class="row-title">${esc(s.name)}${s.kind === 'garnitur' ? ' <span class="pill">Garnitur</span>' : ''}${s.overridden ? ' <span class="pill sample">manuell</span>' : ''}</div>
+          <div class="row-meta">${esc(s.supplier || 'ohne Lieferant')}${s.sources && s.sources.length ? ' · für ' + esc(s.sources.join(', ')) : ''}${s.overrideNote ? ' · ' + esc(s.overrideNote) : ''}</div></div>
+          <div style="text-align:right"><b ${s.qty === null ? 'style="color:#cc0000"' : ''}>${esc(qty(s.qty, s.unit))}</b>${s.need !== null && s.qty !== null && (s.need !== s.qty || s.needUnit !== s.unit) ? `<div class="row-meta">${s.overridden ? 'berechnet' : 'Bedarf'} ${esc(qty(s.need, s.needUnit || s.unit))}</div>` : ''}${s.overridden && s.need === null ? '<div class="row-meta">Menge pro Glas offen</div>' : ''}
+          ${s.kind === 'garnitur' && !locked ? `<button class="btn btn-secondary btn-sm" data-ov="${esc(s.key)}" style="margin-top:4px">${s.overridden ? 'Menge ändern' : s.qty === null ? 'Menge festlegen' : 'Menge ändern'}</button>` : ''}</div></div>`).join('')
           : '<div class="note">Noch nichts zu bestellen.</div>'}
       </div>
       <div class="sticky-bar">
@@ -262,12 +264,43 @@ CAT.register('bestellung', async (root, arg) => {
     } else {
       $('#reopen').onclick = async () => { try { o = await api('POST', `/orders/${o.id}/reopen`); location.reload(); } catch (e) { showErr(e.message); } };
     }
+    $$('[data-ov]', root).forEach(b => b.onclick = async () => {
+      const item = o.computed.shopping.find(x => x.key === b.dataset.ov);
+      if (!item) return;
+      if (dirty && !(await save())) return;       // der Versionsstand muss zum gespeicherten Stand passen
+      overrideDialog(o.computed.shopping.find(x => x.key === b.dataset.ov));
+    });
     const pdf = type => async () => {
       if (dirty && !locked && !(await save())) return;      // PDF zeigt immer den gespeicherten Stand
       window.open(`/api/catering/orders/${o.id}/pdf?type=${type}`, '_blank');
     };
     $('#pdf1').onclick = pdf('bestellung');
     $('#pdf2').onclick = pdf('einkauf');
+  }
+
+  // Manuelle Gesamtmenge einer Garnitur, gilt nur für diese Bestellung
+  function overrideDialog(item) {
+    const units = ['stk', 'g', 'kg', 'ml', 'l', 'pkg'];
+    const m = CAT.modal(`${item.name}: Menge festlegen`, `
+      <div class="note" style="margin-bottom:10px">${item.need !== null && item.need !== undefined ? 'Berechnet: ' + esc(qty(item.need, item.needUnit || item.unit)) : 'Die Menge pro Glas ist noch offen.'}
+        Die Menge gilt nur für diese Bestellung und wird nicht auf ein Gebinde gerundet.</div>
+      <div class="grid2">
+        ${CAT.field('Menge', `<input type="text" inputmode="decimal" id="ov-qty" value="${item.overridden ? esc(fmt(item.qty)) : ''}" placeholder="z. B. 1">`)}
+        ${CAT.field('Einheit', `<select id="ov-unit">${CAT.options(units.map(u => [u, CAT.meta.units[u]]), item.overridden ? item.unit : item.unit)}</select>`)}
+      </div>
+      ${CAT.field('Bemerkung (optional)', `<input type="text" id="ov-note" maxlength="200" value="${esc(item.overrideNote)}" placeholder="z. B. 1 Bund">`)}`, {
+      extraButtons: item.overridden ? '<button class="btn btn-secondary" data-reset>Zurücksetzen</button>' : '',
+      onSave: async el => {
+        o = await api('POST', `/orders/${o.id}/garnish-override`, { rev: o.rev, key: item.key, qty: $('#ov-qty', el).value.trim(),
+          unit: $('#ov-unit', el).value, note: $('#ov-note', el).value.trim() || null });
+        draw(); toast('Menge festgelegt'); return true;
+      },
+    });
+    const reset = CAT.$('[data-reset]', m.el);
+    if (reset) reset.onclick = async () => {
+      try { o = await api('POST', `/orders/${o.id}/garnish-override`, { rev: o.rev, key: item.key, qty: null }); m.close(); draw(); toast('Zurückgesetzt'); }
+      catch (e) { m.showError(e.message); }
+    };
   }
 
   draw();

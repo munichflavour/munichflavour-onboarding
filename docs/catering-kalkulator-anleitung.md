@@ -18,7 +18,8 @@ Nur für Admins. Im Admin-Bereich oben auf **Kalkulator** tippen.
 5. **Gläser pro Speise** eintragen oder **Gläser gleichmäßig verteilen** tippen. Oben steht, wie viele Gläser verteilt sind und wie viele laut Gästezahl nötig wären.
 6. **Speichern**. Darunter steht das Ergebnis: Einkaufsliste mit Bestellmenge, Bedarf, Artikelnummer und Garnitur. Der Rechenweg steht bei jeder Speise.
 7. **PDF Bestellung** (Anzahl, Gericht, Menge, Garnitur) oder **PDF Einkauf** (nach Lieferant, mit Abhak-Kästchen).
-8. **Abschließen** friert das Ergebnis ein. Spätere Änderungen an den Speisen verändern es nicht. Mit **Wieder öffnen** lässt es sich neu rechnen.
+8. **Garnitur-Menge von Hand festlegen:** In der Einkaufsliste hat jede Garnitur einen Knopf **Menge festlegen** bzw. **Menge ändern**. Damit gibst du die Gesamtmenge für diese Bestellung selbst an (z. B. 1 Stück, Bemerkung "1 Bund", oder 100 g). Sie ersetzt die berechnete Menge, wird nicht auf ein Gebinde gerundet und macht auch eine noch offene Menge pro Glas vollständig. Mit **Zurücksetzen** gilt wieder die Berechnung. Das PDF kennzeichnet solche Mengen als "manuell festgelegt".
+9. **Abschließen** friert das Ergebnis ein. Spätere Änderungen an den Speisen verändern es nicht. Mit **Wieder öffnen** lässt es sich neu rechnen.
 
 ## Wichtige Regeln
 - Rentman wird nur gelesen, nie geändert.

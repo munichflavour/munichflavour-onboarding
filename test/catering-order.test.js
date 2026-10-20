@@ -115,3 +115,48 @@ test('PDF: offene Garnitur-Menge erscheint nie als 0', async () => {
   const pdf = await renderOrderPdf({ order: { name: 'T', status: 'entwurf' }, computed, kind: 'einkauf' });
   assert.equal(pdf.subarray(0, 5).toString(), '%PDF-');
 });
+
+// ---- Manuelle Garnitur-Menge ----
+const { keyOf } = require('../modules/catering/order-calc');
+const gambas = (extra = {}) => ({ id: 1, name: 'Gambas', fillGrams: '38', stepGrams: '1000', garnish: [{ name: 'Dill', qtyPerGlass: null, unit: 'g', ...extra }] });
+
+test('Manuelle Menge ersetzt die berechnete und macht eine offene Garnitur vollständig', () => {
+  const base = { guests: 50, glassesPerPerson: 2, lines: [{ id: 1, glasses: 26, rentmanName: 'g', dish: gambas() }] };
+  const open = computeOrder(base);
+  assert.equal(open.complete, false);
+  const withOv = computeOrder({ ...base, garnishOverrides: [{ key: keyOf('Dill', 'g'), name: 'Dill', qty: '1', unit: 'stk', note: '1 Bund' }] });
+  assert.equal(withOv.complete, true);                                        // abweichende Gläser-Summe ist nur eine Warnung
+  assert.ok(!withOv.warnings.some(w => w.code === 'garnitur'));               // offene Menge ist abgedeckt
+  const dill = withOv.shopping.find(s => s.name === 'Dill');
+  assert.equal(dill.qty, '1');
+  assert.equal(dill.unit, 'stk');
+  assert.equal(dill.overridden, true);
+  assert.equal(dill.overrideNote, '1 Bund');
+  assert.equal(dill.open, false);
+  assert.equal(dill.need, null);                                              // berechneter Wert unbekannt, nicht 0
+});
+
+test('Manuelle Menge überschreibt eine berechnete Menge ohne Gebinderundung', () => {
+  const dish = gambas({ qtyPerGlass: '2', packSize: '50' });
+  const calc1 = computeOrder({ guests: 26, glassesPerPerson: 1, lines: [{ id: 1, glasses: 26, rentmanName: 'g', dish }] });
+  assert.equal(calc1.shopping.find(s => s.name === 'Dill').qty, '100');        // 52 g, aufgerundet auf 2 x 50 g
+  const ov = computeOrder({ guests: 26, glassesPerPerson: 1, lines: [{ id: 1, glasses: 26, rentmanName: 'g', dish }],
+    garnishOverrides: [{ key: keyOf('Dill', 'g'), name: 'Dill', qty: '60', unit: 'g' }] });
+  const dill = ov.shopping.find(s => s.name === 'Dill');
+  assert.equal(dill.qty, '60');                                                // genau die festgelegte Menge
+  assert.equal(dill.need, '52');                                               // berechneter Wert bleibt sichtbar
+  assert.equal(dill.packs, null);
+  assert.equal(ov.complete, true);
+});
+
+test('Manuelle Menge ohne passende Garnitur erzeugt einen Hinweis statt still zu verschwinden', () => {
+  const r = computeOrder({ guests: 10, glassesPerPerson: 1, lines: [{ id: 1, glasses: 10, rentmanName: 'g', dish: { ...gambas(), garnish: [] } }],
+    garnishOverrides: [{ key: keyOf('Dill', 'g'), name: 'Dill', qty: '1', unit: 'stk' }] });
+  assert.ok(r.warnings.some(w => w.code === 'override_unbenutzt'));
+  assert.ok(!r.shopping.some(s => s.name === 'Dill'));
+});
+
+test('Garnitur-Schlüssel ist unabhängig von Groß-/Kleinschreibung', () => {
+  assert.equal(keyOf('Dill', 'g'), keyOf('  dill ', 'g'));
+  assert.notEqual(keyOf('Dill', 'g'), keyOf('Dill', 'stk'));
+});

@@ -13,7 +13,7 @@ const dateDe = v => {
 };
 
 function garnishText(line) {
-  return line.garnish.map(g => (g.qtyPerGlass === null ? `${g.name} (Menge offen)` : `${perGlass(g.qtyPerGlass, g.unit)} ${g.name}`)).join(' & ');
+  return line.garnish.map(g => (g.qtyPerGlass === null ? (g.overridden ? g.name : `${g.name} (Menge offen)`) : `${perGlass(g.qtyPerGlass, g.unit)} ${g.name}`)).join(' & ');
 }
 
 // order: { name, number, eventDate, status, createdAt, updatedAt }, computed: Ergebnis von computeOrder
@@ -116,18 +116,22 @@ function renderOrderPdf({ order, computed, kind, logoPath }) {
         doc.font('Helvetica-Bold').fontSize(12).fillColor(COLOR.text).text(supplier, M, doc.y, { width: W });
         doc.moveDown(0.3); head();
         for (const s of items) {
-          const sources = [s.articleNo ? `Art.-Nr. ${s.articleNo}` : null, s.sources && s.sources.length && s.kind === 'garnitur' ? `für: ${s.sources.join(', ')}` : null].filter(Boolean).join('  |  ');
+          const sources = [s.articleNo ? `Art.-Nr. ${s.articleNo}` : null,
+        s.overridden ? `manuell festgelegt${s.overrideNote ? ': ' + s.overrideNote : ''}` : null, s.sources && s.sources.length && s.kind === 'garnitur' ? `für: ${s.sources.join(', ')}` : null].filter(Boolean).join('  |  ');
           const buy = s.qty === null ? 'Menge offen' : qtyUnit(s.qty, s.unit) + (s.packs && s.packSize ? ` (${num(s.packs, 0)} × ${qtyUnit(s.packSize, s.unit)})` : '');
           const label = s.kind === 'garnitur' ? `${s.name} (Garnitur)` : s.name;
           doc.font('Helvetica').fontSize(10);
-          const h = Math.max(doc.heightOfString(label, { width: cols[1].w }) + (sources ? 10 : 0), doc.heightOfString(buy, { width: cols[2].w }), 18) + 8;
+          const labelH = doc.heightOfString(label, { width: cols[1].w });
+          const sourcesH = sources ? doc.fontSize(7.5).heightOfString(sources, { width: cols[1].w }) + 2 : 0;
+          doc.fontSize(10);
+          const h = Math.max(labelH + sourcesH, doc.heightOfString(buy, { width: cols[2].w }), 18) + 8;
           if (doc.y + h > bottom()) { doc.addPage(); head(); }
           const y = doc.y;
           doc.lineWidth(1).strokeColor(COLOR.text).rect(cols[0].x, y + 1, 13, 13).stroke();
           doc.fillColor(COLOR.text).font('Helvetica').fontSize(10).text(label, cols[1].x, y, { width: cols[1].w });
           if (sources) doc.fontSize(7.5).fillColor(COLOR.gray).text(sources, cols[1].x, doc.y, { width: cols[1].w });
           doc.fontSize(10).fillColor(s.qty === null ? COLOR.warn : COLOR.text).font('Helvetica-Bold').text(buy, cols[2].x, y, { width: cols[2].w });
-          doc.font('Helvetica').fillColor(COLOR.gray).text(s.open || s.need === null || s.unit === undefined ? '-' : qtyUnit(s.need, s.unit), cols[3].x, y, { width: cols[3].w });   // offene Menge nie als 0 zeigen
+          doc.font('Helvetica').fillColor(COLOR.gray).text(s.open || s.need === null || s.unit === undefined ? '-' : qtyUnit(s.need, s.needUnit || s.unit), cols[3].x, y, { width: cols[3].w });   // offene Menge nie als 0 zeigen
           doc.moveTo(cols[4].x, y + 13).lineTo(M + W, y + 13).lineWidth(0.5).strokeColor(COLOR.line).stroke();
           doc.y = y + h - 4; rule(doc.y); doc.y += 4;
         }

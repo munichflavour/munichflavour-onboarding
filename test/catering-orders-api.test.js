@@ -227,3 +227,82 @@ test('Namensabgleich: nur Vorschläge, Normalisierung ohne Anführungszeichen un
   assert.equal(suggest('Völlig anderes Gericht', dishes), null);
   assert.ok(similarity('Penne Rucola', 'Penne "Rucola"') > 0.9);
 });
+
+// ---- Manuelle Garnitur-Menge (API) ----
+async function orderWithDill(t) {
+  await t.admin('POST', '/api/catering/dishes/import-example');
+  const dishes = (await t.admin('GET', '/api/catering/dishes')).json;
+  const gambas = dishes.find(d => d.name === 'Gambas "Coco-Ginger"');
+  const o = (await t.admin('POST', '/api/catering/orders', { name: 'Garnitur (Testdaten)', guests: 10, glassesPerPerson: 2 })).json;
+  const saved = (await t.admin('PUT', `/api/catering/orders/${o.id}`, { name: o.name, guests: '10', glassesPerPerson: '2', rev: o.rev,
+    lines: [{ rentmanName: 'Gambas', dishId: gambas.id, glasses: '20' }] })).json;
+  return { gambas, order: saved };
+}
+
+test('Garnitur-Menge manuell festlegen: wirkt im Ergebnis, bleibt gespeichert und macht die Bestellung vollständig', async () => {
+  const t = await setup();
+  try {
+    const { order } = await orderWithDill(t);
+    assert.equal(order.computed.complete, false);                                     // Dill offen
+    const key = order.computed.shopping.find(s => s.name === 'Dill').key;
+    const r = await t.admin('POST', `/api/catering/orders/${order.id}/garnish-override`, { rev: order.rev, key, qty: '1,5', unit: 'stk', note: '1 Bund' });
+    assert.equal(r.status, 200);
+    const dill = r.json.computed.shopping.find(s => s.name === 'Dill');
+    assert.equal(dill.qty, '1.5');
+    assert.equal(dill.overridden, true);
+    assert.equal(r.json.computed.complete, true);
+    // Persistenz
+    const again = (await t.admin('GET', `/api/catering/orders/${order.id}`)).json;
+    assert.equal(again.garnishOverrides.length, 1);
+    assert.equal(again.computed.shopping.find(s => s.name === 'Dill').overrideNote, '1 Bund');
+    // Abschließen und Wieder öffnen behalten die Überschreibung
+    const fin = await t.admin('POST', `/api/catering/orders/${order.id}/finalize`, { rev: again.rev });
+    assert.equal(fin.status, 200);
+    assert.equal(fin.json.computed.shopping.find(s => s.name === 'Dill').qty, '1.5');
+    const re = await t.admin('POST', `/api/catering/orders/${order.id}/reopen`);
+    assert.equal(re.json.computed.shopping.find(s => s.name === 'Dill').qty, '1.5');
+    // Zurücksetzen: Menge ist wieder offen
+    const reset = await t.admin('POST', `/api/catering/orders/${order.id}/garnish-override`, { rev: re.json.rev, key, qty: null });
+    assert.equal(reset.json.computed.shopping.find(s => s.name === 'Dill').qty, null);
+    assert.equal(reset.json.computed.complete, false);
+    // Protokoll
+    const log = (await t.admin('GET', `/api/catering/audit?entity=bestellung&id=${order.id}`)).json;
+    assert.ok(log.some(l => l.action === 'Garnitur-Menge manuell festgelegt'));
+  } finally { t.close(); }
+});
+
+test('Garnitur-Menge: Rechte, Prüfungen, Konflikt und gesperrter Zustand', async () => {
+  const t = await setup();
+  try {
+    const { order } = await orderWithDill(t);
+    const key = order.computed.shopping.find(s => s.name === 'Dill').key;
+    const url = `/api/catering/orders/${order.id}/garnish-override`;
+    assert.equal((await t.employee('POST', url, { rev: order.rev, key, qty: '1', unit: 'stk' })).status, 403);
+    assert.equal((await t.anon('POST', url, { rev: order.rev, key, qty: '1', unit: 'stk' })).status, 403);
+    assert.equal((await t.admin('POST', url, { rev: order.rev, key, qty: '0', unit: 'stk' })).status, 400);
+    assert.equal((await t.admin('POST', url, { rev: order.rev, key, qty: '-2', unit: 'stk' })).status, 400);
+    assert.equal((await t.admin('POST', url, { rev: order.rev, key, qty: 'viel', unit: 'stk' })).status, 400);
+    assert.equal((await t.admin('POST', url, { rev: order.rev, key, qty: '1', unit: 'bund' })).status, 400);
+    assert.equal((await t.admin('POST', url, { rev: order.rev, key: 'gibtsnicht|g', qty: '1', unit: 'g' })).status, 400);
+    const ok = await t.admin('POST', url, { rev: order.rev, key, qty: '1', unit: 'stk' });
+    assert.equal(ok.status, 200);
+    assert.equal((await t.admin('POST', url, { rev: order.rev, key, qty: '2', unit: 'stk' })).status, 409);   // veralteter Stand
+    const fin = await t.admin('POST', `/api/catering/orders/${order.id}/finalize`, { rev: ok.json.rev });
+    assert.equal((await t.admin('POST', url, { rev: fin.json.rev, key, qty: '3', unit: 'stk' })).status, 409);   // abgeschlossen
+  } finally { t.close(); }
+});
+
+test('PDF mit manueller Garnitur-Menge: kein "offen" mehr, Hinweis "manuell festgelegt"', async () => {
+  const t = await setup();
+  try {
+    const { order } = await orderWithDill(t);
+    const key = order.computed.shopping.find(s => s.name === 'Dill').key;
+    const r = await t.admin('POST', `/api/catering/orders/${order.id}/garnish-override`, { rev: order.rev, key, qty: '1', unit: 'stk', note: '1 Bund' });
+    for (const type of ['einkauf', 'bestellung']) {
+      const res = await t.admin('GET', `/api/catering/orders/${order.id}/pdf?type=${type}`, undefined, true);
+      assert.equal(res.status, 200);
+      assert.equal(res.buffer.subarray(0, 5).toString(), '%PDF-');
+    }
+    assert.equal(r.json.computed.warnings.filter(w => w.code === 'garnitur').length, 0);
+  } finally { t.close(); }
+});

@@ -15,9 +15,12 @@ const ceilTo = (value, step) => value.div(step).ceil().times(step);
 const empty = v => v === undefined || v === null || v === '';
 const keyOf = (name, unit) => `${String(name).trim().toLowerCase().replace(/\s+/g, ' ')}|${unit}`;
 
-// input: { guests, glassesPerPerson, lines: [{ id, glasses, rentmanName, dish }] }
+// input: { guests, glassesPerPerson, lines: [{ id, glasses, rentmanName, dish }], garnishOverrides: [{ key, name, qty, unit, note }] }
+// garnishOverrides: Vom Benutzer festgelegte Gesamtmenge einer Garnitur für diese Bestellung. Sie ersetzt die berechnete Menge
+// (ohne Gebinderundung, der Benutzer legt die Einkaufsmenge fest) und macht auch eine offene Menge pro Glas vollständig.
 // dish: { id, name, articleNo, fillGrams, stepGrams, supplierName, garnish: [{ name, qtyPerGlass, unit, packSize, supplierName }] } oder null
-function computeOrder({ guests, glassesPerPerson, lines }) {
+function computeOrder({ guests, glassesPerPerson, lines, garnishOverrides = [] }) {
+  const overrides = new Map(garnishOverrides.map(o => [o.key, o]));
   const warnings = [];
   const warn = (code, text, lineId) => warnings.push({ code, text, lineId: lineId ?? null });
 
@@ -70,14 +73,19 @@ function computeOrder({ guests, glassesPerPerson, lines }) {
       for (const g of dish.garnish || []) {
         const item = { name: g.name, unit: g.unit, qtyPerGlass: empty(g.qtyPerGlass) ? null : D(g.qtyPerGlass).toFixed(), total: null };
         const k = keyOf(g.name, g.unit);
-        const agg = garnishAgg.get(k) || { kind: 'garnitur', name: g.name, supplier: g.supplierName || dish.supplierName || null, unit: g.unit,
-          sum: D(0), open: false, packSize: null, sources: [] };
+        const ov = overrides.get(k);
+        item.overridden = !!ov;
+        const agg = garnishAgg.get(k) || { key: k, kind: 'garnitur', name: g.name, supplier: g.supplierName || dish.supplierName || null, unit: g.unit,
+          sum: D(0), open: false, unknown: false, packSize: null, sources: [] };
         if (!agg.sources.includes(dish.name)) agg.sources.push(dish.name);
         if (!empty(g.packSize) && agg.packSize === null) agg.packSize = D(g.packSize).toFixed();
         if (item.qtyPerGlass === null) {
-          agg.open = true;
-          res.complete = false;
-          warn('garnitur', `Für die Garnitur "${g.name}" bei "${dish.name}" ist die Menge pro Glas offen.`, line.id);
+          agg.unknown = true;       // Bedarf ist unbekannt, nie als 0 ausweisen
+          if (!ov) {      // mit manueller Gesamtmenge ist die offene Menge pro Glas abgedeckt
+            agg.open = true;
+            res.complete = false;
+            warn('garnitur', `Für die Garnitur "${g.name}" bei "${dish.name}" ist die Menge pro Glas offen.`, line.id);
+          }
         } else if (glasses !== null) {
           item.total = glasses.times(D(item.qtyPerGlass)).toFixed();
           agg.sum = agg.sum.plus(item.total);
@@ -89,9 +97,21 @@ function computeOrder({ guests, glassesPerPerson, lines }) {
     out.push(res);
   }
 
+  const usedOverrides = new Set();
   const garnishShopping = [...garnishAgg.values()].map(a => {
-    const row = { kind: 'garnitur', name: a.name, supplier: a.supplier, unit: a.unit, need: a.sum.toFixed(), qty: null, packSize: a.packSize,
-      packs: null, open: a.open, sources: a.sources };
+    const row = { key: a.key, kind: 'garnitur', name: a.name, supplier: a.supplier, unit: a.unit, need: a.unknown ? null : a.sum.toFixed(), needUnit: a.unit, qty: null,
+      packSize: a.packSize, packs: null, open: a.open, sources: a.sources, overridden: false, overrideNote: null };
+    const ov = overrides.get(a.key);
+    if (ov) {
+      usedOverrides.add(a.key);
+      row.qty = D(ov.qty).toFixed();
+      row.unit = ov.unit;
+      row.packSize = null;
+      row.open = false;
+      row.overridden = true;
+      row.overrideNote = ov.note || null;
+      return row;
+    }
     if (!a.open || a.sum.gt(0)) {
       let q = a.sum;
       if (a.packSize) { q = ceilTo(q, D(a.packSize)); row.packs = q.div(D(a.packSize)).toFixed(); }
@@ -99,6 +119,10 @@ function computeOrder({ guests, glassesPerPerson, lines }) {
     }
     return row;
   });
+
+  for (const o of garnishOverrides) {
+    if (!usedOverrides.has(o.key)) warn('override_unbenutzt', `Die manuelle Menge für "${o.name || o.key}" wird nicht verwendet, weil diese Garnitur in der Bestellung nicht mehr vorkommt.`);
+  }
 
   if (target !== null && !total.eq(target)) {
     warn('summe', `Verteilt sind ${total.toFixed()} Gläser, laut ${guests} Gästen x ${num(glassesPerPerson, 2)} Gläser wären es ${num(target, 2)}.`);
@@ -123,4 +147,4 @@ function distributeEvenly(total, n) {
   return Array.from({ length: n }, (_, i) => base + (i < rest ? 1 : 0));
 }
 
-module.exports = { computeOrder, distributeEvenly, Decimal, perGlass };
+module.exports = { computeOrder, distributeEvenly, keyOf, Decimal, perGlass };

@@ -6,7 +6,7 @@ const V = require('../validate');
 const { ApiError } = V;
 const rentman = require('../rentman');
 const { normName, suggest } = require('../match');
-const { computeOrder } = require('../order-calc');
+const { computeOrder, keyOf } = require('../order-calc');
 const { loadDish } = require('./dishes');
 const { renderOrderPdf } = require('../pdf');
 
@@ -34,14 +34,15 @@ function createOrdersRouter(db, audit) {
       return { id: l.id, dishId: l.dish_id, rentmanRowId: l.rentman_row_id, rentmanName: l.rentman_name, blockName: l.block_name, glasses: l.glasses, dish,
         suggestion: !dish && l.rentman_name ? suggest(l.rentman_name, catalog) : null };
     });
-    const live = computeOrder({ guests: o.guests, glassesPerPerson: o.glasses_per_person,
+    const garnishOverrides = db.prepare('SELECT key, name, qty, unit, note FROM catering_order_garnish_overrides WHERE order_id = ? ORDER BY name').all(id);
+    const live = computeOrder({ guests: o.guests, glassesPerPerson: o.glasses_per_person, garnishOverrides,
       lines: lines.map(l => ({ id: l.id, glasses: l.glasses, rentmanName: l.rentmanName || l.blockName, dish: l.dish })) });
     const computed = o.status === 'abgeschlossen' && o.snapshot ? JSON.parse(o.snapshot).computed : live;
     return {
       id: o.id, rentmanProjectId: o.rentman_project_id, number: o.number, name: o.name, eventDate: o.event_date, guests: o.guests,
       guestsSource: o.guests_source, glassesPerPerson: o.glasses_per_person, status: o.status, rev: o.rev, createdAt: o.created_at, updatedAt: o.updated_at,
       finalizedAt: o.snapshot ? JSON.parse(o.snapshot).finalizedAt : null,
-      lines, computed,
+      lines, computed, garnishOverrides,
     };
   }
 
@@ -149,6 +150,37 @@ function createOrdersRouter(db, audit) {
     res.json(loadOrder(id));
   });
 
+  // Manuelle Gesamtmenge einer Garnitur (nur für diese Bestellung). qty leer = Überschreibung entfernen.
+  // `key` stammt aus der Einkaufsliste (computed.shopping[].key), `rev` ist der Stand, auf dem der Benutzer aufbaut.
+  r.post('/orders/:id/garnish-override', (req, res) => {
+    const id = V.id(req.params.id, 'Bestellung');
+    const rev = V.id(req.body.rev, 'Versionsstand');
+    const key = V.str(req.body.key, 'Garnitur', { required: true, max: 200 });
+    const qty = V.dec(req.body.qty, 'Menge', { minExclusive: 0, max: 1000000 });
+    const unit = qty === null ? null : V.unit(req.body.unit, 'Einheit');
+    const note = V.str(req.body.note, 'Bemerkung', { max: 200 });
+    db.transaction(() => {
+      const cur = db.prepare('SELECT status FROM catering_orders WHERE id = ?').get(id);
+      if (!cur) throw new ApiError(404, 'Bestellung nicht gefunden.');
+      if (cur.status !== 'entwurf') throw new ApiError(409, 'Eine abgeschlossene Bestellung lässt sich nicht ändern. Bitte zuerst wieder öffnen.');
+      const info = db.prepare("UPDATE catering_orders SET rev = rev + 1, updated_at = datetime('now') WHERE id = ? AND rev = ?").run(id, rev);
+      if (!info.changes) throw conflictChanged();
+      if (qty === null) {
+        db.prepare('DELETE FROM catering_order_garnish_overrides WHERE order_id = ? AND key = ?').run(id, key);
+        return;
+      }
+      // Nur Garnituren, die in dieser Bestellung vorkommen, dürfen überschrieben werden
+      const shopping = loadOrder(id).computed.shopping.find(x => x.kind === 'garnitur' && x.key === key);
+      const existing = db.prepare('SELECT name FROM catering_order_garnish_overrides WHERE order_id = ? AND key = ?').get(id, key);
+      if (!shopping && !existing) throw V.bad('Diese Garnitur kommt in der Bestellung nicht vor.');
+      db.prepare(`INSERT INTO catering_order_garnish_overrides (order_id, key, name, qty, unit, note) VALUES (?, ?, ?, ?, ?, ?)
+        ON CONFLICT(order_id, key) DO UPDATE SET qty = excluded.qty, unit = excluded.unit, note = excluded.note, updated_at = datetime('now')`)
+        .run(id, key, shopping ? shopping.name : existing.name, qty, unit, note);
+    })();
+    audit(req, 'bestellung', id, qty === null ? 'Garnitur-Menge zurückgesetzt' : 'Garnitur-Menge manuell festgelegt', { key, qty, unit, note });
+    res.json(loadOrder(id));
+  });
+
   r.post('/orders/:id/finalize', (req, res) => {
     const id = V.id(req.params.id, 'Bestellung');
     const rev = V.id(req.body.rev, 'Versionsstand');
@@ -183,7 +215,11 @@ function createOrdersRouter(db, audit) {
     const cur = db.prepare('SELECT status FROM catering_orders WHERE id = ?').get(id);
     if (!cur) throw new ApiError(404, 'Bestellung nicht gefunden.');
     if (cur.status !== 'entwurf') throw new ApiError(409, 'Abgeschlossene Bestellungen lassen sich nicht löschen.');
-    db.transaction(() => { db.prepare('DELETE FROM catering_order_lines WHERE order_id = ?').run(id); db.prepare('DELETE FROM catering_orders WHERE id = ?').run(id); })();
+    db.transaction(() => {
+      db.prepare('DELETE FROM catering_order_garnish_overrides WHERE order_id = ?').run(id);
+      db.prepare('DELETE FROM catering_order_lines WHERE order_id = ?').run(id);
+      db.prepare('DELETE FROM catering_orders WHERE id = ?').run(id);
+    })();
     audit(req, 'bestellung', id, 'gelöscht');
     res.json({ ok: true });
   });
