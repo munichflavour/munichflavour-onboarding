@@ -127,7 +127,7 @@ function renderOrderPdf({ order, computed, kind, logoPath }) {
           doc.fillColor(COLOR.text).font('Helvetica').fontSize(10).text(label, cols[1].x, y, { width: cols[1].w });
           if (sources) doc.fontSize(7.5).fillColor(COLOR.gray).text(sources, cols[1].x, doc.y, { width: cols[1].w });
           doc.fontSize(10).fillColor(s.qty === null ? COLOR.warn : COLOR.text).font('Helvetica-Bold').text(buy, cols[2].x, y, { width: cols[2].w });
-          doc.font('Helvetica').fillColor(COLOR.gray).text(s.need === null || s.unit === undefined ? '' : qtyUnit(s.need, s.unit), cols[3].x, y, { width: cols[3].w });
+          doc.font('Helvetica').fillColor(COLOR.gray).text(s.open || s.need === null || s.unit === undefined ? '-' : qtyUnit(s.need, s.unit), cols[3].x, y, { width: cols[3].w });   // offene Menge nie als 0 zeigen
           doc.moveTo(cols[4].x, y + 13).lineTo(M + W, y + 13).lineWidth(0.5).strokeColor(COLOR.line).stroke();
           doc.y = y + h - 4; rule(doc.y); doc.y += 4;
         }

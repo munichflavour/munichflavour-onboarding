@@ -104,3 +104,14 @@ test('Formatierung wie in der Bestellübersicht', () => {
   assert.equal(perGlass('2', 'stk'), '2');
   assert.equal(perGlass('1.5', 'stk'), '1½');
 });
+
+test('PDF: offene Garnitur-Menge erscheint nie als 0', async () => {
+  const { renderOrderPdf } = require('../modules/catering/pdf');
+  const dish = { id: 1, name: 'Gambas', fillGrams: '38', stepGrams: '1000', garnish: [{ name: 'Dill', qtyPerGlass: null, unit: 'g' }] };
+  const computed = computeOrder({ guests: 50, glassesPerPerson: 2, lines: [{ id: 1, glasses: 26, rentmanName: 'g', dish }] });
+  const dill = computed.shopping.find(s => s.name === 'Dill');
+  assert.equal(dill.open, true);
+  assert.equal(dill.qty, null);
+  const pdf = await renderOrderPdf({ order: { name: 'T', status: 'entwurf' }, computed, kind: 'einkauf' });
+  assert.equal(pdf.subarray(0, 5).toString(), '%PDF-');
+});
