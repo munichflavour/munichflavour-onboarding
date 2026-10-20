@@ -140,33 +140,49 @@ CAT.register('bestellung', async (root, arg) => {
   let o = await api('GET', '/orders/' + encodeURIComponent(arg));
   const dishes = o.status === 'entwurf' ? await api('GET', '/dishes') : [];
   let locked = o.status === 'abgeschlossen';
-  let dirty = false;
+  // Automatisches Speichern: `version` zählt jede Änderung der Eingaben, `savedVersion` den zuletzt gespeicherten Stand.
+  let version = 0, savedVersion = 0, saving = false, timer = null;
+  const sleep = ms => new Promise(r => setTimeout(r, ms));
   const dishOpts = sel => options(dishes.map(d => [d.id, d.name]), sel, 'Speise wählen');
+  const qty = (q, unit) => q === null ? 'offen' : unit === 'g' ? (Number(q) >= 1000 ? fmt(String(Number(q) / 1000)) + ' kg' : fmt(q) + ' g') : fmt(q) + ' ' + (CAT.meta.units[unit] || unit);
 
-  const lineHtml = (l, i) => {
-    const warn = o.computed.warnings.filter(w => w.lineId === l.id).map(w => esc(w.text));
+  // Hinweise unter einer Zeile: Vorschlag (nur wenn unklar), Rechenweg, und was noch offen ist (sachlich, nicht als Fehler)
+  const hintsHtml = l => {
     const c = o.computed.lines.find(x => x.lineId === l.id);
-    return `<div class="line" data-line data-rname="${esc(l.rentmanName)}" data-rid="${esc(l.rentmanRowId)}" data-block="${esc(l.blockName)}">
+    const warn = o.computed.warnings.filter(w => w.lineId === l.id).map(w => esc(w.text));
+    return `${!locked && !l.dishId && l.suggestion && !l.suggestion.auto ? `<div class="hint">Vorschlag: <b>${esc(l.suggestion.name)}</b> (Ähnlichkeit ${Math.round(l.suggestion.score * 100)} %)
+        <button class="btn btn-secondary btn-sm" data-sug="${l.suggestion.dishId}" type="button">Übernehmen</button></div>` : ''}
+      ${c && c.orderGrams !== null ? `<div class="hint">${esc(c.weg.join(' · '))}</div>` : ''}
+      ${warn.map(w => `<div class="hint open-hint">${w}</div>`).join('')}`;
+  };
+
+  const lineHtml = l => `<div class="line" data-line data-rname="${esc(l.rentmanName)}" data-rid="${esc(l.rentmanRowId)}" data-block="${esc(l.blockName)}">
       <div class="row-meta" style="margin-bottom:6px">${l.rentmanName ? 'Rentman: ' + esc(l.rentmanName) : 'manuell hinzugefügt'}${l.blockName ? ' · ' + esc(l.blockName) : ''}</div>
       <div class="line-grid" style="grid-template-columns:2fr 1fr auto">
         <div><label>Speise</label>${locked ? `<div>${esc(l.dish ? l.dish.name : '?')}</div>` : `<select data-f="dish">${dishOpts(l.dishId)}</select>`}</div>
         <div><label>Gläser</label>${locked ? `<div><b>${esc(l.glasses ?? '?')}</b></div>` : `<input type="text" inputmode="numeric" data-f="glasses" value="${esc(l.glasses)}" style="font-size:20px;font-weight:700">`}</div>
         ${locked ? '' : '<div><button class="btn btn-secondary btn-sm" data-rm>✕</button></div>'}
       </div>
-      ${!locked && !l.dishId && l.suggestion ? `<div class="hint">Vorschlag: <b>${esc(l.suggestion.name)}</b> (Ähnlichkeit ${Math.round(l.suggestion.score * 100)} %)
-        <button class="btn btn-secondary btn-sm" data-sug="${l.suggestion.dishId}" type="button">Übernehmen</button></div>` : ''}
-      ${c && c.orderGrams !== null ? `<div class="hint">${esc(c.weg.join(' · '))}</div>` : ''}
-      ${warn.map(w => `<div class="hint" style="color:#cc0000">${w}</div>`).join('')}
+      <div data-hints>${hintsHtml(l)}</div>
     </div>`;
-  };
 
-  const qty = (q, unit) => q === null ? 'offen' : unit === 'g' ? (Number(q) >= 1000 ? fmt(String(Number(q) / 1000)) + ' kg' : fmt(q) + ' g') : fmt(q) + ' ' + (CAT.meta.units[unit] || unit);
+  const resultHtml = () => {
+    const c = o.computed;
+    return `<h3 style="font-size:15px;margin-bottom:10px;">Ergebnis</h3>
+        ${c.warnings.length || !c.complete ? `<div class="warn-box"><b ${c.complete ? '' : 'style="color:#cc0000"'}>${c.complete ? 'Hinweise' : 'Noch unvollständig, nicht zum Bestellen verwenden'}</b><ul style="margin:6px 0 0 18px">${c.warnings.map(w => `<li>${esc(w.text)}</li>`).join('')}</ul></div>` : ''}
+        ${c.shopping.length ? `<div class="note" style="margin-bottom:6px">Einkaufsliste${c.complete ? '' : ' (unvollständig)'}</div>` + c.shopping.map(s => `
+          <div class="row" style="cursor:default"><div class="row-main"><div class="row-title">${esc(s.name)}${s.kind === 'garnitur' ? ' <span class="pill">Garnitur</span>' : ''}${s.overridden ? ' <span class="pill sample">manuell</span>' : ''}</div>
+          <div class="row-meta">${esc(s.supplier || 'ohne Lieferant')}${s.sources && s.sources.length ? ' · für ' + esc(s.sources.join(', ')) : ''}${s.overrideNote ? ' · ' + esc(s.overrideNote) : ''}</div></div>
+          <div style="text-align:right"><b ${s.qty === null ? 'style="color:#cc0000"' : ''}>${esc(qty(s.qty, s.unit))}</b>${s.need !== null && s.qty !== null && (s.need !== s.qty || s.needUnit !== s.unit) ? `<div class="row-meta">${s.overridden ? 'berechnet' : 'Bedarf'} ${esc(qty(s.need, s.needUnit || s.unit))}</div>` : ''}${s.overridden && s.need === null ? '<div class="row-meta">Menge pro Glas offen</div>' : ''}
+          ${s.kind === 'garnitur' && !locked ? `<button class="btn btn-secondary btn-sm" data-ov="${esc(s.key)}" style="margin-top:4px">${s.overridden ? 'Menge ändern' : s.qty === null ? 'Menge festlegen' : 'Menge ändern'}</button>` : ''}</div></div>`).join('')
+          : '<div class="note">Noch nichts zu bestellen.</div>'}`;
+  };
 
   function draw() {
     locked = o.status === 'abgeschlossen';      // nach Abschließen oder Wieder öffnen neu bestimmen
     const c = o.computed;
-    root.innerHTML = `
-      <a href="#/start" class="back-btn" style="display:inline-flex;margin-bottom:12px;">← Zurück zu den Bestellungen</a>
+    root.innerHTML = `<div id="orderpage">
+      <a href="#/start" class="back-btn" id="backlink" style="display:inline-flex;margin-bottom:12px;">← Zurück zu den Bestellungen</a>
       <div class="alert alert-error hidden" id="err"></div>
       <div class="card">
         <h2 style="font-size:18px;margin-bottom:4px;">${esc(o.name)} <span class="pill ${locked ? '' : 'sample'}">${locked ? 'abgeschlossen' : 'Entwurf'}</span></h2>
@@ -187,29 +203,22 @@ CAT.register('bestellung', async (root, arg) => {
         ${locked ? '' : `<div class="toolbar"><button class="btn btn-secondary" id="addLine">+ Speise hinzufügen</button>
           <button class="btn btn-secondary" id="spread">Gläser gleichmäßig verteilen</button></div>`}
       </div>
-      <div class="card" id="result">
-        <h3 style="font-size:15px;margin-bottom:10px;">Ergebnis</h3>
-        ${c.warnings.length ? `<div class="${c.complete ? 'warn-box' : 'alert alert-error'}"><b>${c.complete ? 'Hinweise' : 'Unvollständig, nicht zum Bestellen verwenden'}</b><ul style="margin:6px 0 0 18px">${c.warnings.map(w => `<li>${esc(w.text)}</li>`).join('')}</ul></div>` : ''}
-        ${c.shopping.length ? `<div class="note" style="margin-bottom:6px">Einkaufsliste${c.complete ? '' : ' (unvollständig)'}</div>` + c.shopping.map(s => `
-          <div class="row" style="cursor:default"><div class="row-main"><div class="row-title">${esc(s.name)}${s.kind === 'garnitur' ? ' <span class="pill">Garnitur</span>' : ''}${s.overridden ? ' <span class="pill sample">manuell</span>' : ''}</div>
-          <div class="row-meta">${esc(s.supplier || 'ohne Lieferant')}${s.sources && s.sources.length ? ' · für ' + esc(s.sources.join(', ')) : ''}${s.overrideNote ? ' · ' + esc(s.overrideNote) : ''}</div></div>
-          <div style="text-align:right"><b ${s.qty === null ? 'style="color:#cc0000"' : ''}>${esc(qty(s.qty, s.unit))}</b>${s.need !== null && s.qty !== null && (s.need !== s.qty || s.needUnit !== s.unit) ? `<div class="row-meta">${s.overridden ? 'berechnet' : 'Bedarf'} ${esc(qty(s.need, s.needUnit || s.unit))}</div>` : ''}${s.overridden && s.need === null ? '<div class="row-meta">Menge pro Glas offen</div>' : ''}
-          ${s.kind === 'garnitur' && !locked ? `<button class="btn btn-secondary btn-sm" data-ov="${esc(s.key)}" style="margin-top:4px">${s.overridden ? 'Menge ändern' : s.qty === null ? 'Menge festlegen' : 'Menge ändern'}</button>` : ''}</div></div>`).join('')
-          : '<div class="note">Noch nichts zu bestellen.</div>'}
-      </div>
+      <div class="card" id="result">${resultHtml()}</div>
       <div class="sticky-bar">
+        ${locked ? '' : '<div id="savestate" class="hint" style="flex:1 1 100%;margin:0;min-height:16px"></div>'}
         ${locked ? '<button class="btn btn-secondary" id="reopen">Wieder öffnen</button>' : `
           <button class="btn btn-primary" id="save">Speichern</button>
           <button class="btn btn-secondary" id="finalize" ${c.complete ? '' : 'disabled'}>Abschließen</button>`}
         <button class="btn btn-secondary" id="pdf1">PDF Bestellung</button>
         <button class="btn btn-secondary" id="pdf2">PDF Einkauf</button>
         ${locked ? '' : '<button class="btn btn-secondary" id="del">Löschen</button>'}
-      </div>`;
+      </div></div>`;
     bind();
     updateSum();
   }
 
   const showErr = msg => { const e = $('#err'); e.textContent = msg; e.classList.toggle('hidden', !msg); if (msg) e.scrollIntoView({ block: 'center' }); };
+  const setState = text => { const el = $('#savestate'); if (el) el.textContent = text; };
   const readLines = () => $$('[data-line]', root).map(el => ({ rentmanName: el.dataset.rname || null, rentmanRowId: el.dataset.rid || null, blockName: el.dataset.block || null,
     dishId: $('[data-f="dish"]', el).value || null, glasses: $('[data-f="glasses"]', el).value.trim() || null }));
   const body = () => ({ name: o.name, number: o.number, eventDate: o.eventDate, guests: $('#guests').value.trim() || null, guestsSource: o.guestsSource,
@@ -218,8 +227,8 @@ CAT.register('bestellung', async (root, arg) => {
   function updateSum() {
     const el = $('#sumline');
     if (!el) return;
-    let total = 0, n = 0;
-    $$('[data-f="glasses"]', root).forEach(i => { const v = Number(i.value); if (i.value.trim() && Number.isFinite(v)) total += v; n++; });
+    let total = 0;
+    $$('[data-f="glasses"]', root).forEach(i => { const v = Number(i.value); if (i.value.trim() && Number.isFinite(v)) total += v; });
     if (locked) { el.textContent = `Gläser verteilt: ${o.computed.totalGlasses}${o.computed.target ? ' von ' + fmt(o.computed.target) : ''}`; return; }
     const g = Number($('#guests').value), p = Number(($('#gpp').value || '').replace(',', '.'));
     const target = g > 0 && p > 0 ? g * p : null;
@@ -227,18 +236,59 @@ CAT.register('bestellung', async (root, arg) => {
     el.dataset.target = target ?? '';
   }
 
-  async function save() {
-    showErr('');
-    try { o = await api('PUT', '/orders/' + o.id, body()); dirty = false; draw(); toast('Gespeichert'); return true; }
-    catch (e) { showErr(e.message + (e.status === 409 ? ' (Seite neu laden mit F5)' : '')); return false; }
+  // Nach dem Speichern nur die berechneten Teile erneuern (Hinweise, Ergebnis, Summe), nie die Eingabefelder:
+  // So bleibt der Cursor stehen, und es werden keine veralteten Meldungen gezeigt.
+  function refreshDynamic() {
+    stale(false);
+    $$('[data-line]', root).forEach((el, i) => { const l = o.lines[i]; if (l) $('[data-hints]', el).innerHTML = hintsHtml(l); });
+    $('#result').innerHTML = resultHtml();
+    const fin = $('#finalize'); if (fin) fin.disabled = !o.computed.complete;
+    bindOverrides();
+    updateSum();
+  }
+
+  const stale = on => { const pg = $('#orderpage'); if (pg) pg.classList.toggle('stale', on); };
+  function mark() { version++; stale(true); setState('Änderungen werden gespeichert …'); updateSum(); scheduleSave(500); }
+  function scheduleSave(delay) { clearTimeout(timer); timer = setTimeout(() => { runSave(); }, delay); }
+
+  // Speichert den aktuellen Stand der Eingaben. Wartet auf eine laufende Speicherung und speichert erneut, wenn inzwischen weiter geändert wurde.
+  async function runSave() {
+    while (saving) await sleep(50);
+    if (version === savedVersion || !$('#orderpage')) return true;      // nichts zu speichern, oder die Seite wurde schon verlassen
+    saving = true; showErr('');
+    const v = version;
+    try { o = await api('PUT', '/orders/' + o.id, body()); savedVersion = v; }
+    catch (e) {
+      saving = false;
+      showErr(e.message + (e.status === 409 ? ' (Seite neu laden mit F5)' : ''));
+      setState('Nicht gespeichert'); stale(false);
+      return false;
+    }
+    saving = false;
+    if (version !== v) return runSave();
+    refreshDynamic(); setState('Gespeichert ✓');
+    return true;
+  }
+  const flush = async () => { clearTimeout(timer); return runSave(); };
+
+  function bindOverrides() {
+    $$('[data-ov]', root).forEach(b => b.onclick = async () => {
+      if (!(await flush())) return;               // der Versionsstand muss zum gespeicherten Stand passen
+      const item = o.computed.shopping.find(x => x.key === b.dataset.ov);
+      if (item) overrideDialog(item);
+    });
   }
 
   function bind() {
     if (!locked) {
-      const mark = () => { dirty = true; updateSum(); };
-      root.addEventListener('input', mark, { once: false });
+      const page = $('#orderpage');                  // Beobachter hängen an der Seite selbst und verschwinden mit ihr
+      page.addEventListener('input', mark);
+      page.addEventListener('change', e => { if (e.target.matches('[data-f]')) mark(); });
       $$('[data-rm]', root).forEach(b => b.onclick = () => { b.closest('[data-line]').remove(); mark(); });
-      $$('[data-sug]', root).forEach(b => b.onclick = () => { $('[data-f="dish"]', b.closest('[data-line]')).value = b.dataset.sug; mark(); });
+      page.addEventListener('click', e => {
+        const b = e.target.closest('[data-sug]');
+        if (b) { $('[data-f="dish"]', b.closest('[data-line]')).value = b.dataset.sug; mark(); }
+      });
       $('#addLine').onclick = () => {
         const tmp = { id: 'neu' + Date.now(), dishId: null, glasses: null, rentmanName: null, rentmanRowId: null, blockName: null, dish: null, suggestion: null };
         const lines = $('#lines'); if (!lines.querySelector('[data-line]')) lines.innerHTML = '';
@@ -256,27 +306,24 @@ CAT.register('bestellung', async (root, arg) => {
         showErr(Math.abs(target - total) > 1e-9 ? `Hinweis: Das Soll von ${fmt(String(target))} Gläsern wurde auf ${total} gerundet.` : '');
         mark();
       };
-      $('#save').onclick = save;
+      $('#save').onclick = async () => { if (await flush()) toast('Gespeichert'); };
       $('#finalize').onclick = async () => {
-        if (dirty && !(await save())) return;
+        if (!(await flush())) return;
         if (!(await confirmDialog('Bestellung abschließen', 'Das Ergebnis wird eingefroren. Spätere Änderungen an den Speisen wirken sich nicht mehr darauf aus.', 'Abschließen'))) return;
         try { o = await api('POST', `/orders/${o.id}/finalize`, { rev: o.rev }); draw(); toast('Abgeschlossen'); } catch (e) { showErr(e.message); }
       };
       $('#del').onclick = async () => {
         if (!(await confirmDialog('Bestellung löschen', 'Diese Bestellung wird endgültig gelöscht.', 'Löschen'))) return;
+        clearTimeout(timer); version = savedVersion;       // keine Speicherung mehr nach dem Löschen
         try { await api('DELETE', '/orders/' + o.id); location.hash = '#/start'; } catch (e) { showErr(e.message); }
       };
     } else {
       $('#reopen').onclick = async () => { try { o = await api('POST', `/orders/${o.id}/reopen`); location.reload(); } catch (e) { showErr(e.message); } };
     }
-    $$('[data-ov]', root).forEach(b => b.onclick = async () => {
-      const item = o.computed.shopping.find(x => x.key === b.dataset.ov);
-      if (!item) return;
-      if (dirty && !(await save())) return;       // der Versionsstand muss zum gespeicherten Stand passen
-      overrideDialog(o.computed.shopping.find(x => x.key === b.dataset.ov));
-    });
+    bindOverrides();
+    $('#backlink').onclick = async e => { if (!locked) { e.preventDefault(); await flush(); location.hash = '#/start'; } };
     const pdf = type => async () => {
-      if (dirty && !locked && !(await save())) return;      // PDF zeigt immer den gespeicherten Stand
+      if (!locked && !(await flush())) return;      // PDF zeigt immer den gespeicherten Stand
       window.open(`/api/catering/orders/${o.id}/pdf?type=${type}`, '_blank');
     };
     $('#pdf1').onclick = pdf('bestellung');
@@ -298,7 +345,7 @@ CAT.register('bestellung', async (root, arg) => {
       onSave: async el => {
         o = await api('POST', `/orders/${o.id}/garnish-override`, { rev: o.rev, key: item.key, qty: $('#ov-qty', el).value.trim(),
           unit: $('#ov-unit', el).value, note: $('#ov-note', el).value.trim() || null });
-        draw(); toast('Menge festgelegt'); return true;
+        savedVersion = version; draw(); toast('Menge festgelegt'); return true;
       },
     });
     const reset = CAT.$('[data-reset]', m.el);
@@ -309,4 +356,13 @@ CAT.register('bestellung', async (root, arg) => {
   }
 
   draw();
+  // Eindeutige Treffer aus Rentman (gleicher oder vorangestellter Name) werden ohne Zutun zugeordnet und gespeichert
+  if (!locked) {
+    let n = 0;
+    $$('[data-line]', root).forEach((el, i) => {
+      const l = o.lines[i];
+      if (l && !l.dishId && l.suggestion && l.suggestion.auto) { $('[data-f="dish"]', el).value = l.suggestion.dishId; n++; }
+    });
+    if (n) { version++; scheduleSave(0); toast(`${n} Speisen aus Rentman zugeordnet`); }
+  }
 });

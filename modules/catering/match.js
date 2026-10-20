@@ -35,4 +35,19 @@ function suggest(name, dishes, minScore = 0.5) {
   return best;
 }
 
-module.exports = { normName, similarity, suggest };
+// Eindeutige automatische Zuordnung einer Rentman-Zeile zu einer Speise des Katalogs:
+//   1. Der Name stimmt (nach Normalisierung) genau überein, oder
+//   2. der Katalogname steht am Anfang des Rentman-Namens (ganze Wörter), z. B. Katalog "Kartoffel-Gurken-Salat" und
+//      Rentman "Kartoffel-Gurken-Salat mit Fleischpflanzerl".
+// Gibt es dabei mehr als einen Treffer, wird NICHT automatisch zugeordnet (dann bleibt es bei einem Vorschlag).
+function autoMatch(name, dishes) {
+  const n = normName(name);
+  if (!n) return null;
+  const exact = dishes.filter(d => normName(d.name) === n);
+  if (exact.length === 1) return exact[0];
+  if (exact.length > 1) return null;
+  const prefix = dishes.filter(d => { const dn = normName(d.name); return dn && n.startsWith(dn + ' '); });
+  return prefix.length === 1 ? prefix[0] : null;
+}
+
+module.exports = { normName, similarity, suggest, autoMatch };

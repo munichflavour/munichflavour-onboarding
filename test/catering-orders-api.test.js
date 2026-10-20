@@ -321,3 +321,70 @@ test('Rentman-Token wird unabhängig von der Schreibweise des Variablennamens er
     assert.equal(rentman.isConfigured(), false);
   } finally { Object.assign(process.env, saved); }
 });
+
+// ---- Automatische Zuordnung der Rentman-Speisen ----
+const { autoMatch } = require('../modules/catering/match');
+
+test('autoMatch: gleicher Name oder eindeutig vorangestellter Katalogname, sonst nichts', () => {
+  const dishes = [{ id: 1, name: 'Wurstsalat "Schweizer Art"' }, { id: 2, name: 'Penne "Rucola"' }, { id: 3, name: 'Kartoffel-Gurken-Salat' }, { id: 4, name: 'Penne' }];
+  assert.equal(autoMatch('Wurstsalat "Schweizer Art"', dishes).id, 1);
+  assert.equal(autoMatch('- Penne "Rucola"', dishes).id, 2);                       // führender Strich und Anführungszeichen egal
+  assert.equal(autoMatch('- Kartoffel-Gurken-Salat mit Fleischpflanzerl', dishes).id, 3);   // Katalogname steht vorn
+  assert.equal(autoMatch('Penne "Rucola" XL', dishes), null);                      // "Penne" und "Penne Rucola" passen: uneindeutig
+  assert.equal(autoMatch('Gambas "Coco-Ginger"', dishes), null);                   // nicht im Katalog
+  assert.equal(autoMatch('', dishes), null);
+  assert.equal(autoMatch('Pennetta', [{ id: 4, name: 'Penne' }]), null);           // nur ganze Wörter zählen
+  assert.equal(autoMatch('Salat', [{ id: 1, name: 'Salat A' }, { id: 2, name: 'Salat A' }]), null);
+});
+
+const RENTMAN_LINES = ['Wurstsalat "Schweizer Art"', '- Penne "Rucola"', '- Kartoffel-Gurken-Salat mit Fleischpflanzerl', '- Pikanter Couscous-Salat', '- Gambas "Coco-Ginger"', '- Völlig unbekanntes Gericht']
+  .map((n, i) => ({ rentmanRowId: String(i + 1), rentmanName: n, blockName: 'Speisen im Weckglas:' }));
+
+test('Neue Bestellung aus Rentman: Speisen werden direkt zugeordnet, Unbekanntes bleibt offen', async () => {
+  const t = await setup();
+  try {
+    await t.admin('POST', '/api/catering/dishes/import-example');
+    const o = (await t.admin('POST', '/api/catering/orders', { name: 'Auto (Testdaten)', guests: 50, glassesPerPerson: '2,6', lines: RENTMAN_LINES })).json;
+    assert.deepEqual(o.lines.map(l => l.dish && l.dish.name), ['Wurstsalat "Schweizer Art"', 'Penne "Rucola"', 'Kartoffel-Gurken-Salat', 'Pikanter Couscous-Salat', 'Gambas "Coco-Ginger"', null]);
+    assert.equal(o.lines[5].dishId, null);                                           // unbekannte Speise nicht erraten
+    assert.equal(o.lines[5].suggestion, null);
+    // die Zuordnung ist gespeichert (bestätigter Name) und gilt auch für die nächste Bestellung
+    const next = (await t.admin('POST', '/api/catering/orders', { name: 'Zweite', lines: [RENTMAN_LINES[2]] })).json;
+    assert.equal(next.lines[0].dish.name, 'Kartoffel-Gurken-Salat');
+  } finally { t.close(); }
+});
+
+test('Bestellung ohne Zuordnung (älterer Stand): eindeutige Treffer sind als auto gekennzeichnet, unklare nur als Vorschlag', async () => {
+  const t = await setup();
+  try {
+    // Bestellung entsteht, bevor der Katalog existiert: nichts zuordenbar
+    const o = (await t.admin('POST', '/api/catering/orders', { name: 'Alt', lines: RENTMAN_LINES.slice(0, 2) })).json;
+    assert.equal(o.lines[0].dishId, null);
+    await t.admin('POST', '/api/catering/dishes/import-example');
+    const again = (await t.admin('GET', `/api/catering/orders/${o.id}`)).json;
+    assert.equal(again.lines[0].suggestion.auto, true);
+    assert.equal(again.lines[0].suggestion.name, 'Wurstsalat "Schweizer Art"');
+    // Der Benutzer (bzw. die Oberfläche) übernimmt: speichern ordnet zu
+    const put = await t.admin('PUT', `/api/catering/orders/${o.id}`, { name: o.name, rev: again.rev,
+      lines: again.lines.map(l => ({ rentmanName: l.rentmanName, rentmanRowId: l.rentmanRowId, blockName: l.blockName, dishId: l.suggestion.dishId, glasses: '10' })) });
+    assert.equal(put.status, 200);
+    assert.ok(put.json.lines.every(l => l.dish));
+  } finally { t.close(); }
+});
+
+test('Änderung der Auswahl durch den Benutzer überschreibt die automatische Zuordnung', async () => {
+  const t = await setup();
+  try {
+    await t.admin('POST', '/api/catering/dishes/import-example');
+    const dishes = (await t.admin('GET', '/api/catering/dishes')).json;
+    const penne = dishes.find(d => d.name === 'Penne "Rucola"');
+    const couscous = dishes.find(d => d.name === 'Pikanter Couscous-Salat');
+    const o = (await t.admin('POST', '/api/catering/orders', { name: 'Wechsel', lines: [RENTMAN_LINES[1]] })).json;
+    assert.equal(o.lines[0].dishId, penne.id);
+    const put = (await t.admin('PUT', `/api/catering/orders/${o.id}`, { name: o.name, rev: o.rev,
+      lines: [{ rentmanName: RENTMAN_LINES[1].rentmanName, rentmanRowId: '2', blockName: 'x', dishId: couscous.id, glasses: '5' }] })).json;
+    assert.equal(put.lines[0].dishId, couscous.id);
+    const next = (await t.admin('POST', '/api/catering/orders', { name: 'Danach', lines: [RENTMAN_LINES[1]] })).json;
+    assert.equal(next.lines[0].dishId, couscous.id);                                 // die letzte Entscheidung des Benutzers gilt
+  } finally { t.close(); }
+});

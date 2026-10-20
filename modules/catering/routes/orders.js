@@ -5,7 +5,7 @@ const express = require('express');
 const V = require('../validate');
 const { ApiError } = V;
 const rentman = require('../rentman');
-const { normName, suggest } = require('../match');
+const { normName, suggest, autoMatch } = require('../match');
 const { computeOrder, keyOf } = require('../order-calc');
 const { loadDish } = require('./dishes');
 const { renderOrderPdf } = require('../pdf');
@@ -31,8 +31,11 @@ function createOrdersRouter(db, audit) {
     const catalog = o.status === 'entwurf' ? activeDishes() : [];
     const lines = rows.map(l => {
       const dish = dishOf(l.dish_id);
-      return { id: l.id, dishId: l.dish_id, rentmanRowId: l.rentman_row_id, rentmanName: l.rentman_name, blockName: l.block_name, glasses: l.glasses, dish,
-        suggestion: !dish && l.rentman_name ? suggest(l.rentman_name, catalog) : null };
+      // Ohne Zuordnung: eindeutige Treffer sind als `auto` gekennzeichnet (die Oberfläche übernimmt sie selbst), sonst nur ein Vorschlag
+      const am = !dish && l.rentman_name ? autoMatch(l.rentman_name, catalog) : null;
+      const suggestion = am ? { dishId: am.id, name: am.name, score: 1, auto: true }
+        : (!dish && l.rentman_name ? suggest(l.rentman_name, catalog) : null);
+      return { id: l.id, dishId: l.dish_id, rentmanRowId: l.rentman_row_id, rentmanName: l.rentman_name, blockName: l.block_name, glasses: l.glasses, dish, suggestion };
     });
     const garnishOverrides = db.prepare('SELECT key, name, qty, unit, note FROM catering_order_garnish_overrides WHERE order_id = ? ORDER BY name').all(id);
     const live = computeOrder({ guests: o.guests, glassesPerPerson: o.glasses_per_person, garnishOverrides,
@@ -95,6 +98,8 @@ function createOrdersRouter(db, audit) {
       if (open) throw new ApiError(409, 'Für dieses Projekt gibt es bereits eine offene Bestellung.', { openOrderId: open.id });
     }
     const aliasDish = db.prepare('SELECT dish_id FROM catering_dish_aliases a JOIN catering_dishes d ON d.id = a.dish_id WHERE a.alias = ? AND d.archived = 0');
+    const catalog = activeDishes();
+    const saveAlias = db.prepare('INSERT OR IGNORE INTO catering_dish_aliases (dish_id, alias) VALUES (?, ?)');
     let id;
     db.transaction(() => {
       id = db.prepare(`INSERT INTO catering_orders (rentman_project_id, number, name, event_date, guests, guests_source, glasses_per_person, created_by, updated_at)
@@ -103,8 +108,15 @@ function createOrdersRouter(db, audit) {
       const ins = db.prepare('INSERT INTO catering_order_lines (order_id, dish_id, rentman_row_id, rentman_name, block_name, sort) VALUES (?, ?, ?, ?, ?, ?)');
       lines.forEach((l, i) => {
         const rentmanName = V.str(l.rentmanName, 'Name der Speise', { max: 200 });
-        const known = rentmanName ? aliasDish.get(normName(rentmanName)) : null;     // nur bestätigte Zuordnungen
-        ins.run(id, known ? known.dish_id : null, V.str(l.rentmanRowId, 'Rentman-Zeile', { max: 40 }), rentmanName, V.str(l.blockName, 'Block', { max: 200 }), i);
+        // Zuordnung: gespeicherter Name, sonst eindeutiger Treffer im Katalog (gleicher oder vorangestellter Name). Unklares bleibt offen.
+        let dishId = null;
+        const known = rentmanName ? aliasDish.get(normName(rentmanName)) : null;
+        if (known) dishId = known.dish_id;
+        else if (rentmanName) {
+          const am = autoMatch(rentmanName, catalog);
+          if (am) { dishId = am.id; saveAlias.run(am.id, normName(rentmanName)); }
+        }
+        ins.run(id, dishId, V.str(l.rentmanRowId, 'Rentman-Zeile', { max: 40 }), rentmanName, V.str(l.blockName, 'Block', { max: 200 }), i);
       });
     })();
     audit(req, 'bestellung', id, 'angelegt', { name: head.name, rentmanProjectId });
