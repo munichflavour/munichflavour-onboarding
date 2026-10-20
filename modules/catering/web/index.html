@@ -12,6 +12,7 @@
   <header>
     <img src="/assets/logo.jpg" alt="Munich Flavour" onerror="this.style.display='none'">
     <div class="header-title"><h1>Catering-Kalkulator</h1><div class="header-sub">Admin</div></div>
+    <button class="hdr-link" id="lockBtn" type="button" title="Kalkulator wieder sperren" style="background:none;cursor:pointer;margin-right:6px">🔒</button>
     <a href="/admin.html#programme" class="hdr-link">← Programme</a>
   </header>
 
@@ -32,6 +33,9 @@
   <script src="/catering/view-projects.js"></script>
   <script src="/catering/view-ingredients.js"></script>
   <script src="/catering/view-recipes.js"></script>
-  <script>CAT.start();</script>
+  <script>
+    document.getElementById('lockBtn').onclick = async () => { await fetch('/api/catering/lock', { method: 'POST' }); location.href = '/admin.html#programme'; };
+    CAT.start();
+  </script>
 </body>
 </html>

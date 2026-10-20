@@ -11,7 +11,7 @@ function isNew(dateStr) { return (Date.now() - Date.parse(dateStr + 'Z')) < NEW_
 
 // Programme, die im Admin-Bereich zur Auswahl stehen. Ein weiteres Programm = eine Zeile mehr.
 const PROGRAMS = [
-  { icon: '🍽️', title: 'Catering-Kalkulator', text: 'Bestellmengen und Einkaufslisten für Speisen im Glas berechnen', href: '/catering/' },
+  { icon: '🍽️', title: 'Catering-Kalkulator', text: 'Bestellmengen und Einkaufslisten für Speisen im Glas berechnen (passwortgeschützt)', href: '/catering/', locked: true },
   { icon: '🍹', title: 'Kartengenerator', text: 'Speisen- und Getränkekarten aus Rentman als PDF erstellen', href: '/karten/' },
 ];
 
@@ -19,7 +19,7 @@ function renderPrograms() {
   document.getElementById('programList').innerHTML = PROGRAMS.map(p => `
     <a class="prog-card" href="${escHtml(p.href)}">
       <span class="prog-icon">${p.icon}</span>
-      <span class="prog-info"><span class="prog-title">${escHtml(p.title)}</span><span class="prog-text">${escHtml(p.text)}</span></span>
+      <span class="prog-info"><span class="prog-title">${escHtml(p.title)}${p.locked ? ' 🔒' : ''}</span><span class="prog-text">${escHtml(p.text)}</span></span>
       <span class="prog-arrow">›</span>
     </a>`).join('');
 }

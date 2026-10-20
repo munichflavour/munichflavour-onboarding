@@ -24,7 +24,7 @@ async function setup() {
     let json = null; try { json = JSON.parse(text); } catch { /* keine JSON-Antwort */ }
     return { status: res.status, json, headers: res.headers };
   };
-  return { db, admin: as({ userId: 1, role: 'admin' }), employee: as({ userId: 2, role: 'employee' }), anon: as(null),
+  return { db, admin: as({ userId: 1, role: 'admin', cateringUnlocked: true }), employee: as({ userId: 2, role: 'employee' }), anon: as(null),
     close: () => { server.close(); db.close(); } };
 }
 

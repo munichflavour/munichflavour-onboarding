@@ -15,6 +15,7 @@ const CAT = (() => {
       res = await fetch('/api/catering' + url, { method, headers: body === undefined ? {} : { 'Content-Type': 'application/json' },
         body: body === undefined ? undefined : JSON.stringify(body) });
     } catch { throw new Error('Keine Verbindung zum Server. Es wurde nichts gespeichert.'); }
+    if (res.status === 423) { window.location.reload(); throw new Error('Gesperrt'); }     // gesperrt: Seite zeigt wieder die Passwortabfrage
     if (res.status === 401 || (res.status === 403 && !(await res.clone().json().catch(() => ({}))).error?.includes('Anfrage'))) {
       window.location.href = '/login.html';
       throw new Error('Nicht angemeldet');

@@ -13,27 +13,56 @@ const { createMasterdataRouter } = require('./routes/masterdata');
 const { createRecipesRouter } = require('./routes/recipes');
 const { createDishesRouter } = require('./routes/dishes');
 const { createOrdersRouter } = require('./routes/orders');
+const lock = require('./lock');
 
 // Beispielprojekte nur für Oberfläche und Tests, nie als echte Daten ausgeben.
 const SAMPLE_PROJECTS = [
   { id: 'sample-1', number: 'TEST-001', name: 'Beispielprojekt (Testdaten)', start: null, status: 'Beispiel', statusId: null, sample: true },
 ];
 
-function mount(app, db, { requireAdmin }) {
+// options.passwordHash (Hex, scrypt) überschreibt das Passwort, nur für Tests
+function mount(app, db, { requireAdmin, passwordHash }) {
   const schemaVersion = migrate(db);
   const projectCache = rentman.createProjectCache(db);
   const foodCache = rentman.createFoodCache(db);
   const audit = createAudit(db);
 
-  // Seite: ohne Admin-Login Weiterleitung zum Login
+  const limiter = lock.createLimiter();
+  const unlocked = req => !lock.enabled() || req.session.cateringUnlocked === true;
+
+  // Seite: ohne Admin-Login Weiterleitung zum Login, ohne Passwort die Sperrseite (und sonst nichts)
   const gate = (req, res, next) => {
     if (!req.session.userId || req.session.role !== 'admin') return res.redirect('/login.html');
+    if (!unlocked(req)) {
+      res.set('Cache-Control', 'no-store');
+      if (req.path === '/' || req.path === '/index.html') return res.sendFile(path.join(__dirname, 'lock.html'));
+      return res.status(423).type('text/plain; charset=utf-8').send('Gesperrt');
+    }
     next();
   };
   app.use('/catering', gate, express.static(path.join(__dirname, 'web')));
 
   const api = express.Router();
   api.use(requireAdmin);
+
+  // Passwortschutz: Entsperren gilt für die Sitzung; alles andere ist bis dahin gesperrt (423)
+  api.get('/lock-status', (req, res) => res.json({ protected: lock.enabled(), unlocked: unlocked(req) }));
+  api.post('/unlock', (req, res) => {
+    const wait = limiter.blockedMinutes(req);
+    if (wait) return res.status(429).json({ error: `Zu viele Fehlversuche. Bitte in ${wait} Minute(n) erneut versuchen.` });
+    if (!lock.check(req.body && req.body.password, passwordHash)) {
+      limiter.fail(req);
+      return res.status(401).json({ error: 'Falsches Passwort.' });
+    }
+    limiter.clear(req);
+    req.session.cateringUnlocked = true;
+    res.json({ ok: true });
+  });
+  api.post('/lock', (req, res) => { req.session.cateringUnlocked = false; res.json({ ok: true }); });
+  api.use((req, res, next) => {
+    if (unlocked(req)) return next();
+    res.status(423).json({ error: 'Der Catering-Kalkulator ist gesperrt. Bitte das Passwort eingeben.', locked: true });
+  });
 
   api.get('/status', (req, res) => {
     res.json({
