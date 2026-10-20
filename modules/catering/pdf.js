@@ -1,8 +1,10 @@
-// PDF-Ausgabe (DIN A4): "Bestellübersicht" (Anzahl, Gericht, Menge, Garnitur) und "Einkaufsliste" nach Lieferant.
+// PDF-Ausgabe (DIN A4): eine vollständige Einkaufsliste, nach Lieferanten aufgeteilt.
+// Jeder Lieferant steht auf einer eigenen Seite mit Projektkopf, damit sich jede Seite einzeln weitergeben lässt.
 // Unvollständige Bestellungen werden deutlich gekennzeichnet und nie als fertige Liste ausgegeben.
 const fs = require('fs');
 const PDFDocument = require('pdfkit');
 const { num, grams, perGlass, qtyUnit } = require('./format');
+const { groupBySupplier } = require('./order-calc');
 
 const M = 40;                       // Seitenrand
 const COLOR = { text: '#000', gray: '#666', line: '#ccc', warn: '#cc0000', warnBg: '#fff0f0', note: '#fff4d6' };
@@ -12,15 +14,24 @@ const dateDe = v => {
   return d && !isNaN(d) ? d.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' }) : 'ohne Datum';
 };
 
-function garnishText(line) {
-  return line.garnish.map(g => (g.qtyPerGlass === null ? (g.overridden ? g.name : `${g.name} (Menge offen)`) : `${perGlass(g.qtyPerGlass, g.unit)} ${g.name}`)).join(' & ');
+// Woraus sich die Menge zusammensetzt: bei Speisen "22 Gläser x 40 g", bei Garnitur "22 x ½ + 19 x 1"
+function detailText(s) {
+  if (s.kind === 'speise') {
+    if (s.glasses === null || s.glasses === undefined || !s.fillGrams) return '';
+    return `${num(s.glasses, 0)} Gläser x ${num(s.fillGrams, 2)} g = ${grams(s.need)}`;
+  }
+  const known = (s.parts || []).filter(p => p.qtyPerGlass !== null && p.glasses !== null);
+  const calc = known.length ? known.map(p => `${num(p.glasses, 0)} x ${perGlass(p.qtyPerGlass, s.unit)}`).join(' + ') : '';
+  if (s.overridden) return s.need === null ? 'Menge pro Glas offen' : `berechnet: ${qtyUnit(s.need, s.needUnit || s.unit)}`;
+  if (s.open || s.need === null) return 'Menge pro Glas offen';
+  return `${calc} = ${qtyUnit(s.need, s.needUnit || s.unit)}`;
 }
 
-// order: { name, number, eventDate, status, createdAt, updatedAt }, computed: Ergebnis von computeOrder
-function renderOrderPdf({ order, computed, kind, logoPath }) {
+// order: { name, number, eventDate, status, createdAt }, computed: Ergebnis von computeOrder
+function renderOrderPdf({ order, computed, logoPath }) {
   return new Promise((resolve, reject) => {
     const doc = new PDFDocument({ size: 'A4', margin: M, bufferPages: true,
-      info: { Title: `${kind === 'einkauf' ? 'Einkaufsliste' : 'Bestellübersicht'} ${order.name}`, Author: 'Munich Flavour' } });
+      info: { Title: `Einkaufsliste ${order.name}`, Author: 'Munich Flavour' } });
     const chunks = [];
     doc.on('data', c => chunks.push(c));
     doc.on('end', () => resolve(Buffer.concat(chunks)));
@@ -28,114 +39,99 @@ function renderOrderPdf({ order, computed, kind, logoPath }) {
 
     const W = doc.page.width - 2 * M;
     const bottom = () => doc.page.height - M - 20;
-    const ensure = h => { if (doc.y + h > bottom()) doc.addPage(); };
+    const rule = y => doc.moveTo(M, y).lineTo(M + W, y).lineWidth(0.5).strokeColor(COLOR.line).stroke();
+    const hasLogo = !!(logoPath && fs.existsSync(logoPath));
 
-    // Kopf
-    let headerH = 0;
-    if (logoPath && fs.existsSync(logoPath)) {
-      try { doc.image(logoPath, M, M, { fit: [48, 48] }); headerH = 54; } catch { /* Logo ist optional */ }
-    }
-    doc.fillColor(COLOR.text).font('Helvetica-Bold').fontSize(20)
-      .text(kind === 'einkauf' ? 'Einkaufsliste' : 'Bestellübersicht', M + (headerH ? 62 : 0), M + 2, { width: W - (headerH ? 62 : 0) });
-    doc.font('Helvetica').fontSize(11).fillColor(COLOR.gray).text('Munich Flavour', M + (headerH ? 62 : 0), doc.y, { width: W - 62 });
-    doc.y = Math.max(doc.y, M + headerH) + 10;
-
-    doc.fillColor(COLOR.text).font('Helvetica-Bold').fontSize(14).text(order.name, M, doc.y, { width: W });
     const meta = [
       order.number ? `Nr. ${order.number}` : null,
       `Event: ${dateDe(order.eventDate)}`,
       computed.guests ? `Gäste: ${num(computed.guests, 0)}` : 'Gäste: fehlt',
       computed.glassesPerPerson ? `${num(computed.glassesPerPerson, 2)} Gläser/Person` : null,
+      `${num(computed.totalGlasses, 0)} Gläser`,
       `Erstellt: ${dateDe(order.createdAt)}`,
       order.status === 'abgeschlossen' ? 'abgeschlossen' : 'Entwurf',
     ].filter(Boolean).join('   |   ');
-    doc.font('Helvetica').fontSize(9).fillColor(COLOR.gray).text(meta, M, doc.y + 2, { width: W });
-    doc.moveDown(0.8);
 
-    // Hinweise: unvollständig = rot, sonst gelb
-    if (computed.warnings.length) {
-      const items = computed.warnings.slice(0, 12).map(w => `• ${w.text}`);
-      if (computed.warnings.length > 12) items.push(`• … und ${computed.warnings.length - 12} weitere Hinweise`);
-      const head = computed.complete ? 'Hinweise' : 'UNVOLLSTÄNDIG: Diese Liste nicht zum Bestellen verwenden';
-      const body = items.join('\n');
-      doc.font('Helvetica-Bold').fontSize(10);
-      const h = 14 + doc.heightOfString(head, { width: W - 16 }) + doc.font('Helvetica').fontSize(9).heightOfString(body, { width: W - 16 });
-      ensure(h + 10);
-      const y = doc.y;
-      doc.rect(M, y, W, h).fill(computed.complete ? COLOR.note : COLOR.warnBg);
-      doc.fillColor(computed.complete ? COLOR.text : COLOR.warn).font('Helvetica-Bold').fontSize(10).text(head, M + 8, y + 7, { width: W - 16 });
-      doc.fillColor(COLOR.text).font('Helvetica').fontSize(9).text(body, M + 8, doc.y + 2, { width: W - 16 });
-      doc.y = y + h + 12;
+    // Kopf einer Seite: Titel, Projekt, Lieferant. `first` zeigt zusätzlich die ausführlichen Hinweise.
+    function header(supplierLabel, count, first, cont) {
+      let logoH = 0;
+      if (hasLogo) { try { doc.image(logoPath, M, M, { fit: [44, 44] }); logoH = 50; } catch { /* Logo ist optional */ } }
+      const tx = M + (logoH ? 58 : 0);
+      doc.fillColor(COLOR.text).font('Helvetica-Bold').fontSize(18).text('Einkaufsliste', tx, M + 2, { width: W - (tx - M) });
+      doc.font('Helvetica').fontSize(10).fillColor(COLOR.gray).text('Munich Flavour', tx, doc.y, { width: W - (tx - M) });
+      doc.y = Math.max(doc.y, M + logoH) + 8;
+      doc.fillColor(COLOR.text).font('Helvetica-Bold').fontSize(13).text(order.name, M, doc.y, { width: W });
+      doc.font('Helvetica').fontSize(8.5).fillColor(COLOR.gray).text(meta, M, doc.y + 2, { width: W });
+      doc.moveDown(0.6);
+
+      if (!computed.complete) {
+        const h = 22;
+        const y = doc.y;
+        doc.rect(M, y, W, h).fill(COLOR.warnBg);
+        doc.fillColor(COLOR.warn).font('Helvetica-Bold').fontSize(10).text('UNVOLLSTÄNDIG: Diese Liste nicht zum Bestellen verwenden', M + 8, y + 6, { width: W - 16 });
+        doc.y = y + h + 8;
+      }
+      if (first && computed.warnings.length) {
+        const items = computed.warnings.slice(0, 12).map(w => `• ${w.text}`);
+        if (computed.warnings.length > 12) items.push(`• … und ${computed.warnings.length - 12} weitere Hinweise`);
+        const body = items.join('\n');
+        doc.font('Helvetica').fontSize(8.5);
+        const h = 12 + doc.heightOfString(body, { width: W - 16 });
+        const y = doc.y;
+        doc.rect(M, y, W, h).fill(COLOR.note);
+        doc.fillColor(COLOR.text).font('Helvetica').fontSize(8.5).text(body, M + 8, y + 6, { width: W - 16 });
+        doc.y = y + h + 10;
+      }
+      doc.fillColor(COLOR.text).font('Helvetica-Bold').fontSize(14)
+        .text(`${supplierLabel}${cont ? ' (Fortsetzung)' : ''}`, M, doc.y, { width: W, continued: false });
+      doc.font('Helvetica').fontSize(9).fillColor(COLOR.gray).text(`${count} Artikel`, M, doc.y, { width: W });
+      doc.moveDown(0.4);
     }
 
-    const rule = y => doc.moveTo(M, y).lineTo(M + W, y).lineWidth(0.5).strokeColor(COLOR.line).stroke();
+    const cols = [{ x: M, w: 18 }, { x: M + 26, w: 168 }, { x: M + 200, w: 92 }, { x: M + 298, w: 120 }, { x: M + 424, w: W - 424 }];
+    const tableHead = () => {
+      const y = doc.y;
+      doc.font('Helvetica-Bold').fontSize(9).fillColor(COLOR.gray);
+      ['', 'Artikel', 'Einkaufsmenge', 'Zusammensetzung', 'Bemerkung'].forEach((t, i) => doc.text(t, cols[i].x, y, { width: cols[i].w }));
+      doc.y = y + 13; rule(doc.y); doc.y += 5;
+    };
 
-    if (kind !== 'einkauf') {
-      // ---- Bestellübersicht ----
-      const cols = [{ x: M, w: 55, align: 'right' }, { x: M + 70, w: 175 }, { x: M + 255, w: 70 }, { x: M + 335, w: W - 335 }];
-      const head = () => {
+    const groups = groupBySupplier(computed.shopping);
+    if (!groups.length) groups.push({ supplier: null, items: [] });
+    let firstPage = true;
+
+    for (const g of groups) {
+      const label = g.supplier || 'Ohne Lieferant';
+      if (!firstPage) doc.addPage();
+      header(label, g.items.length, firstPage, false);
+      firstPage = false;
+      tableHead();
+      if (!g.items.length) { doc.font('Helvetica').fontSize(10).fillColor(COLOR.gray).text('Noch nichts zu bestellen.', M, doc.y); }
+
+      for (const s of g.items) {
+        const sub = [s.articleNo ? `Art.-Nr. ${s.articleNo}` : null,
+          s.overridden ? `manuell festgelegt${s.overrideNote ? ': ' + s.overrideNote : ''}` : null,
+          s.kind === 'garnitur' && s.sources && s.sources.length ? `für: ${s.sources.join(', ')}` : null].filter(Boolean).join('  |  ');
+        const buy = s.qty === null ? 'Menge offen' : qtyUnit(s.qty, s.unit) + (s.packs && s.packSize ? ` (${num(s.packs, 0)} x ${qtyUnit(s.packSize, s.unit)})` : '');
+        const label2 = s.kind === 'garnitur' ? `${s.name} (Garnitur)` : s.name;
+        const detail = detailText(s);
+
+        doc.font('Helvetica').fontSize(10);
+        const labelH = doc.heightOfString(label2, { width: cols[1].w });
+        const subH = sub ? doc.fontSize(7.5).heightOfString(sub, { width: cols[1].w }) + 2 : 0;
+        const detH = detail ? doc.fontSize(8).heightOfString(detail, { width: cols[3].w }) : 0;
+        doc.fontSize(10);
+        const h = Math.max(labelH + subH, doc.heightOfString(buy, { width: cols[2].w }), detH, 18) + 8;
+        if (doc.y + h > bottom()) { doc.addPage(); header(label, g.items.length, false, true); tableHead(); }
+
         const y = doc.y;
-        doc.font('Helvetica-Bold').fontSize(10).fillColor(COLOR.text);
-        ['Anzahl', 'Gericht', 'Menge', 'Garnitur / Beilage'].forEach((t, i) => doc.text(t, cols[i].x, y, { width: cols[i].w, align: cols[i].align || 'left' }));
-        doc.y = y + 16; rule(doc.y); doc.y += 6;
-      };
-      ensure(60); head();
-      for (const l of computed.lines) {
-        const name = l.dishName || l.rentmanName || 'Unbenannt';
-        const gt = garnishText(l);
-        doc.font('Helvetica').fontSize(11);
-        const h = Math.max(doc.heightOfString(name, { width: cols[1].w }), doc.heightOfString(gt || ' ', { width: cols[3].w }), 14) + 8;
-        if (doc.y + h > bottom()) { doc.addPage(); head(); }
-        const y = doc.y;
-        doc.fillColor(COLOR.text);
-        doc.text(l.glasses === null ? '?' : `${num(l.glasses, 0)}×`, cols[0].x, y, { width: cols[0].w, align: 'right' });
-        doc.text(name, cols[1].x, y, { width: cols[1].w });
-        doc.fillColor(l.orderGrams === null ? COLOR.warn : COLOR.text).text(l.orderGrams === null ? 'offen' : grams(l.orderGrams), cols[2].x, y, { width: cols[2].w });
-        doc.fillColor(COLOR.text).text(gt, cols[3].x, y, { width: cols[3].w });
+        doc.lineWidth(1).strokeColor(COLOR.text).rect(cols[0].x, y + 1, 13, 13).stroke();
+        doc.fillColor(COLOR.text).font('Helvetica').fontSize(10).text(label2, cols[1].x, y, { width: cols[1].w });
+        if (sub) doc.fontSize(7.5).fillColor(COLOR.gray).text(sub, cols[1].x, doc.y, { width: cols[1].w });
+        doc.fontSize(10).fillColor(s.qty === null ? COLOR.warn : COLOR.text).font('Helvetica-Bold').text(buy, cols[2].x, y, { width: cols[2].w });
+        if (detail) doc.font('Helvetica').fontSize(8).fillColor(COLOR.gray).text(detail, cols[3].x, y + 1, { width: cols[3].w });
+        doc.moveTo(cols[4].x, y + 13).lineTo(M + W, y + 13).lineWidth(0.5).strokeColor(COLOR.line).stroke();
         doc.y = y + h - 4; rule(doc.y); doc.y += 4;
-      }
-      ensure(30);
-      doc.font('Helvetica-Bold').fontSize(11).fillColor(COLOR.text).text(`${num(computed.totalGlasses, 0)}×`, cols[0].x, doc.y + 4, { width: cols[0].w, align: 'right' });
-      doc.text('Gesamt', cols[1].x, doc.y - 13, { width: cols[1].w });
-      if (computed.target !== null) doc.font('Helvetica').fontSize(9).fillColor(COLOR.gray)
-        .text(`Soll laut Gästezahl: ${num(computed.target, 2)}`, cols[3].x, doc.y - 12, { width: cols[3].w });
-      doc.y += 14;
-    } else {
-      // ---- Einkaufsliste nach Lieferant ----
-      const groups = new Map();
-      computed.shopping.forEach(s => { const k = s.supplier || 'Ohne Lieferant'; if (!groups.has(k)) groups.set(k, []); groups.get(k).push(s); });
-      const cols = [{ x: M, w: 18 }, { x: M + 26, w: 170 }, { x: M + 205, w: 95 }, { x: M + 310, w: 85 }, { x: M + 405, w: W - 405 }];
-      const head = () => {
-        const y = doc.y;
-        doc.font('Helvetica-Bold').fontSize(9).fillColor(COLOR.gray);
-        ['', 'Artikel', 'Einkaufsmenge', 'Bedarf', 'Bemerkung'].forEach((t, i) => doc.text(t, cols[i].x, y, { width: cols[i].w }));
-        doc.y = y + 13; rule(doc.y); doc.y += 5;
-      };
-      for (const [supplier, items] of groups) {
-        ensure(70);
-        doc.font('Helvetica-Bold').fontSize(12).fillColor(COLOR.text).text(supplier, M, doc.y, { width: W });
-        doc.moveDown(0.3); head();
-        for (const s of items) {
-          const sources = [s.articleNo ? `Art.-Nr. ${s.articleNo}` : null,
-        s.overridden ? `manuell festgelegt${s.overrideNote ? ': ' + s.overrideNote : ''}` : null, s.sources && s.sources.length && s.kind === 'garnitur' ? `für: ${s.sources.join(', ')}` : null].filter(Boolean).join('  |  ');
-          const buy = s.qty === null ? 'Menge offen' : qtyUnit(s.qty, s.unit) + (s.packs && s.packSize ? ` (${num(s.packs, 0)} × ${qtyUnit(s.packSize, s.unit)})` : '');
-          const label = s.kind === 'garnitur' ? `${s.name} (Garnitur)` : s.name;
-          doc.font('Helvetica').fontSize(10);
-          const labelH = doc.heightOfString(label, { width: cols[1].w });
-          const sourcesH = sources ? doc.fontSize(7.5).heightOfString(sources, { width: cols[1].w }) + 2 : 0;
-          doc.fontSize(10);
-          const h = Math.max(labelH + sourcesH, doc.heightOfString(buy, { width: cols[2].w }), 18) + 8;
-          if (doc.y + h > bottom()) { doc.addPage(); head(); }
-          const y = doc.y;
-          doc.lineWidth(1).strokeColor(COLOR.text).rect(cols[0].x, y + 1, 13, 13).stroke();
-          doc.fillColor(COLOR.text).font('Helvetica').fontSize(10).text(label, cols[1].x, y, { width: cols[1].w });
-          if (sources) doc.fontSize(7.5).fillColor(COLOR.gray).text(sources, cols[1].x, doc.y, { width: cols[1].w });
-          doc.fontSize(10).fillColor(s.qty === null ? COLOR.warn : COLOR.text).font('Helvetica-Bold').text(buy, cols[2].x, y, { width: cols[2].w });
-          doc.font('Helvetica').fillColor(COLOR.gray).text(s.open || s.need === null || s.unit === undefined ? '-' : qtyUnit(s.need, s.needUnit || s.unit), cols[3].x, y, { width: cols[3].w });   // offene Menge nie als 0 zeigen
-          doc.moveTo(cols[4].x, y + 13).lineTo(M + W, y + 13).lineWidth(0.5).strokeColor(COLOR.line).stroke();
-          doc.y = y + h - 4; rule(doc.y); doc.y += 4;
-        }
-        doc.moveDown(0.8);
       }
     }
 

@@ -67,7 +67,7 @@ function computeOrder({ guests, glassesPerPerson, lines, garnishOverrides = [] }
         }
         res.orderGrams = order.toFixed();
         shoppingMain.push({ kind: 'speise', name: dish.name, articleNo: dish.articleNo || null, supplier: dish.supplierName || null, qty: res.orderGrams, unit: 'g',
-          need: res.needGrams, packSize: res.stepGrams, open: false, sources: [label] });
+          need: res.needGrams, packSize: res.stepGrams, open: false, sources: [label], glasses: res.glasses, fillGrams: res.fillGrams });
       }
 
       for (const g of dish.garnish || []) {
@@ -75,9 +75,15 @@ function computeOrder({ guests, glassesPerPerson, lines, garnishOverrides = [] }
         const k = keyOf(g.name, g.unit);
         const ov = overrides.get(k);
         item.overridden = !!ov;
-        const agg = garnishAgg.get(k) || { key: k, kind: 'garnitur', name: g.name, supplier: g.supplierName || dish.supplierName || null, unit: g.unit,
-          sum: D(0), open: false, unknown: false, packSize: null, sources: [] };
+        const agg = garnishAgg.get(k) || { key: k, kind: 'garnitur', name: g.name, supplier: g.supplierName || null, unit: g.unit,
+          sum: D(0), open: false, unknown: false, packSize: null, sources: [], parts: [] };
         if (!agg.sources.includes(dish.name)) agg.sources.push(dish.name);
+        agg.parts.push({ dish: dish.name, glasses: glasses === null ? null : glasses.toFixed(), qtyPerGlass: item.qtyPerGlass });
+        // Dieselbe Garnitur bei Speisen mit verschiedenen Lieferanten wird nicht still zusammengeführt
+        if ((g.supplierName || null) !== agg.supplier && !agg.conflict) {
+          agg.conflict = true;
+          warn('lieferant_konflikt', `Die Garnitur "${g.name}" hat bei verschiedenen Speisen unterschiedliche Lieferanten (${agg.supplier || 'keiner'} und ${g.supplierName || 'keiner'}). Es gilt: ${agg.supplier || 'ohne Lieferant'}.`, line.id);
+        }
         if (!empty(g.packSize) && agg.packSize === null) agg.packSize = D(g.packSize).toFixed();
         if (item.qtyPerGlass === null) {
           agg.unknown = true;       // Bedarf ist unbekannt, nie als 0 ausweisen
@@ -100,7 +106,7 @@ function computeOrder({ guests, glassesPerPerson, lines, garnishOverrides = [] }
   const usedOverrides = new Set();
   const garnishShopping = [...garnishAgg.values()].map(a => {
     const row = { key: a.key, kind: 'garnitur', name: a.name, supplier: a.supplier, unit: a.unit, need: a.unknown ? null : a.sum.toFixed(), needUnit: a.unit, qty: null,
-      packSize: a.packSize, packs: null, open: a.open, sources: a.sources, overridden: false, overrideNote: null };
+      packSize: a.packSize, packs: null, open: a.open, sources: a.sources, parts: a.parts, overridden: false, overrideNote: null };
     const ov = overrides.get(a.key);
     if (ov) {
       usedOverrides.add(a.key);
@@ -120,6 +126,10 @@ function computeOrder({ guests, glassesPerPerson, lines, garnishOverrides = [] }
     return row;
   });
 
+  const allShopping = [...shoppingMain, ...garnishShopping];
+  const ohne = allShopping.filter(x => !x.supplier);
+  if (ohne.length) warn('ohne_lieferant', `Für ${ohne.length === 1 ? '1 Artikel' : ohne.length + ' Artikel'} ist noch kein Lieferant festgelegt: ${ohne.map(x => x.name).join(', ')}. Sie stehen unter "Ohne Lieferant".`);
+
   for (const o of garnishOverrides) {
     if (!usedOverrides.has(o.key)) warn('override_unbenutzt', `Die manuelle Menge für "${o.name || o.key}" wird nicht verwendet, weil diese Garnitur in der Bestellung nicht mehr vorkommt.`);
   }
@@ -134,8 +144,23 @@ function computeOrder({ guests, glassesPerPerson, lines, garnishOverrides = [] }
     glassesPerPerson: empty(glassesPerPerson) ? null : D(glassesPerPerson).toFixed(),
     target: target === null ? null : target.toFixed(),
     totalGlasses: total.toFixed(),
-    complete, warnings, lines: out, shopping: [...shoppingMain, ...garnishShopping],
+    complete, warnings, lines: out, shopping: allShopping,
   };
+}
+
+// Teilt die Einkaufsliste nach Lieferant auf: benannte Lieferanten alphabetisch, "ohne Lieferant" zuletzt.
+// Innerhalb eines Lieferanten stehen zuerst die Speisen, dann die Garnitur.
+function groupBySupplier(shopping) {
+  const map = new Map();
+  for (const it of shopping) {
+    const k = it.supplier || '';
+    if (!map.has(k)) map.set(k, []);
+    map.get(k).push(it);
+  }
+  const rank = it => (it.kind === 'speise' ? 0 : 1);
+  return [...map.entries()]
+    .sort(([a], [b]) => (a === '' ? 1 : b === '' ? -1 : a.localeCompare(b, 'de')))
+    .map(([k, items]) => ({ supplier: k || null, items: items.slice().sort((x, y) => rank(x) - rank(y)) }));
 }
 
 // Verteilt `total` Gläser möglichst gleichmäßig auf n Zeilen (Rest auf die ersten Zeilen).
@@ -147,4 +172,4 @@ function distributeEvenly(total, n) {
   return Array.from({ length: n }, (_, i) => base + (i < rest ? 1 : 0));
 }
 
-module.exports = { computeOrder, distributeEvenly, keyOf, Decimal, perGlass };
+module.exports = { computeOrder, distributeEvenly, groupBySupplier, keyOf, Decimal, perGlass };

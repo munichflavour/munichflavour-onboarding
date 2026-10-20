@@ -168,13 +168,14 @@ test('PDF: Bestellübersicht und Einkaufsliste, mehrseitig, unvollständig geken
     const lines = Array.from({ length: 60 }, (_, i) => ({ rentmanName: `Speise Nummer ${i + 1} mit längerem Namen`, dishId: d.id, glasses: String(i + 1) }));
     const o = (await t.admin('POST', '/api/catering/orders', { name: 'Großes Projekt (Testdaten)', guests: 100, glassesPerPerson: 2.6, number: '9999' })).json;
     await t.admin('PUT', `/api/catering/orders/${o.id}`, { name: o.name, number: '9999', guests: '100', glassesPerPerson: '2.6', rev: o.rev, lines });
-    for (const type of ['bestellung', 'einkauf']) {
-      const res = await t.admin('GET', `/api/catering/orders/${o.id}/pdf?type=${type}`, undefined, true);
+    for (const q of ['', '?type=einkauf', '?type=bestellung']) {          // es gibt nur noch die eine Einkaufsliste, der alte Parameter ist ohne Wirkung
+      const res = await t.admin('GET', `/api/catering/orders/${o.id}/pdf${q}`, undefined, true);
       assert.equal(res.status, 200);
       assert.match(res.headers.get('content-type'), /application\/pdf/);
+      assert.match(res.headers.get('content-disposition'), /Einkaufsliste_/);
       assert.equal(res.buffer.subarray(0, 5).toString(), '%PDF-');
       const pages = (res.buffer.toString('latin1').match(/\/Type \/Page\b/g) || []).length;
-      if (type === 'bestellung') assert.ok(pages >= 2, `60 Zeilen müssen auf mehrere Seiten umbrechen (Seiten: ${pages})`);
+      assert.ok(pages >= 2, `60 Zeilen müssen auf mehrere Seiten umbrechen (Seiten: ${pages})`);
     }
     // leere Bestellung (unvollständig) liefert trotzdem ein PDF, das als unvollständig gekennzeichnet ist
     const empty = (await t.admin('POST', '/api/catering/orders', { name: 'Leer' })).json;
@@ -298,11 +299,9 @@ test('PDF mit manueller Garnitur-Menge: kein "offen" mehr, Hinweis "manuell fest
     const { order } = await orderWithDill(t);
     const key = order.computed.shopping.find(s => s.name === 'Dill').key;
     const r = await t.admin('POST', `/api/catering/orders/${order.id}/garnish-override`, { rev: order.rev, key, qty: '1', unit: 'stk', note: '1 Bund' });
-    for (const type of ['einkauf', 'bestellung']) {
-      const res = await t.admin('GET', `/api/catering/orders/${order.id}/pdf?type=${type}`, undefined, true);
-      assert.equal(res.status, 200);
-      assert.equal(res.buffer.subarray(0, 5).toString(), '%PDF-');
-    }
+    const res = await t.admin('GET', `/api/catering/orders/${order.id}/pdf`, undefined, true);
+    assert.equal(res.status, 200);
+    assert.equal(res.buffer.subarray(0, 5).toString(), '%PDF-');
     assert.equal(r.json.computed.warnings.filter(w => w.code === 'garnitur').length, 0);
   } finally { t.close(); }
 });
@@ -386,5 +385,32 @@ test('Änderung der Auswahl durch den Benutzer überschreibt die automatische Zu
     assert.equal(put.lines[0].dishId, couscous.id);
     const next = (await t.admin('POST', '/api/catering/orders', { name: 'Danach', lines: [RENTMAN_LINES[1]] })).json;
     assert.equal(next.lines[0].dishId, couscous.id);                                 // die letzte Entscheidung des Benutzers gilt
+  } finally { t.close(); }
+});
+
+// ---- Einkaufsliste nach Lieferanten ----
+test('Garnitur mit Lieferant: Lieferant wird gespeichert und die Einkaufsliste danach aufgeteilt', async () => {
+  const t = await setup();
+  try {
+    const kugler = (await t.admin('POST', '/api/catering/suppliers', { name: 'Kugler' })).json;
+    const markt = (await t.admin('POST', '/api/catering/suppliers', { name: 'Großmarkt' })).json;
+    const d = (await t.admin('POST', '/api/catering/dishes', { name: 'Wurstsalat', supplierId: kugler.id, articleNo: '3271', fillGrams: '40', stepGrams: '900',
+      garnish: [{ name: 'Radieschen', qtyPerGlass: '0,5', unit: 'stk', supplierId: markt.id }, { name: 'Dill', qtyPerGlass: '2', unit: 'g' }] })).json;
+    assert.equal(d.garnish[0].supplierId, markt.id);
+    assert.equal(d.garnish[0].supplierName, 'Großmarkt');
+    assert.equal(d.garnish[1].supplierId, null);
+    const o = (await t.admin('POST', '/api/catering/orders', { name: 'Aufgeteilt', guests: 10, glassesPerPerson: 2 })).json;
+    const saved = (await t.admin('PUT', `/api/catering/orders/${o.id}`, { name: o.name, guests: '10', glassesPerPerson: '2', rev: o.rev,
+      lines: [{ rentmanName: 'Wurstsalat', dishId: d.id, glasses: '20' }] })).json;
+    const by = n => saved.computed.shopping.find(s => s.name === n);
+    assert.equal(by('Wurstsalat').supplier, 'Kugler');
+    assert.equal(by('Radieschen').supplier, 'Großmarkt');
+    assert.equal(by('Dill').supplier, null);                                          // kein stiller Standard-Lieferant
+    assert.ok(saved.computed.warnings.some(w => w.code === 'ohne_lieferant' && /Dill/.test(w.text)));
+    assert.equal(saved.computed.complete, true);                                      // fehlender Lieferant ist ein Hinweis, kein Hindernis
+    // eine Seite je Lieferant: Kugler, Großmarkt, Ohne Lieferant
+    const res = await t.admin('GET', `/api/catering/orders/${o.id}/pdf`, undefined, true);
+    const pages = (res.buffer.toString('latin1').match(/\/Type \/Page\b/g) || []).length;
+    assert.equal(pages, 3);
   } finally { t.close(); }
 });

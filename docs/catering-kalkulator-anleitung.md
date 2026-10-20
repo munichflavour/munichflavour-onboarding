@@ -7,7 +7,7 @@ Nur für Admins und zusätzlich **passwortgeschützt**, solange der Kalkulator i
 2. Jede Speise antippen und prüfen:
    - **Füllmenge pro Glas (g)**: Die vorbelegten Werte sind aus der Bestellübersicht vom 20.10.2026 zurückgerechnet. Bitte prüfen.
    - **Gebinde / Bestellschritt (g)**: Die Bestellmenge wird auf ein Vielfaches aufgerundet. Leer lassen, wenn nicht gerundet werden soll.
-   - **Garnitur pro Glas**: Name, Menge pro Glas, Einheit und optional Gebinde. Eine leere Menge bedeutet "offen" und wird nie als 0 gerechnet.
+   - **Garnitur pro Glas**: Name, Menge pro Glas, Einheit, optional Gebinde und **Lieferant**. Eine leere Menge bedeutet "offen" und wird nie als 0 gerechnet. Ohne Lieferant steht die Garnitur unter "Ohne Lieferant", sie bekommt nicht stillschweigend den Lieferanten der Speise.
 3. Fehlt etwas, meldet das Tool "unvollständig", statt eine scheinbar fertige Liste zu erzeugen.
 
 ## Für jedes Event
@@ -17,7 +17,7 @@ Nur für Admins und zusätzlich **passwortgeschützt**, solange der Kalkulator i
 4. Die Speisen aus Rentman werden **automatisch** den Speisen deines Katalogs zugeordnet, wenn der Name gleich ist oder der Katalogname am Anfang des Rentman-Namens steht (z. B. Katalog "Kartoffel-Gurken-Salat", Rentman "Kartoffel-Gurken-Salat mit Fleischpflanzerl"). Ist es nicht eindeutig oder fehlt die Speise im Katalog, bleibt die Zeile offen. Bei ähnlichen Namen erscheint ein **Vorschlag**, den du mit **Übernehmen** bestätigst, oder du wählst die Speise selbst. Die Zuordnung wird gemerkt und beim nächsten Mal wieder genutzt. Wählst du eine andere Speise, gilt künftig deine Auswahl.
 5. **Gläser pro Speise** eintragen oder **Gläser gleichmäßig verteilen** tippen. Oben steht, wie viele Gläser verteilt sind und wie viele laut Gästezahl nötig wären.
 6. Die Seite **speichert und rechnet automatisch**, kurz nachdem du etwas änderst. Unten steht "Gespeichert ✓". Darunter steht das Ergebnis: Einkaufsliste mit Bestellmenge, Bedarf, Artikelnummer und Garnitur. Der Rechenweg steht bei jeder Speise. Gelb markierte Hinweise zeigen, was noch offen ist. Der Knopf **Speichern** erzwingt das Speichern sofort.
-7. **PDF Bestellung** (Anzahl, Gericht, Menge, Garnitur) oder **PDF Einkauf** (nach Lieferant, mit Abhak-Kästchen).
+7. **PDF Einkaufsliste**: Es gibt genau eine vollständige Liste, nach **Lieferanten aufgeteilt**. Jeder Lieferant steht auf einer eigenen Seite mit Projektkopf (Projekt, Datum, Gäste, Gläser), sodass sich jede Seite einzeln weitergeben lässt. Pro Artikel stehen Artikelnummer, Einkaufsmenge, die Zusammensetzung (z. B. "22 Gläser x 40 g = 880 g" oder "22 x ½ + 19 x 1"), ein Abhak-Kästchen und Platz für eine Bemerkung. Artikel ohne Lieferant stehen auf der letzten Seite unter "Ohne Lieferant"; dazu gibt es einen Hinweis.
 8. **Garnitur-Menge von Hand festlegen:** In der Einkaufsliste hat jede Garnitur einen Knopf **Menge festlegen** bzw. **Menge ändern**. Damit gibst du die Gesamtmenge für diese Bestellung selbst an (z. B. 1 Stück, Bemerkung "1 Bund", oder 100 g). Sie ersetzt die berechnete Menge, wird nicht auf ein Gebinde gerundet und macht auch eine noch offene Menge pro Glas vollständig. Mit **Zurücksetzen** gilt wieder die Berechnung. Das PDF kennzeichnet solche Mengen als "manuell festgelegt".
 9. **Abschließen** friert das Ergebnis ein. Spätere Änderungen an den Speisen verändern es nicht. Mit **Wieder öffnen** lässt es sich neu rechnen.
 

@@ -144,6 +144,13 @@ CAT.register('bestellung', async (root, arg) => {
   let version = 0, savedVersion = 0, saving = false, timer = null;
   const sleep = ms => new Promise(r => setTimeout(r, ms));
   const dishOpts = sel => options(dishes.map(d => [d.id, d.name]), sel, 'Speise wählen');
+  // Wie im PDF: nach Lieferant gruppiert (benannte alphabetisch, "ohne Lieferant" zuletzt), Speisen vor Garnitur
+  const bySupplier = shopping => {
+    const map = new Map();
+    shopping.forEach(it => { const k = it.supplier || ''; if (!map.has(k)) map.set(k, []); map.get(k).push(it); });
+    return [...map.entries()].sort(([a], [b]) => (a === '' ? 1 : b === '' ? -1 : a.localeCompare(b, 'de')))
+      .map(([k, items]) => ({ supplier: k || null, items: items.slice().sort((x, y) => (x.kind === 'speise' ? 0 : 1) - (y.kind === 'speise' ? 0 : 1)) }));
+  };
   const qty = (q, unit) => q === null ? 'offen' : unit === 'g' ? (Number(q) >= 1000 ? fmt(String(Number(q) / 1000)) + ' kg' : fmt(q) + ' g') : fmt(q) + ' ' + (CAT.meta.units[unit] || unit);
 
   // Hinweise unter einer Zeile: Vorschlag (nur wenn unklar), Rechenweg, und was noch offen ist (sachlich, nicht als Fehler)
@@ -170,11 +177,12 @@ CAT.register('bestellung', async (root, arg) => {
     const c = o.computed;
     return `<h3 style="font-size:15px;margin-bottom:10px;">Ergebnis</h3>
         ${c.warnings.length || !c.complete ? `<div class="warn-box"><b ${c.complete ? '' : 'style="color:#cc0000"'}>${c.complete ? 'Hinweise' : 'Noch unvollständig, nicht zum Bestellen verwenden'}</b><ul style="margin:6px 0 0 18px">${c.warnings.map(w => `<li>${esc(w.text)}</li>`).join('')}</ul></div>` : ''}
-        ${c.shopping.length ? `<div class="note" style="margin-bottom:6px">Einkaufsliste${c.complete ? '' : ' (unvollständig)'}</div>` + c.shopping.map(s => `
+        ${c.shopping.length ? `<div class="note" style="margin-bottom:6px">Einkaufsliste${c.complete ? '' : ' (unvollständig)'}</div>` + bySupplier(c.shopping).map(g => `
+          <div style="margin:14px 0 2px;font-weight:700;font-size:15px">${esc(g.supplier || 'Ohne Lieferant')} <span class="pill">${g.items.length} Artikel</span></div>` + g.items.map(s => `
           <div class="row" style="cursor:default"><div class="row-main"><div class="row-title">${esc(s.name)}${s.kind === 'garnitur' ? ' <span class="pill">Garnitur</span>' : ''}${s.overridden ? ' <span class="pill sample">manuell</span>' : ''}</div>
-          <div class="row-meta">${esc(s.supplier || 'ohne Lieferant')}${s.sources && s.sources.length ? ' · für ' + esc(s.sources.join(', ')) : ''}${s.overrideNote ? ' · ' + esc(s.overrideNote) : ''}</div></div>
+          <div class="row-meta">${s.articleNo ? 'Art. ' + esc(s.articleNo) + ' · ' : ''}${s.kind === 'speise' && s.glasses ? esc(s.glasses) + ' Gläser' : (s.sources && s.sources.length ? 'für ' + esc(s.sources.join(', ')) : '')}${s.overrideNote ? ' · ' + esc(s.overrideNote) : ''}</div></div>
           <div style="text-align:right"><b ${s.qty === null ? 'style="color:#cc0000"' : ''}>${esc(qty(s.qty, s.unit))}</b>${s.need !== null && s.qty !== null && (s.need !== s.qty || s.needUnit !== s.unit) ? `<div class="row-meta">${s.overridden ? 'berechnet' : 'Bedarf'} ${esc(qty(s.need, s.needUnit || s.unit))}</div>` : ''}${s.overridden && s.need === null ? '<div class="row-meta">Menge pro Glas offen</div>' : ''}
-          ${s.kind === 'garnitur' && !locked ? `<button class="btn btn-secondary btn-sm" data-ov="${esc(s.key)}" style="margin-top:4px">${s.overridden ? 'Menge ändern' : s.qty === null ? 'Menge festlegen' : 'Menge ändern'}</button>` : ''}</div></div>`).join('')
+          ${s.kind === 'garnitur' && !locked ? `<button class="btn btn-secondary btn-sm" data-ov="${esc(s.key)}" style="margin-top:4px">${s.overridden ? 'Menge ändern' : s.qty === null ? 'Menge festlegen' : 'Menge ändern'}</button>` : ''}</div></div>`).join('')).join('')
           : '<div class="note">Noch nichts zu bestellen.</div>'}`;
   };
 
@@ -209,8 +217,7 @@ CAT.register('bestellung', async (root, arg) => {
         ${locked ? '<button class="btn btn-secondary" id="reopen">Wieder öffnen</button>' : `
           <button class="btn btn-primary" id="save">Speichern</button>
           <button class="btn btn-secondary" id="finalize" ${c.complete ? '' : 'disabled'}>Abschließen</button>`}
-        <button class="btn btn-secondary" id="pdf1">PDF Bestellung</button>
-        <button class="btn btn-secondary" id="pdf2">PDF Einkauf</button>
+        <button class="btn btn-secondary" id="pdf">PDF Einkaufsliste</button>
         ${locked ? '' : '<button class="btn btn-secondary" id="del">Löschen</button>'}
       </div></div>`;
     bind();
@@ -322,12 +329,10 @@ CAT.register('bestellung', async (root, arg) => {
     }
     bindOverrides();
     $('#backlink').onclick = async e => { if (!locked) { e.preventDefault(); await flush(); location.hash = '#/start'; } };
-    const pdf = type => async () => {
+    $('#pdf').onclick = async () => {
       if (!locked && !(await flush())) return;      // PDF zeigt immer den gespeicherten Stand
-      window.open(`/api/catering/orders/${o.id}/pdf?type=${type}`, '_blank');
+      window.open(`/api/catering/orders/${o.id}/pdf`, '_blank');
     };
-    $('#pdf1').onclick = pdf('bestellung');
-    $('#pdf2').onclick = pdf('einkauf');
   }
 
   // Manuelle Gesamtmenge einer Garnitur, gilt nur für diese Bestellung
