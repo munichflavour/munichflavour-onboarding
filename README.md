@@ -51,6 +51,8 @@ Admin-Bereich oeffnet der Reiter **Programme** und dort die Karte **Kartengenera
 an den Kartengenerator weiter (Reverse Proxy, `server.js`). Mitarbeiter und nicht Angemeldete werden abgewiesen. Der
 Kartengenerator selbst akzeptiert im Webbetrieb nur Anfragen mit dem gemeinsamen Token (`KARTEN_TOKEN`) und hat keine
 oeffentliche Adresse. Karten werden als PDF heruntergeladen (kein Ordnerdialog im Webbetrieb).
+Im Portal erscheint die Seite im Portal-Design (schwarze Kopfleiste mit Logo, Link **← Programme**, immer hell). Das wird am
+Pfad `/karten/` erkannt; im lokalen Betrieb (Mac/Windows) bleibt die Oberflaeche unveraendert.
 
 **Einrichtung auf Railway** (das Portal bleibt unveraendert, nur Variablen kommen dazu):
 1. Im Railway-Projekt **New > GitHub Repo** (dasselbe Repo, Branch `main`) = zweiter Dienst, Name z. B. `karten`.
