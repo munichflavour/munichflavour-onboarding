@@ -46,7 +46,7 @@ test('Beispielkatalog (Kugler) wird nur auf Knopfdruck und nur einmal angelegt',
   try {
     assert.equal((await t.admin('GET', '/api/catering/dishes')).json.length, 0);       // nichts vorbelegt
     const first = await t.admin('POST', '/api/catering/dishes/import-example');
-    assert.equal(first.json.created.length, 6);
+    assert.equal(first.json.created.length, 5);
     assert.equal((await t.admin('POST', '/api/catering/dishes/import-example')).json.created.length, 0);
     const dishes = (await t.admin('GET', '/api/catering/dishes')).json;
     const penne = dishes.find(d => d.name === 'Penne "Rucola"');
@@ -55,9 +55,6 @@ test('Beispielkatalog (Kugler) wird nur auf Knopfdruck und nur einmal angelegt',
     assert.equal(penne.articleNo, '360');
     assert.equal(penne.supplierName, 'Kugler');
     assert.equal(penne.garnish.find(g => g.name === 'Rucola').qtyPerGlass, null);      // unbekannte Menge bleibt offen
-    const bulgur = dishes.find(d => d.name === 'Bulgursalat "grüne Minze"');
-    assert.equal(bulgur.fillGrams, null);                                              // Füllmenge unbekannt: nicht erfunden
-    assert.equal(bulgur.stepGrams, '1000');
   } finally { t.close(); }
 });
 

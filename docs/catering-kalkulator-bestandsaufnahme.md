@@ -118,13 +118,15 @@ Der Betrieb besteht aus einer Anrichteküche. Fertige Salate werden bei einem Gr
 - Garnitur pro Glas (z. B. ½ Radieschen) kommt auf die Einkaufsliste. Gleiche Garnitur aus mehreren Speisen wird zusammengefasst und erst danach auf das Gebinde gerundet.
 - Fehlende Angaben (Füllmenge, Zuordnung, Garnitur-Menge, Gästezahl) werden nie als 0 gerechnet. Die Bestellung gilt dann als unvollständig, das PDF trägt eine rote Warnung, Abschließen ist gesperrt.
 
-**Kugler-Katalog (kugler.de, öffentlicher Shop, abgerufen am 20.10.2026):** Alle sechs Salate der Menükarte führt Kugler unter genau diesen Namen. Gebinde und Artikelnummern: Wurstsalat "Schweizer Art" 900 g (Art. 3271), Pikanter Couscous-Salat 1000 g (4310), Gambas "Coco-Ginger" 1000 g (6741), Penne "Rucola" 1000 g (360), Kartoffel-Gurken-Salat 1500 g (3591), Bulgursalat "grüne Minze" 1000 g (6790). Die Mengen der Bestellübersicht entsprechen diesen Hauptgebinden (900 g, 1 kg, 1 kg, 2 x 1 kg, 1,5 kg). Weitere Gebinde (z. B. 500 g, 270 g, Becher) stehen je Speise in der Bemerkung. Ein Bestellschritt pro Speise bildet nur das Hauptgebinde ab, eine Kombination mehrerer Gebinde wird nicht berechnet. Der Shop nennt auch Preise, sie sind nicht übernommen.
+**Kugler-Katalog (kugler.de, öffentlicher Shop, abgerufen am 20.10.2026):** Alle Salate der Menükarte führt Kugler unter genau diesen Namen. Gebinde und Artikelnummern: Wurstsalat "Schweizer Art" 900 g (Art. 3271), Pikanter Couscous-Salat 1000 g (4310), Gambas "Coco-Ginger" 1000 g (6741), Penne "Rucola" 1000 g (360), Kartoffel-Gurken-Salat 1500 g (3591). Die Mengen der Bestellübersicht entsprechen diesen Hauptgebinden (900 g, 1 kg, 1 kg, 2 x 1 kg, 1,5 kg). Weitere Gebinde (z. B. 500 g, 270 g, Becher) stehen je Speise in der Bemerkung. Ein Bestellschritt pro Speise bildet nur das Hauptgebinde ab, eine Kombination mehrerer Gebinde wird nicht berechnet. Der Shop nennt auch Preise, sie sind nicht übernommen.
 
 **Herleitung der Füllmengen:** Aus der Bestellübersicht vom 20.10.2026 (Gesamtmenge geteilt durch Gläser, abgerundet): Wurstsalat 40 g, Couscous 52 g, Garnelen 38 g, Penne 58 g, Kartoffel-Gurken 51 g. Mit den Hauptgebinden von Kugler ergibt das exakt die Mengen der Übersicht (900 g, 1 kg, 1 kg, 2 kg, 1,5 kg). Die Werte sind Näherungen und im Katalog zu prüfen. 
 
 **Rentman:** Blöcke der Materialgruppe "Catering" mit ihrer Menge (Personen) und die Speisen direkt darunter. Der Benutzer wählt die Blöcke und sieht die Quelle der Gästezahl. Namen werden nur vorgeschlagen (Ähnlichkeit), zugeordnet wird erst nach Bestätigung, die für künftige Importe gespeichert wird.
 
 **Ausgabe:** PDF "Bestellübersicht" (Anzahl, Gericht, Menge, Garnitur, Gesamt) und PDF "Einkaufsliste" nach Lieferant mit Abhak-Kästchen. Optional `assets/logo-pdf.jpg` als kleineres Logo (das vorhandene `logo.jpg` macht jedes PDF ca. 2 MB groß).
+
+**Offen (Stand 20.10.2026):** Die genauen Dekorationsmengen (welche Garnitur auf welchen Salat, wie viel Rucola und Dill pro Glas) liefert der Auftraggeber nach. Bis dahin steht die Menge als "offen" in der Bestellung, sie gilt als unvollständig. Der Bulgursalat war ein Fehler in Rentman und auf der Karte und wurde dort entfernt, er ist nicht im Katalog.
 
 **Noch nicht umgesetzt:** Brotzeit und Desserts (Entscheidung: später), mehrere Projekte zusammen, Wareneinsatz, Lieferantengebinde je Artikel.
 

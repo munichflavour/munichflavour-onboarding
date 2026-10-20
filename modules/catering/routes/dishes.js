@@ -39,9 +39,6 @@ const EXAMPLE_DISHES = [
     note: note(true, 'Gebinde 1000 g (Art. 360), Becher ca. 530 g, Gebinde 270 g') },
   { name: 'Kartoffel-Gurken-Salat', articleNo: '3591', fillGrams: '51', stepGrams: '1500', garnish: [{ name: 'Mini-Fleischpflanzerl am Spieß', qtyPerGlass: '2', unit: 'stk' }],
     note: note(true, 'Gebinde 1500 g (Art. 3591), Gebinde 5000 g, Becher ca. 550 g, Becher ca. 350 g') },
-  // Steht auf der Menükarte und in Rentman, aber nicht in der Bestellübersicht: Füllmenge und Garnitur sind unbekannt.
-  { name: 'Bulgursalat "grüne Minze"', articleNo: '6790', fillGrams: null, stepGrams: '1000', garnish: [],
-    note: note(false, 'Gebinde 1000 g (Art. 6790), Becher ca. 450 g, Becher ca. 270 g') },
 ];
 
 function createDishesRouter(db, audit) {
