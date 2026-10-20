@@ -1,7 +1,7 @@
 // Speisenkatalog: Füllmenge pro Glas, Gebinde, Lieferant, Garnitur, bestätigte Rentman-Namen
 CAT.register('speisen', async root => {
   const { $, $$, esc, fmt, api, field, options, unitOptions, modal, confirmDialog, toast } = CAT;
-  const suppliers = await api('GET', '/suppliers');
+  let suppliers = await api('GET', '/suppliers');
   let dishes = [];
 
   root.innerHTML = `
@@ -49,11 +49,15 @@ CAT.register('speisen', async root => {
         <div><label>Menge pro Glas</label><input type="text" inputmode="decimal" data-g="qtyPerGlass" value="${esc(fmt(g.qtyPerGlass))}" placeholder="offen"></div>
         <div><label>Einheit</label><select data-g="unit">${unitOptions(g.unit || 'stk', ['stk', 'g', 'kg', 'ml', 'l', 'pkg'])}</select></div>
         <div><label>Gebinde (Einheit)</label><input type="text" inputmode="decimal" data-g="packSize" value="${esc(fmt(g.packSize))}" placeholder="keins"></div>
+        <div class="span2"><label>Lieferant</label><select data-g="supplierId">${options(suppliers.map(s => [s.id, s.name]), g.supplierId, 'ohne Lieferant')}</select></div>
         <div><button class="btn btn-secondary btn-sm" data-rm style="width:100%">Entfernen</button></div>
       </div>
     </div>`;
 
-  function edit(d) {
+  async function edit(d) {
+    // Lieferanten frisch laden: Sie können sich seit dem Öffnen der Seite geändert haben (z. B. durch das Anlegen des Katalogs).
+    // Mit veralteter Liste würde beim Speichern der Lieferant der Speise verloren gehen.
+    try { suppliers = await api('GET', '/suppliers'); } catch (e) { toast(e.message); return; }
     const isNew = !d;
     d = d || { garnish: [], aliases: [] };
     const m = modal(isNew ? 'Neue Speise' : 'Speise bearbeiten', `
@@ -76,7 +80,7 @@ CAT.register('speisen', async root => {
         const v = id => $('#' + id, el).value.trim();
         const garnish = $$('[data-garnish]', el).map(g => {
           const f = k => $(`[data-g="${k}"]`, g).value.trim();
-          return { name: f('name'), qtyPerGlass: f('qtyPerGlass') || null, unit: f('unit'), packSize: f('packSize') || null };
+          return { name: f('name'), qtyPerGlass: f('qtyPerGlass') || null, unit: f('unit'), packSize: f('packSize') || null, supplierId: f('supplierId') || null };
         });
         const body = { name: v('d-name'), supplierId: v('d-supplier') || null, articleNo: v('d-article') || null, fillGrams: v('d-fill') || null, stepGrams: v('d-step') || null,
           note: v('d-note') || null, aliases: v('d-alias').split('\n').map(s => s.trim()).filter(Boolean), garnish, category: 'weckglas', rev: d.rev };

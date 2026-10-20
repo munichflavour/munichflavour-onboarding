@@ -71,7 +71,7 @@ Lokal zum Testen: `KARTEN_LOKAL=1 node server.js` startet den Generator als Kind
 ## Catering-Kalkulator im Portal (nur Admins)
 
 Der Catering-Kalkulator rechnet aus Gästezahl und Speisen eines Rentman-Projekts die Bestellmengen fuer Speisen im Glas und
-erzeugt eine **Bestelluebersicht** und eine **Einkaufsliste** als PDF. Im Admin-Bereich oeffnet der Reiter **Programme** und dort die Karte **Catering-Kalkulator** die
+erzeugt eine **Einkaufsliste** als PDF, nach Lieferanten aufgeteilt (ein Lieferant je Seite). Im Admin-Bereich oeffnet der Reiter **Programme** und dort die Karte **Catering-Kalkulator** die
 Seite `/catering/`. Wie beim Kartengenerator prueft das Portal den Admin-Login (Seite und API serverseitig); Mitarbeiter und nicht
 Angemeldete werden abgewiesen. Bedienung: [`docs/catering-kalkulator-anleitung.md`](docs/catering-kalkulator-anleitung.md),
 Architektur und Entscheidungen: [`docs/catering-kalkulator-bestandsaufnahme.md`](docs/catering-kalkulator-bestandsaufnahme.md).

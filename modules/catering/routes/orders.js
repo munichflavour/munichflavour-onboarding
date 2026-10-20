@@ -238,10 +238,9 @@ function createOrdersRouter(db, audit) {
 
   r.get('/orders/:id/pdf', ah(async (req, res) => {
     const o = loadOrder(V.id(req.params.id, 'Bestellung'));
-    const kind = req.query.type === 'einkauf' ? 'einkauf' : 'bestellung';
-    const pdf = await renderOrderPdf({ order: o, computed: o.computed, kind, logoPath: LOGO });
+    const pdf = await renderOrderPdf({ order: o, computed: o.computed, logoPath: LOGO });
     const safe = o.name.replace(/[^\w\-äöüÄÖÜß]+/g, '_').slice(0, 60);
-    res.set({ 'Content-Type': 'application/pdf', 'Content-Disposition': `inline; filename="${kind === 'einkauf' ? 'Einkaufsliste' : 'Bestelluebersicht'}_${safe}.pdf"`,
+    res.set({ 'Content-Type': 'application/pdf', 'Content-Disposition': `inline; filename="Einkaufsliste_${safe}.pdf"`,
       'Cache-Control': 'no-store' });
     res.send(pdf);
   }));

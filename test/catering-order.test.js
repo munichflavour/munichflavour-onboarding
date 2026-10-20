@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { computeOrder, distributeEvenly } = require('../modules/catering/order-calc');
+const { computeOrder, distributeEvenly, groupBySupplier } = require('../modules/catering/order-calc');
 const { grams, perGlass } = require('../modules/catering/format');
 
 // Bestellübersicht vom 20.10.: Anzahl Gläser und Gesamtmenge. Füllmenge = Gesamtmenge / Gläser, abgerundet.
@@ -112,7 +112,7 @@ test('PDF: offene Garnitur-Menge erscheint nie als 0', async () => {
   const dill = computed.shopping.find(s => s.name === 'Dill');
   assert.equal(dill.open, true);
   assert.equal(dill.qty, null);
-  const pdf = await renderOrderPdf({ order: { name: 'T', status: 'entwurf' }, computed, kind: 'einkauf' });
+  const pdf = await renderOrderPdf({ order: { name: 'T', status: 'entwurf' }, computed });
   assert.equal(pdf.subarray(0, 5).toString(), '%PDF-');
 });
 
@@ -159,4 +159,56 @@ test('Manuelle Menge ohne passende Garnitur erzeugt einen Hinweis statt still zu
 test('Garnitur-Schlüssel ist unabhängig von Groß-/Kleinschreibung', () => {
   assert.equal(keyOf('Dill', 'g'), keyOf('  dill ', 'g'));
   assert.notEqual(keyOf('Dill', 'g'), keyOf('Dill', 'stk'));
+});
+
+// ---- Aufteilung nach Lieferanten ----
+const withSupplier = (name, supplier, garnish = []) => ({ id: name, name, fillGrams: '40', stepGrams: '100', supplierName: supplier, garnish });
+
+test('Garnitur bekommt nicht still den Lieferanten der Speise', () => {
+  const r = computeOrder({ guests: 10, glassesPerPerson: 2, lines: [{ id: 1, glasses: 20, rentmanName: 'a',
+    dish: withSupplier('Wurstsalat', 'Kugler', [{ name: 'Radieschen', qtyPerGlass: '1', unit: 'stk' }]) }] });
+  assert.equal(r.shopping.find(s => s.name === 'Radieschen').supplier, null);
+  assert.equal(r.shopping.find(s => s.name === 'Wurstsalat').supplier, 'Kugler');
+  const w = r.warnings.find(x => x.code === 'ohne_lieferant');
+  assert.ok(w && /Radieschen/.test(w.text) && !/Wurstsalat/.test(w.text));
+  assert.equal(r.complete, true);                                           // Hinweis, kein Hindernis
+});
+
+test('Garnitur mit eigenem Lieferant steht beim eigenen Lieferanten', () => {
+  const r = computeOrder({ guests: 10, glassesPerPerson: 2, lines: [{ id: 1, glasses: 20, rentmanName: 'a',
+    dish: withSupplier('Wurstsalat', 'Kugler', [{ name: 'Radieschen', qtyPerGlass: '1', unit: 'stk', supplierName: 'Großmarkt' }]) }] });
+  assert.equal(r.shopping.find(s => s.name === 'Radieschen').supplier, 'Großmarkt');
+  assert.ok(!r.warnings.some(w => w.code === 'ohne_lieferant'));
+});
+
+test('Dieselbe Garnitur mit verschiedenen Lieferanten wird nicht still zusammengeführt', () => {
+  const r = computeOrder({ guests: 10, glassesPerPerson: 2, lines: [
+    { id: 1, glasses: 10, rentmanName: 'a', dish: withSupplier('A', 'Kugler', [{ name: 'Tomate', qtyPerGlass: '1', unit: 'stk', supplierName: 'Großmarkt' }]) },
+    { id: 2, glasses: 10, rentmanName: 'b', dish: withSupplier('B', 'Kugler', [{ name: 'Tomate', qtyPerGlass: '1', unit: 'stk', supplierName: 'Bauer' }]) },
+  ] });
+  assert.ok(r.warnings.some(w => w.code === 'lieferant_konflikt' && /Tomate/.test(w.text)));
+  assert.equal(r.shopping.find(s => s.name === 'Tomate').qty, '20');       // Menge bleibt zusammen, der Hinweis zeigt den Konflikt
+});
+
+test('groupBySupplier: benannte Lieferanten alphabetisch, ohne Lieferant zuletzt, Speisen vor Garnitur', () => {
+  const g = groupBySupplier([
+    { name: 'Dill', kind: 'garnitur', supplier: null }, { name: 'Tomate', kind: 'garnitur', supplier: 'Kugler' },
+    { name: 'Salat', kind: 'speise', supplier: 'Kugler' }, { name: 'Radieschen', kind: 'garnitur', supplier: 'Bauer' }, { name: 'Äpfel', kind: 'garnitur', supplier: 'Ägypten Import' },
+  ]);
+  assert.deepEqual(g.map(x => x.supplier), ['Ägypten Import', 'Bauer', 'Kugler', null]);
+  assert.deepEqual(g[2].items.map(i => i.name), ['Salat', 'Tomate']);
+  assert.deepEqual(groupBySupplier([]), []);
+});
+
+test('Positionen enthalten Gläser und Zusammensetzung für die gemeinsame Liste', () => {
+  const r = computeOrder({ guests: 10, glassesPerPerson: 2, lines: [
+    { id: 1, glasses: 22, rentmanName: 'a', dish: withSupplier('A', 'Kugler', [{ name: 'Radieschen', qtyPerGlass: '0.5', unit: 'stk', supplierName: 'Markt' }]) },
+    { id: 2, glasses: 10, rentmanName: 'b', dish: withSupplier('B', 'Kugler', [{ name: 'Radieschen', qtyPerGlass: '1', unit: 'stk', supplierName: 'Markt' }]) },
+  ] });
+  const a = r.shopping.find(s => s.name === 'A');
+  assert.equal(a.glasses, '22');
+  assert.equal(a.fillGrams, '40');
+  const rad = r.shopping.find(s => s.name === 'Radieschen');
+  assert.deepEqual(rad.parts.map(p => [p.dish, p.glasses, p.qtyPerGlass]), [['A', '22', '0.5'], ['B', '10', '1']]);
+  assert.equal(rad.qty, '21');
 });
