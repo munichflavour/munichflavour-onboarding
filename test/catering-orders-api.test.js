@@ -76,6 +76,7 @@ test('Mit dem Kugler-Katalog ergeben sich genau die Mengen der Bestellübersicht
     assert.equal(saved.computed.complete, false);
     assert.equal(saved.computed.shopping.find(s => s.name === 'Penne "Rucola"').articleNo, '360');
     assert.equal(saved.computed.shopping.find(s => s.name === 'Radieschen').qty, '11');
+    assert.equal(saved.computed.shopping.find(s => s.name === 'Mini-Fleischpflanzerl am Spieß').qty, '29');   // 1 pro Glas, 29 Gläser
   } finally { t.close(); }
 });
 

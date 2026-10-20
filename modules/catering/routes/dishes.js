@@ -37,7 +37,7 @@ const EXAMPLE_DISHES = [
     note: note(true, 'Gebinde 1000 g (Art. 6741), Becher ca. 570 g, Becher ca. 370 g') },
   { name: 'Penne "Rucola"', articleNo: '360', fillGrams: '58', stepGrams: '1000', garnish: [{ name: 'Rucola', qtyPerGlass: null, unit: 'g' }, { name: 'Tomate', qtyPerGlass: '0.5', unit: 'stk' }],
     note: note(true, 'Gebinde 1000 g (Art. 360), Becher ca. 530 g, Gebinde 270 g') },
-  { name: 'Kartoffel-Gurken-Salat', articleNo: '3591', fillGrams: '51', stepGrams: '1500', garnish: [{ name: 'Mini-Fleischpflanzerl am Spieß', qtyPerGlass: '2', unit: 'stk' }],
+  { name: 'Kartoffel-Gurken-Salat', articleNo: '3591', fillGrams: '51', stepGrams: '1500', garnish: [{ name: 'Mini-Fleischpflanzerl am Spieß', qtyPerGlass: '1', unit: 'stk' }],
     note: note(true, 'Gebinde 1500 g (Art. 3591), Gebinde 5000 g, Becher ca. 550 g, Becher ca. 350 g') },
 ];
 
