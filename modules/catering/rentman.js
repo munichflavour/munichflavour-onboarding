@@ -8,8 +8,12 @@ class RentmanError extends Error {
   constructor(message, status) { super(message); this.status = status; }
 }
 
-// Die Variable heißt RENTMAN_API; kleingeschrieben wird sie ebenfalls akzeptiert (wie im Kartengenerator).
-const token = () => process.env.RENTMAN_API || process.env.rentman_api;
+// Die Schreibweise des Namens ist egal (RENTMAN_API, rentman_api, Rentman_api, ...), die Werte selbst werden nie ausgegeben.
+const token = () => {
+  if (process.env.RENTMAN_API) return process.env.RENTMAN_API;
+  const hit = Object.keys(process.env).find(k => k.toUpperCase() === 'RENTMAN_API' && process.env[k]);
+  return hit ? process.env[hit] : undefined;
+};
 const isConfigured = () => !!token();
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 

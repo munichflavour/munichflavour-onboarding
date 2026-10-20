@@ -306,3 +306,18 @@ test('PDF mit manueller Garnitur-Menge: kein "offen" mehr, Hinweis "manuell fest
     assert.equal(r.json.computed.warnings.filter(w => w.code === 'garnitur').length, 0);
   } finally { t.close(); }
 });
+
+test('Rentman-Token wird unabhängig von der Schreibweise des Variablennamens erkannt', () => {
+  const rentman = require('../modules/catering/rentman');
+  const saved = {};
+  for (const k of Object.keys(process.env)) if (k.toUpperCase() === 'RENTMAN_API') { saved[k] = process.env[k]; delete process.env[k]; }
+  try {
+    assert.equal(rentman.isConfigured(), false);
+    for (const name of ['RENTMAN_API', 'rentman_api', 'Rentman_api', 'Rentman_Api']) {
+      process.env[name] = 'geheim';
+      assert.equal(rentman.isConfigured(), true, name);
+      delete process.env[name];
+    }
+    assert.equal(rentman.isConfigured(), false);
+  } finally { Object.assign(process.env, saved); }
+});
