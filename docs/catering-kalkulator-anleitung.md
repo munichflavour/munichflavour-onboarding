@@ -11,7 +11,7 @@ Nur für Admins. Im Admin-Bereich den Reiter **Programme** öffnen und **Caterin
 3. Fehlt etwas, meldet das Tool "unvollständig", statt eine scheinbar fertige Liste zu erzeugen.
 
 ## Für jedes Event
-1. Reiter **Bestellungen**, **Neue Bestellung**, **Aus Rentman**. Projekt suchen und antippen.
+1. Reiter **Bestellungen**, **Neue Bestellung**, **Aus Rentman**. Projekt suchen und antippen. Angezeigt werden nur Projekte, die **Speisen enthalten** (ein Block der Materialgruppe "Catering" mit Speisen darunter). Bar-, Kaffee- und Smoothie-Projekte ohne Essen erscheinen nicht. Das Ergebnis wird 10 Minuten gemerkt. Wenn du in Rentman etwas geändert hast, tippe auf **Aktualisieren**.
 2. **Block wählen**, dessen Speisen berechnet werden sollen (z. B. "Speisen im Weckglas"). Die Gästezahl kommt aus der Menge des Blocks, die Quelle steht darunter. Mehrere Blöcke werden **nicht** addiert. Weichen sie voneinander ab, trägst du die Gästezahl selbst ein.
 3. **Gläser pro Person** eintragen (kein Standardwert), **Bestellung anlegen**.
 4. Auf der Bestellseite jede Rentman-Zeile einer Speise zuordnen. Das Tool macht einen **Vorschlag**, den du mit **Übernehmen** bestätigst. Die Zuordnung wird gespeichert und beim nächsten Mal automatisch genutzt.
