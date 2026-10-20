@@ -8,20 +8,22 @@ class RentmanError extends Error {
   constructor(message, status) { super(message); this.status = status; }
 }
 
-const isConfigured = () => !!process.env.RENTMAN_API;
+// Die Variable heißt RENTMAN_API; kleingeschrieben wird sie ebenfalls akzeptiert (wie im Kartengenerator).
+const token = () => process.env.RENTMAN_API || process.env.rentman_api;
+const isConfigured = () => !!token();
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 // Einziger Zugang zur API. Es gibt bewusst keine Methode für POST, PUT oder DELETE.
 async function get(path, params = {}) {
-  const token = process.env.RENTMAN_API;
-  if (!token) throw new RentmanError('Rentman-Token (RENTMAN_API) ist nicht konfiguriert', 503);
+  const auth = token();
+  if (!auth) throw new RentmanError('Rentman-Token (RENTMAN_API) ist nicht konfiguriert', 503);
   if (!/^\/[a-z0-9/_-]*$/i.test(path)) throw new RentmanError('Ungültiger Pfad', 400);
   const url = new URL(API + path);
   Object.entries(params).forEach(([k, v]) => url.searchParams.set(k, String(v)));
   for (let attempt = 0; attempt < 4; attempt++) {
     let res;
     try {
-      res = await fetch(url, { method: 'GET', headers: { Authorization: `Bearer ${token}` }, signal: AbortSignal.timeout(60000) });
+      res = await fetch(url, { method: 'GET', headers: { Authorization: `Bearer ${auth}` }, signal: AbortSignal.timeout(60000) });
     } catch (e) {
       if (attempt < 2) { await sleep(1000); continue; }
       throw new RentmanError('Rentman nicht erreichbar', 502);

@@ -33,16 +33,16 @@ Es gibt **keine** Rentman-Integration im Node-Portal. Es gibt aber eine ausgerei
 - Projektliste wird 10 Minuten gecacht (Speicher plus Datei).
 - Die API ist dort als Version 1.16.0 vermerkt und kann keine Dateien hochladen.
 
-### Noch nicht belegt (muss vor der Umsetzung geprüft werden)
-Die Rentman-Doku (api.rentman.net) ist eine JavaScript-Seite und war hier nicht lesbar. Folgendes ist daher **unbestätigt** und wird nicht angenommen:
+### Befunde aus der Live-Diagnose (Beispielprojekt vom 2026-10-20, Token funktioniert)
 
-1. Wo die Gästezahl liegt (Projektfeld, Custom Field, Menge einer Position, Planning).
-2. Felder für Kunde und Veranstaltungsort am Projekt (Verknüpfungen auf Kontakt bzw. Location).
-3. Ob Positionen eine Referenz auf Equipment-Stammdaten (Artikel-ID, Artikelnummer) tragen und ob Einheiten mitgeliefert werden.
-4. Ob Custom Fields über die API lesbar sind.
-5. Unterprojekte: jedes Projekt hat laut vorhandenem Code genau eine Zeile, Fälle mit mehreren sind ungeklärt.
+Abgerufen wurde ein bestätigtes Catering-Projekt (56 Materialzeilen, Gruppen "Auftragspauschale" und "Catering").
 
-Vorgehen: Ein kleiner **Diagnose-Endpunkt** (nur Admin, nur lesend) gibt die Rohfelder eines gewählten Projekts aus. So klären wir die Punkte an euren echten Daten, ohne zu raten.
+1. **Gästezahl:** Am Projekt gibt es kein Gästefeld. Die Personenzahl steht als **Menge der Blockzeile** (z. B. "Brotzeit Spezialitäten", Menge 50, Bemerkung "Pauschale pro Person"). Es gab zwei Blöcke mit je 50. Die Werte dürfen **nicht addiert** werden (das wären nicht 100 Gäste). Das Custom Field `custom_8` am Projekt war leer, seine Bedeutung ist nicht abrufbar.
+2. **Gericht-Zeilen haben Menge 0.** Die einzelnen Speisen hängen als Kinder unter dem Block und tragen keine Portionszahl. Die Aufteilung auf die Speisen ("Mischkalkulation", "2-3 Gläser pro Person") steht nur im Freitext der Bemerkung. Die Portionen je Speise müssen also im Kalkulator festgelegt werden (Modi C/D mit Anteilen), sie lassen sich nicht aus Rentman übernehmen.
+3. **Die Rentman-Artikel-ID identifiziert die Speise nicht eindeutig.** Die Speisen sind virtuelle Pakete mit Artikelnummern (z. B. 988 bis 990), aber mehrere unterschiedlich benannte Speisen im Projekt verweisen auf dieselbe Artikel-ID (die Zeilennamen wurden im Projekt überschrieben). Verlässlich ist daher nur die Kombination aus Artikel-ID und Zeilenname, bestätigt durch den Benutzer. Die Zuordnung rein über die Artikel-ID wäre hier falsch.
+4. **Darunter hängen Bestandteile** (Brot, Aufstriche, Tomaten, Kräuter) als physische Artikel mit Menge 0 und eigener, eindeutiger Artikel-ID. Sie zeigen, welche Komponenten zu einer Speise gehören.
+5. **Verknüpfungen** (Kunde, Ort, Ansprechpartner) sind als `/contacts/<id>` abrufbar. Custom-Field-Definitionen liefern mit diesem Token HTTP 403.
+6. Nicht-Essen-Zeilen (Mülleimer, Servietten) stehen in der Gruppe "Auftragspauschale" und werden ausgeschlossen.
 
 ## 3. Architekturentscheidung (Empfehlung)
 
