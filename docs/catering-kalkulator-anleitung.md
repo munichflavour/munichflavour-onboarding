@@ -1,6 +1,6 @@
 # Catering-Kalkulator: Kurzanleitung
 
-Nur für Admins. Im Admin-Bereich oben auf **Kalkulator** tippen.
+Nur für Admins. Im Admin-Bereich den Reiter **Programme** öffnen und **Catering-Kalkulator** antippen. Über **← Programme** oben rechts im Kalkulator kommst du zurück.
 
 ## Einmalig: Speisen einrichten
 1. Reiter **Speisen**. Beim ersten Mal auf **Salate (Kugler) anlegen** tippen. Das legt die Salate der Menükarte mit Kugler-Gebinden und Artikelnummern an.
