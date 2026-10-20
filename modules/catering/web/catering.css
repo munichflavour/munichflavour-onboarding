@@ -1,6 +1,7 @@
 .hdr-link { color:#fff; text-decoration:none; border:1.5px solid rgba(255,255,255,0.3); border-radius:8px; font-size:14px; padding:8px 12px; }
 .tabs { overflow-x:auto; }
-.tab-btn { white-space:nowrap; padding:10px 12px; }
+.tab-btn { white-space:nowrap; padding:10px 12px; flex:1 0 auto; }
+@media (max-width:420px) { .tab-btn { padding:10px 5px; font-size:12px; } }
 .toolbar { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:12px; align-items:center; }
 .toolbar input[type="search"], .toolbar input[type="text"] { flex:1; min-width:160px; }
 .toolbar select { width:auto; min-width:140px; }

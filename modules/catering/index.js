@@ -22,6 +22,7 @@ const SAMPLE_PROJECTS = [
 function mount(app, db, { requireAdmin }) {
   const schemaVersion = migrate(db);
   const projectCache = rentman.createProjectCache(db);
+  const foodCache = rentman.createFoodCache(db);
   const audit = createAudit(db);
 
   // Seite: ohne Admin-Login Weiterleitung zum Login
@@ -52,6 +53,33 @@ function mount(app, db, { requireAdmin }) {
     try {
       const r = await projectCache.get({ force: req.query.refresh === '1' });
       res.json({ source: 'rentman', configured: true, fetchedAt: new Date(r.at).toISOString(), projects: r.data });
+    } catch (e) {
+      res.status(e.status && e.status < 600 ? 502 : 500).json({ error: e.message });
+    }
+  });
+
+  // Auswahl für neue Bestellungen: nur Projekte, die Speisen enthalten (Block der Materialgruppe "Catering" mit Speisen darunter).
+  // Standard: bestätigte Projekte ab gestern, nach Datum aufsteigend. all=1: alle Projekte, neueste zuerst. q: Name oder Nummer.
+  api.get('/rentman/projects-with-food', async (req, res) => {
+    if (!rentman.isConfigured()) {
+      return res.json({ configured: false, projects: [], hinweis: 'Rentman ist nicht angebunden (RENTMAN_API fehlt).' });
+    }
+    try {
+      const all = req.query.all === '1';
+      const q = String(req.query.q || '').trim().toLowerCase().slice(0, 60);
+      const gestern = new Date().setHours(0, 0, 0, 0) - 86400000;
+      const force = req.query.refresh === '1';        // Aktualisieren: Projektliste und Speisenprüfung sofort neu holen
+      const list = (await projectCache.get({ force })).data;
+      const ts = p => (p.start ? Date.parse(p.start) : 0);
+      const candidates = list
+        .filter(p => (all || ([3, 4, 5, 6].includes(p.statusId) && p.start && ts(p) >= gestern))
+          && (!q || (p.name || '').toLowerCase().includes(q) || String(p.number || '').includes(q)))
+        .sort((a, b) => (all ? ts(b) - ts(a) : ts(a) - ts(b)));
+      const r = await foodCache.find(candidates, { want: 25, maxChecks: 60, force });
+      if (r.checked === 0 && r.failed > 0) {
+        return res.status(502).json({ error: 'Die Rentman-Verbindung ist derzeit nicht verfügbar. Bitte in einer Minute erneut versuchen.' });
+      }
+      res.json({ configured: true, projects: r.hits, geprueft: r.checked, fehler: r.failed, kandidaten: candidates.length, mehr: r.remaining > 0 });
     } catch (e) {
       res.status(e.status && e.status < 600 ? 502 : 500).json({ error: e.message });
     }

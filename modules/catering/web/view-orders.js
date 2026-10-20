@@ -58,26 +58,31 @@ CAT.register('start', async root => {
     }
 
     async function rentmanPane() {
-      pane.innerHTML = '<div class="note">Lädt Rentman-Projekte…</div>';
-      let r;
-      try { r = await api('GET', '/projects'); } catch (e) { pane.innerHTML = `<div class="alert alert-error">${esc(e.message)}</div>`; return; }
-      if (!r.configured) { pane.innerHTML = `<div class="warn-box">${esc(r.hinweis)}</div>`; return; }
       pane.innerHTML = `<div class="toolbar"><input type="search" id="p-q" placeholder="Projektname oder Nummer"></div>
         <label style="display:flex;gap:8px;align-items:center;text-transform:none;font-weight:400;margin-bottom:8px;">
           <input type="checkbox" id="p-all" style="width:20px;height:20px"> auch vergangene und unbestätigte Projekte</label>
-        <div id="p-list"></div><div id="p-detail"></div>`;
-      const today = new Date().setHours(0, 0, 0, 0) - 86400000;
-      const showList = () => {
-        const q = $('#p-q', pane).value.trim().toLowerCase(), all = $('#p-all', pane).checked;
-        const hits = r.projects.filter(p => (all || ([3, 4, 5, 6].includes(p.statusId) && p.start && Date.parse(p.start) >= today))
-          && (!q || (p.name || '').toLowerCase().includes(q) || String(p.number || '').includes(q)))
-          .sort((a, b) => (all ? Date.parse(b.start || 0) - Date.parse(a.start || 0) : Date.parse(a.start || 0) - Date.parse(b.start || 0))).slice(0, 25);
-        $('#p-list', pane).innerHTML = hits.length ? hits.map(p => `<div class="row" data-pid="${esc(p.id)}"><div class="row-main"><div class="row-title">${esc(p.name)}</div>
-          <div class="row-meta">Nr. ${esc(p.number ?? '-')} · ${fmtDateDe(p.start)}</div></div><span class="pill">${esc(p.status)}</span></div>`).join('')
-          : '<div class="note">Keine Projekte gefunden.</div>';
+        <div class="hint" style="margin:0 0 8px">Angezeigt werden nur Projekte, die Speisen enthalten. <button class="btn btn-secondary btn-sm" id="p-refresh" type="button">Aktualisieren</button></div>
+        <div id="p-list"><div class="note">Lädt Rentman-Projekte…</div></div><div id="p-detail"></div>`;
+      let timer = null, seq = 0;
+      const load = async (refresh = false) => {
+        const mine = ++seq;                                  // nur die jeweils letzte Anfrage darf die Liste zeichnen
+        $('#p-list', pane).innerHTML = '<div class="note">Prüft Rentman-Projekte auf Speisen…</div>';
+        let r;
+        try { r = await api('GET', `/rentman/projects-with-food?all=${$('#p-all', pane).checked ? 1 : 0}&q=${encodeURIComponent($('#p-q', pane).value.trim())}${refresh === true ? '&refresh=1' : ''}`); }
+        catch (e) { if (mine === seq) $('#p-list', pane).innerHTML = `<div class="alert alert-error">${esc(e.message)}</div>`; return; }
+        if (mine !== seq) return;
+        if (!r.configured) { pane.innerHTML = `<div class="warn-box">${esc(r.hinweis)}</div>`; return; }
+        $('#p-list', pane).innerHTML = (r.projects.length ? r.projects.map(p => `<div class="row" data-pid="${esc(p.id)}"><div class="row-main"><div class="row-title">${esc(p.name)}</div>
+          <div class="row-meta">Nr. ${esc(p.number ?? '-')} · ${fmtDateDe(p.start)} · ${p.speisen} Speisen</div></div><span class="pill">${esc(p.status)}</span></div>`).join('')
+          : '<div class="note">Keine Projekte mit Speisen gefunden.</div>')
+          + (r.fehler ? `<div class="hint">Bei ${r.fehler} Projekten war die Prüfung nicht möglich (Rentman). Bitte später erneut versuchen.</div>` : '')
+          + (r.mehr ? '<div class="hint">Es gibt weitere Projekte. Bitte den Suchbegriff genauer eingeben.</div>' : '');
         $$('[data-pid]', pane).forEach(el => el.onclick = () => pick(r.projects.find(p => p.id === el.dataset.pid)));
       };
-      $('#p-q', pane).oninput = showList; $('#p-all', pane).onchange = showList; showList();
+      $('#p-q', pane).oninput = () => { clearTimeout(timer); timer = setTimeout(load, 350); };
+      $('#p-all', pane).onchange = () => load();
+      $('#p-refresh', pane).onclick = () => load(true);
+      load();
 
       async function pick(p) {
         $('#p-list', pane).classList.add('hidden');

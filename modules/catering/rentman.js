@@ -57,14 +57,14 @@ async function fetchProjects() {
   const [statuses, subs, projects] = await Promise.all([
     getAll('/statuses'),
     getAll('/subprojects', { fields: 'id,project,status' }),
-    getAll('/projects', { fields: 'id,number,name,planperiod_start' }),
+    getAll('/projects', { fields: 'id,number,name,planperiod_start,modified' }),
   ]);
   const statusName = Object.fromEntries(statuses.map(s => [String(s.id), s.name]));
   const statusOf = {};
   subs.forEach(sp => { if (sp.project) statusOf[idOf(sp.project)] = idOf(sp.status); });
   return projects.map(p => {
     const sid = statusOf[String(p.id)] || null;
-    return { id: String(p.id), number: p.number, name: (p.name || '').trim(), start: p.planperiod_start || null,
+    return { id: String(p.id), number: p.number, name: (p.name || '').trim(), start: p.planperiod_start || null, modified: p.modified || null,
              statusId: sid ? Number(sid) : null, status: sid ? statusName[sid] || 'unbekannt' : 'ohne Status' };
   });
 }
@@ -164,4 +164,57 @@ async function fetchProjectCatering(id) {
   };
 }
 
-module.exports = { extractCateringBlocks, fetchProjectCatering, plain, RentmanError, isConfigured, get, getAll, fetchProjects, createProjectCache, diagnoseProject };
+// ---- Projekte mit Speisen ----
+// "Enthält Speisen" heißt: Es gibt mindestens einen Block der Materialgruppe "Catering" (mit Menge) und darunter mindestens eine
+// Speise. Nur solche Projekte lassen sich im Kalkulator importieren. Das Ergebnis je Projekt wird 10 Minuten gemerkt, damit nicht bei
+// jedem Aufruf alle Projekte neu bei Rentman abgefragt werden. Das Projektfeld `modified` reagiert in Rentman NICHT auf Änderungen
+// an den Materialzeilen (geprüft an einem echten Projekt), deshalb gilt nur die Zeit; `force` prüft sofort neu.
+const FOOD_TTL_MS = 10 * 60 * 1000;
+
+async function fetchProjectFood(id) {
+  const [rows, groups] = await Promise.all([
+    getAll(`/projects/${id}/projectequipment`),
+    getAll(`/projects/${id}/projectequipmentgroup`),
+  ]);
+  const blocks = extractCateringBlocks(rows, groups);
+  return { blocks: blocks.length, dishes: blocks.reduce((n, b) => n + b.dishes.length, 0) };
+}
+
+function createFoodCache(db, fetchFood = fetchProjectFood) {
+  const sel = db.prepare('SELECT payload, fetched_at FROM rentman_cache WHERE key = ?');
+  const ins = db.prepare("INSERT OR REPLACE INTO rentman_cache (key, payload, fetched_at) VALUES (?, ?, datetime('now'))");
+
+  async function one(p, force = false) {
+    const key = `food:${p.id}`;
+    const row = sel.get(key);
+    if (row && !force) {
+      const c = JSON.parse(row.payload);
+      // gültig, solange der Eintrag nicht zu alt ist (und das Projekt laut Rentman nicht geändert wurde)
+      if (Date.now() - Date.parse(row.fetched_at + 'Z') < FOOD_TTL_MS && c.modified === (p.modified || null)) return c;
+    }
+    const f = await fetchFood(p.id);
+    const out = { modified: p.modified || null, blocks: f.blocks, dishes: f.dishes };
+    ins.run(key, JSON.stringify(out));
+    return out;
+  }
+
+  // Geht die Kandidaten in kleinen Stapeln durch, bis `want` Treffer da sind oder `maxChecks` Prüfungen gemacht wurden.
+  async function find(candidates, { want = 25, maxChecks = 60, concurrency = 3, force = false } = {}) {
+    const hits = [];
+    let checked = 0, failed = 0, i = 0;
+    while (i < candidates.length && hits.length < want && checked + failed < maxChecks) {
+      const batch = candidates.slice(i, i + Math.min(concurrency, maxChecks - checked - failed));
+      i += batch.length;
+      const res = await Promise.allSettled(batch.map(p => one(p, force)));
+      res.forEach((r, k) => {
+        if (r.status !== 'fulfilled') { failed++; return; }
+        checked++;
+        if (r.value.dishes > 0) hits.push({ ...batch[k], speisen: r.value.dishes, bloecke: r.value.blocks });
+      });
+    }
+    return { hits: hits.slice(0, want), checked, failed, remaining: candidates.length - i };
+  }
+  return { find, one };
+}
+
+module.exports = { fetchProjectFood, createFoodCache, extractCateringBlocks, fetchProjectCatering, plain, RentmanError, isConfigured, get, getAll, fetchProjects, createProjectCache, diagnoseProject };
