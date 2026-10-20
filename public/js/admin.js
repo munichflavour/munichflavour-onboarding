@@ -9,14 +9,32 @@ let editingEmpId = null;
 const NEW_THRESHOLD_MS = 7 * 24 * 60 * 60 * 1000; // 7 Tage
 function isNew(dateStr) { return (Date.now() - Date.parse(dateStr + 'Z')) < NEW_THRESHOLD_MS; }
 
+// Programme, die im Admin-Bereich zur Auswahl stehen. Ein weiteres Programm = eine Zeile mehr.
+const PROGRAMS = [
+  { icon: '🍽️', title: 'Catering-Kalkulator', text: 'Bestellmengen und Einkaufslisten für Speisen im Glas berechnen', href: '/catering/' },
+  { icon: '🍹', title: 'Kartengenerator', text: 'Speisen- und Getränkekarten aus Rentman als PDF erstellen', href: '/karten/' },
+];
+
+function renderPrograms() {
+  document.getElementById('programList').innerHTML = PROGRAMS.map(p => `
+    <a class="prog-card" href="${escHtml(p.href)}">
+      <span class="prog-icon">${p.icon}</span>
+      <span class="prog-info"><span class="prog-title">${escHtml(p.title)}</span><span class="prog-text">${escHtml(p.text)}</span></span>
+      <span class="prog-arrow">›</span>
+    </a>`).join('');
+}
+
 function showTab(tab) {
-  ['documents','employees','announcements'].forEach(t => {
+  ['documents','employees','announcements','programs'].forEach(t => {
     document.getElementById(`view-${t}`).classList.toggle('hidden', t !== tab);
     document.getElementById(`tab-${t}`).classList.toggle('active', t === tab);
   });
   if (tab === 'documents') loadDocuments();
   if (tab === 'employees') loadEmployees();
   if (tab === 'announcements') loadAnnouncementsAdmin();
+  if (tab === 'programs') renderPrograms();
+  // Adresse merken, damit die Programme-Seite direkt erreichbar ist (z. B. "zurück" aus einem Programm)
+  history.replaceState(null, '', tab === 'programs' ? '#programme' : location.pathname + location.search);
 }
 
 async function logout() { await fetch('/api/logout', { method:'POST' }); window.location.href = '/login.html'; }
@@ -438,5 +456,5 @@ function escHtml(str) { return String(str||'').replace(/&/g,'&amp;').replace(/</
   if (!r || r.data.role !== 'admin') { window.location.href = '/login.html'; return; }
   initOfflineBanner();
   loadPushSetting();
-  loadDocuments();
+  if (location.hash === '#programme') showTab('programs'); else loadDocuments();
 })();

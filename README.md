@@ -47,7 +47,7 @@ Der Server läuft danach auf **http://localhost:3000**
 ## Kartengenerator im Portal (nur Admins)
 
 Der Kartengenerator (`tools/cocktailkarte`, Python) laeuft als **eigener Dienst** und ist ins Portal eingebunden: Im
-Admin-Bereich oeffnet der Knopf **Karten** die Seite `/karten/`. Das Portal prueft den Admin-Login und reicht die Anfrage
+Admin-Bereich oeffnet der Reiter **Programme** und dort die Karte **Kartengenerator** die Seite `/karten/`. Das Portal prueft den Admin-Login und reicht die Anfrage
 an den Kartengenerator weiter (Reverse Proxy, `server.js`). Mitarbeiter und nicht Angemeldete werden abgewiesen. Der
 Kartengenerator selbst akzeptiert im Webbetrieb nur Anfragen mit dem gemeinsamen Token (`KARTEN_TOKEN`) und hat keine
 oeffentliche Adresse. Karten werden als PDF heruntergeladen (kein Ordnerdialog im Webbetrieb).
@@ -69,7 +69,7 @@ Lokal zum Testen: `KARTEN_LOKAL=1 node server.js` startet den Generator als Kind
 ## Catering-Kalkulator im Portal (nur Admins)
 
 Der Catering-Kalkulator rechnet aus Gästezahl und Speisen eines Rentman-Projekts die Bestellmengen fuer Speisen im Glas und
-erzeugt eine **Bestelluebersicht** und eine **Einkaufsliste** als PDF. Im Admin-Bereich oeffnet der Knopf **Kalkulator** die
+erzeugt eine **Bestelluebersicht** und eine **Einkaufsliste** als PDF. Im Admin-Bereich oeffnet der Reiter **Programme** und dort die Karte **Catering-Kalkulator** die
 Seite `/catering/`. Wie beim Kartengenerator prueft das Portal den Admin-Login (Seite und API serverseitig); Mitarbeiter und nicht
 Angemeldete werden abgewiesen. Bedienung: [`docs/catering-kalkulator-anleitung.md`](docs/catering-kalkulator-anleitung.md),
 Architektur und Entscheidungen: [`docs/catering-kalkulator-bestandsaufnahme.md`](docs/catering-kalkulator-bestandsaufnahme.md).
