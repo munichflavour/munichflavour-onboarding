@@ -31,4 +31,4 @@ Nur für Admins und zusätzlich **passwortgeschützt**, solange der Kalkulator i
 ## Wenn etwas nicht klappt
 - "Rentman ist nicht angebunden": Die Variable `RENTMAN_API` fehlt im Portal-Dienst.
 - "Die Rentman-Verbindung ist derzeit nicht verfügbar": später erneut versuchen. Bereits gespeicherte Bestellungen sind davon nicht betroffen.
-- Mit **Rentman** (oberer Reiter) lassen sich Projektliste und Rohdaten eines Projekts ansehen.
+- Bei Datenproblemen zeigt die versteckte Seite `/catering/#/rentman` Projektliste und Rohdaten eines Projekts (nur für die Fehlersuche, nicht in der Navigation).
