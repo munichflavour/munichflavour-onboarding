@@ -62,6 +62,7 @@ self.addEventListener('fetch', event => {
   const url = new URL(request.url);
   if (url.origin !== self.location.origin) return;
   if (url.pathname.startsWith('/karten')) return;   // Kartengenerator: immer live, nie zwischenspeichern
+  if (url.pathname.startsWith('/catering') || url.pathname.startsWith('/api/catering')) return;   // Catering-Kalkulator: immer live
 
   // Einmal geöffnete Dokumente bleiben dauerhaft offline verfügbar
   if (/^\/api\/documents\/\d+\/(view|download)$/.test(url.pathname)) {

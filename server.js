@@ -301,6 +301,9 @@ app.use('/karten', (req, res) => {
   else req.pipe(pr);
 });
 
+// ===== CATERING-KALKULATOR (modules/catering, nur Admins) =====
+require('./modules/catering').mount(app, db, { requireAdmin });
+
 // ===== PUSH =====
 app.get('/api/push/vapid-public-key', (req, res) => res.json({ key: vapidPublicKey }));
 app.post('/api/push/subscribe', requireAuth, (req, res) => {

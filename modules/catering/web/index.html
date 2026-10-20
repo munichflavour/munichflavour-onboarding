@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>Catering-Kalkulator</title>
+  <meta name="theme-color" content="#000000">
+  <link rel="stylesheet" href="/css/style.css">
+  <link rel="stylesheet" href="/catering/catering.css">
+</head>
+<body>
+  <header>
+    <img src="/assets/logo.jpg" alt="Munich Flavour" onerror="this.style.display='none'">
+    <div class="header-title"><h1>Catering-Kalkulator</h1><div class="header-sub">Admin</div></div>
+    <a href="/admin.html" class="hdr-link">Portal</a>
+  </header>
+
+  <main>
+    <nav class="tabs" id="nav">
+      <button class="tab-btn" data-view="start">Bestellungen</button>
+      <button class="tab-btn" data-view="speisen">Speisen</button>
+      <button class="tab-btn" data-view="lieferanten">Lieferanten</button>
+      <button class="tab-btn" data-view="rentman">Rentman</button>
+    </nav>
+    <div id="view"></div>
+  </main>
+
+  <script src="/catering/core.js"></script>
+  <script src="/catering/view-orders.js"></script>
+  <script src="/catering/view-dishes.js"></script>
+  <script src="/catering/view-suppliers.js"></script>
+  <script src="/catering/view-projects.js"></script>
+  <script src="/catering/view-ingredients.js"></script>
+  <script src="/catering/view-recipes.js"></script>
+  <script>CAT.start();</script>
+</body>
+</html>

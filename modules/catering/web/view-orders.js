@@ -1,0 +1,307 @@
+// Bestellungen: Liste (#/start), Neuanlage, Bestellseite (#/bestellung/<id>)
+const fmtDateDe = iso => {
+  const d = iso ? new Date(iso) : null;
+  return d && !isNaN(d) ? d.toLocaleDateString('de-DE', { weekday: 'short', day: '2-digit', month: '2-digit', year: 'numeric' }) : 'ohne Datum';
+};
+
+CAT.register('start', async root => {
+  const { $, $$, esc, fmt, api, field, modal, toast } = CAT;
+  root.innerHTML = `
+    <div class="card">
+      <div class="toolbar">
+        <div class="note" style="flex:1">Bestellungen für Speisen im Glas. Gästezahl und Speisen kommen aus Rentman, die Mengen rechnet das Tool.</div>
+        <button class="btn btn-primary" id="newBtn">Neue Bestellung</button>
+      </div>
+      <div id="list"><div class="note">Lädt…</div></div>
+    </div>`;
+  const list = await api('GET', '/orders');
+  $('#list').innerHTML = list.length ? list.map(o => `
+    <div class="row" data-id="${o.id}">
+      <div class="row-main">
+        <div class="row-title">${esc(o.name)}</div>
+        <div class="row-meta">${o.number ? 'Nr. ' + esc(o.number) + ' · ' : ''}${fmtDateDe(o.eventDate)} · ${o.guests ? esc(o.guests) + ' Gäste' : 'Gästezahl fehlt'} · ${esc(fmt(o.totalGlasses))} Gläser</div>
+      </div>
+      <div style="text-align:right">
+        <span class="pill ${o.status === 'abgeschlossen' ? '' : 'sample'}">${o.status === 'abgeschlossen' ? 'abgeschlossen' : 'Entwurf'}</span>
+        ${o.status === 'entwurf' && !o.complete ? '<div class="row-meta">unvollständig</div>' : ''}
+      </div>
+    </div>`).join('') : '<div class="note">Noch keine Bestellung angelegt.</div>';
+  $$('.row', root).forEach(r => r.onclick = () => { location.hash = '#/bestellung/' + r.dataset.id; });
+  $('#newBtn').onclick = () => newOrderDialog();
+
+  function newOrderDialog() {
+    const m = modal('Neue Bestellung', `
+      <div class="tabs" id="mode"><button class="tab-btn active" data-m="rentman">Aus Rentman</button><button class="tab-btn" data-m="manuell">Manuell</button></div>
+      <div id="pane"></div>`, {});
+    const pane = $('#pane', m.el);
+    const modes = { rentman: rentmanPane, manuell: manualPane };
+    $$('[data-m]', m.el).forEach(b => b.onclick = () => {
+      $$('[data-m]', m.el).forEach(x => x.classList.toggle('active', x === b));
+      modes[b.dataset.m]();
+    });
+    rentmanPane();
+
+    async function create(body) {
+      try { const o = await api('POST', '/orders', body); m.close(); location.hash = '#/bestellung/' + o.id; }
+      catch (e) {
+        if (e.status === 409 && e.openOrderId) location.hash = '#/bestellung/' + e.openOrderId;
+        m.showError(e.message);
+      }
+    }
+
+    function manualPane() {
+      pane.innerHTML = field('Name', '<input type="text" id="n-name" maxlength="200" placeholder="z. B. Firmenfeier Müller">') +
+        '<div class="grid2">' + field('Datum', '<input type="date" id="n-date">') + field('Gäste', '<input type="text" inputmode="numeric" id="n-guests">') + '</div>' +
+        '<div class="modal-actions"><button class="btn btn-primary" id="n-go" style="flex:1">Anlegen</button></div>';
+      $('#n-go', pane).onclick = () => create({ name: $('#n-name', pane).value, eventDate: $('#n-date', pane).value || null,
+        guests: $('#n-guests', pane).value || null, guestsSource: $('#n-guests', pane).value ? 'manuell eingegeben' : null });
+    }
+
+    async function rentmanPane() {
+      pane.innerHTML = '<div class="note">Lädt Rentman-Projekte…</div>';
+      let r;
+      try { r = await api('GET', '/projects'); } catch (e) { pane.innerHTML = `<div class="alert alert-error">${esc(e.message)}</div>`; return; }
+      if (!r.configured) { pane.innerHTML = `<div class="warn-box">${esc(r.hinweis)}</div>`; return; }
+      pane.innerHTML = `<div class="toolbar"><input type="search" id="p-q" placeholder="Projektname oder Nummer"></div>
+        <label style="display:flex;gap:8px;align-items:center;text-transform:none;font-weight:400;margin-bottom:8px;">
+          <input type="checkbox" id="p-all" style="width:20px;height:20px"> auch vergangene und unbestätigte Projekte</label>
+        <div id="p-list"></div><div id="p-detail"></div>`;
+      const today = new Date().setHours(0, 0, 0, 0) - 86400000;
+      const showList = () => {
+        const q = $('#p-q', pane).value.trim().toLowerCase(), all = $('#p-all', pane).checked;
+        const hits = r.projects.filter(p => (all || ([3, 4, 5, 6].includes(p.statusId) && p.start && Date.parse(p.start) >= today))
+          && (!q || (p.name || '').toLowerCase().includes(q) || String(p.number || '').includes(q)))
+          .sort((a, b) => (all ? Date.parse(b.start || 0) - Date.parse(a.start || 0) : Date.parse(a.start || 0) - Date.parse(b.start || 0))).slice(0, 25);
+        $('#p-list', pane).innerHTML = hits.length ? hits.map(p => `<div class="row" data-pid="${esc(p.id)}"><div class="row-main"><div class="row-title">${esc(p.name)}</div>
+          <div class="row-meta">Nr. ${esc(p.number ?? '-')} · ${fmtDateDe(p.start)}</div></div><span class="pill">${esc(p.status)}</span></div>`).join('')
+          : '<div class="note">Keine Projekte gefunden.</div>';
+        $$('[data-pid]', pane).forEach(el => el.onclick = () => pick(r.projects.find(p => p.id === el.dataset.pid)));
+      };
+      $('#p-q', pane).oninput = showList; $('#p-all', pane).onchange = showList; showList();
+
+      async function pick(p) {
+        $('#p-list', pane).classList.add('hidden');
+        $('#p-q', pane).parentElement.classList.add('hidden');
+        const det = $('#p-detail', pane);
+        det.innerHTML = '<div class="note">Lädt Speisen aus Rentman…</div>';
+        let data;
+        try { data = await api('GET', '/orders/rentman/' + encodeURIComponent(p.id)); }
+        catch (e) { det.innerHTML = `<div class="alert alert-error">${esc(e.message)}</div>`; return; }
+        if (data.openOrderId) {
+          det.innerHTML = `<div class="warn-box">Für dieses Projekt gibt es bereits eine offene Bestellung.</div>
+            <button class="btn btn-primary btn-full" id="open-existing">Bestehende Bestellung öffnen</button>`;
+          $('#open-existing', det).onclick = () => { m.close(); location.hash = '#/bestellung/' + data.openOrderId; };
+          return;
+        }
+        const blocks = data.blocks;
+        det.innerHTML = `<h3 style="font-size:16px;margin-bottom:4px;">${esc(data.project.name)}</h3>
+          <div class="note" style="margin-bottom:10px;">Nr. ${esc(data.project.number ?? '-')} · ${fmtDateDe(data.project.start)}</div>
+          ${blocks.length ? `<div class="warn-box">Die Personenzahl steht in Rentman als Menge der Blockzeile. Mehrere Blöcke dürfen nicht addiert werden.
+            Wähle die Blöcke, deren Speisen berechnet werden sollen.</div>` + blocks.map(b => `
+            <label class="line" style="display:block;text-transform:none;font-weight:400;cursor:pointer">
+              <div style="display:flex;gap:10px;align-items:flex-start">
+                <input type="checkbox" data-block="${esc(b.rowId)}" style="width:22px;height:22px;margin-top:2px">
+                <div><div style="font-weight:600">${esc(b.name)}</div>
+                <div class="row-meta">Menge in Rentman (Personen): <b>${esc(b.quantity)}</b> · ${b.dishes.length} Speisen</div>
+                ${b.remark ? `<div class="row-meta">${esc(b.remark.slice(0, 160))}</div>` : ''}</div></div></label>`).join('')
+            : '<div class="warn-box">In diesem Projekt wurden keine Speisenblöcke (Materialgruppe "Catering") gefunden. Du kannst die Bestellung trotzdem anlegen und Speisen später hinzufügen.</div>'}
+          <div class="grid2" style="margin-top:12px">${field('Gäste', '<input type="text" inputmode="numeric" id="g-guests">')}
+            ${field('Gläser pro Person', '<input type="text" inputmode="decimal" id="g-gpp" placeholder="z. B. 2,6">', 'Wird von dir festgelegt, es gibt keinen Standard.')}</div>
+          <div class="hint" id="g-src"></div>
+          <div class="modal-actions"><button class="btn btn-primary" id="g-go" style="flex:1">Bestellung anlegen</button></div>`;
+        let source = null;
+        const update = () => {
+          const sel = blocks.filter(b => $(`[data-block="${b.rowId}"]`, det).checked);
+          const values = [...new Set(sel.map(b => b.quantity))];
+          if (values.length === 1) { $('#g-guests', det).value = values[0]; source = `Rentman, Block "${sel[0].name}" (Menge ${values[0]})`; $('#g-src', det).textContent = 'Quelle der Gästezahl: ' + source; }
+          else if (values.length > 1) { $('#g-guests', det).value = ''; source = null; $('#g-src', det).textContent = `Die gewählten Blöcke haben unterschiedliche Mengen (${values.join(', ')}). Bitte Gästezahl selbst eintragen.`; }
+        };
+        $$('[data-block]', det).forEach(c => c.onchange = update);
+        $('#g-go', det).onclick = () => {
+          const sel = blocks.filter(b => $(`[data-block="${b.rowId}"]`, det).checked);
+          const guests = $('#g-guests', det).value.trim();
+          const lines = sel.flatMap(b => b.dishes.map(d => ({ rentmanRowId: d.rowId, rentmanName: d.name, blockName: b.name })));
+          create({ name: data.project.name, number: data.project.number, eventDate: data.project.start, rentmanProjectId: data.project.id,
+            guests: guests || null, guestsSource: guests ? (guests === (sel[0] && sel.every(b => b.quantity === sel[0].quantity) ? sel[0].quantity : null) ? source : 'manuell eingegeben') : null,
+            glassesPerPerson: $('#g-gpp', det).value.trim() || null, lines });
+        };
+      }
+    }
+  }
+});
+
+CAT.register('bestellung', async (root, arg) => {
+  const { $, $$, esc, fmt, api, options, toast, confirmDialog } = CAT;
+  let o = await api('GET', '/orders/' + encodeURIComponent(arg));
+  const dishes = o.status === 'entwurf' ? await api('GET', '/dishes') : [];
+  let locked = o.status === 'abgeschlossen';
+  let dirty = false;
+  const dishOpts = sel => options(dishes.map(d => [d.id, d.name]), sel, 'Speise wählen');
+
+  const lineHtml = (l, i) => {
+    const warn = o.computed.warnings.filter(w => w.lineId === l.id).map(w => esc(w.text));
+    const c = o.computed.lines.find(x => x.lineId === l.id);
+    return `<div class="line" data-line data-rname="${esc(l.rentmanName)}" data-rid="${esc(l.rentmanRowId)}" data-block="${esc(l.blockName)}">
+      <div class="row-meta" style="margin-bottom:6px">${l.rentmanName ? 'Rentman: ' + esc(l.rentmanName) : 'manuell hinzugefügt'}${l.blockName ? ' · ' + esc(l.blockName) : ''}</div>
+      <div class="line-grid" style="grid-template-columns:2fr 1fr auto">
+        <div><label>Speise</label>${locked ? `<div>${esc(l.dish ? l.dish.name : '?')}</div>` : `<select data-f="dish">${dishOpts(l.dishId)}</select>`}</div>
+        <div><label>Gläser</label>${locked ? `<div><b>${esc(l.glasses ?? '?')}</b></div>` : `<input type="text" inputmode="numeric" data-f="glasses" value="${esc(l.glasses)}" style="font-size:20px;font-weight:700">`}</div>
+        ${locked ? '' : '<div><button class="btn btn-secondary btn-sm" data-rm>✕</button></div>'}
+      </div>
+      ${!locked && !l.dishId && l.suggestion ? `<div class="hint">Vorschlag: <b>${esc(l.suggestion.name)}</b> (Ähnlichkeit ${Math.round(l.suggestion.score * 100)} %)
+        <button class="btn btn-secondary btn-sm" data-sug="${l.suggestion.dishId}" type="button">Übernehmen</button></div>` : ''}
+      ${c && c.orderGrams !== null ? `<div class="hint">${esc(c.weg.join(' · '))}</div>` : ''}
+      ${warn.map(w => `<div class="hint" style="color:#cc0000">${w}</div>`).join('')}
+    </div>`;
+  };
+
+  const qty = (q, unit) => q === null ? 'offen' : unit === 'g' ? (Number(q) >= 1000 ? fmt(String(Number(q) / 1000)) + ' kg' : fmt(q) + ' g') : fmt(q) + ' ' + (CAT.meta.units[unit] || unit);
+
+  function draw() {
+    locked = o.status === 'abgeschlossen';      // nach Abschließen oder Wieder öffnen neu bestimmen
+    const c = o.computed;
+    root.innerHTML = `
+      <a href="#/start" class="back-btn" style="display:inline-flex;margin-bottom:12px;">← Zurück zu den Bestellungen</a>
+      <div class="alert alert-error hidden" id="err"></div>
+      <div class="card">
+        <h2 style="font-size:18px;margin-bottom:4px;">${esc(o.name)} <span class="pill ${locked ? '' : 'sample'}">${locked ? 'abgeschlossen' : 'Entwurf'}</span></h2>
+        <div class="note">${o.number ? 'Nr. ' + esc(o.number) + ' · ' : ''}${fmtDateDe(o.eventDate)}${o.finalizedAt ? ' · abgeschlossen am ' + new Date(o.finalizedAt).toLocaleString('de-DE') : ''}</div>
+      </div>
+      <div class="card">
+        <div class="grid2">
+          <div class="form-group"><label>Gäste</label>${locked ? `<div><b>${esc(o.guests ?? 'fehlt')}</b></div>` : '<input type="text" inputmode="numeric" id="guests" value="' + esc(o.guests) + '">'}
+            <div class="hint">${o.guestsSource ? 'Quelle: ' + esc(o.guestsSource) : 'Quelle: nicht angegeben'}</div></div>
+          <div class="form-group"><label>Gläser pro Person</label>${locked ? `<div><b>${esc(fmt(o.glassesPerPerson) || 'fehlt')}</b></div>` : '<input type="text" inputmode="decimal" id="gpp" value="' + esc(fmt(o.glassesPerPerson)) + '" placeholder="z. B. 2,6">'}
+            <div class="hint">Wird von dir festgelegt (laut Angebot 2 bis 3).</div></div>
+        </div>
+        <div id="sumline" style="font-size:15px;font-weight:600"></div>
+      </div>
+      <div class="card">
+        <h3 style="font-size:15px;margin-bottom:10px;">Speisen und Gläser</h3>
+        <div id="lines">${o.lines.map(lineHtml).join('') || '<div class="note">Keine Speisen. Füge unten Speisen hinzu.</div>'}</div>
+        ${locked ? '' : `<div class="toolbar"><button class="btn btn-secondary" id="addLine">+ Speise hinzufügen</button>
+          <button class="btn btn-secondary" id="spread">Gläser gleichmäßig verteilen</button></div>`}
+      </div>
+      <div class="card" id="result">
+        <h3 style="font-size:15px;margin-bottom:10px;">Ergebnis</h3>
+        ${c.warnings.length ? `<div class="${c.complete ? 'warn-box' : 'alert alert-error'}"><b>${c.complete ? 'Hinweise' : 'Unvollständig, nicht zum Bestellen verwenden'}</b><ul style="margin:6px 0 0 18px">${c.warnings.map(w => `<li>${esc(w.text)}</li>`).join('')}</ul></div>` : ''}
+        ${c.shopping.length ? `<div class="note" style="margin-bottom:6px">Einkaufsliste${c.complete ? '' : ' (unvollständig)'}</div>` + c.shopping.map(s => `
+          <div class="row" style="cursor:default"><div class="row-main"><div class="row-title">${esc(s.name)}${s.kind === 'garnitur' ? ' <span class="pill">Garnitur</span>' : ''}${s.overridden ? ' <span class="pill sample">manuell</span>' : ''}</div>
+          <div class="row-meta">${esc(s.supplier || 'ohne Lieferant')}${s.sources && s.sources.length ? ' · für ' + esc(s.sources.join(', ')) : ''}${s.overrideNote ? ' · ' + esc(s.overrideNote) : ''}</div></div>
+          <div style="text-align:right"><b ${s.qty === null ? 'style="color:#cc0000"' : ''}>${esc(qty(s.qty, s.unit))}</b>${s.need !== null && s.qty !== null && (s.need !== s.qty || s.needUnit !== s.unit) ? `<div class="row-meta">${s.overridden ? 'berechnet' : 'Bedarf'} ${esc(qty(s.need, s.needUnit || s.unit))}</div>` : ''}${s.overridden && s.need === null ? '<div class="row-meta">Menge pro Glas offen</div>' : ''}
+          ${s.kind === 'garnitur' && !locked ? `<button class="btn btn-secondary btn-sm" data-ov="${esc(s.key)}" style="margin-top:4px">${s.overridden ? 'Menge ändern' : s.qty === null ? 'Menge festlegen' : 'Menge ändern'}</button>` : ''}</div></div>`).join('')
+          : '<div class="note">Noch nichts zu bestellen.</div>'}
+      </div>
+      <div class="sticky-bar">
+        ${locked ? '<button class="btn btn-secondary" id="reopen">Wieder öffnen</button>' : `
+          <button class="btn btn-primary" id="save">Speichern</button>
+          <button class="btn btn-secondary" id="finalize" ${c.complete ? '' : 'disabled'}>Abschließen</button>`}
+        <button class="btn btn-secondary" id="pdf1">PDF Bestellung</button>
+        <button class="btn btn-secondary" id="pdf2">PDF Einkauf</button>
+        ${locked ? '' : '<button class="btn btn-secondary" id="del">Löschen</button>'}
+      </div>`;
+    bind();
+    updateSum();
+  }
+
+  const showErr = msg => { const e = $('#err'); e.textContent = msg; e.classList.toggle('hidden', !msg); if (msg) e.scrollIntoView({ block: 'center' }); };
+  const readLines = () => $$('[data-line]', root).map(el => ({ rentmanName: el.dataset.rname || null, rentmanRowId: el.dataset.rid || null, blockName: el.dataset.block || null,
+    dishId: $('[data-f="dish"]', el).value || null, glasses: $('[data-f="glasses"]', el).value.trim() || null }));
+  const body = () => ({ name: o.name, number: o.number, eventDate: o.eventDate, guests: $('#guests').value.trim() || null, guestsSource: o.guestsSource,
+    glassesPerPerson: $('#gpp').value.trim() || null, rev: o.rev, lines: readLines() });
+
+  function updateSum() {
+    const el = $('#sumline');
+    if (!el) return;
+    let total = 0, n = 0;
+    $$('[data-f="glasses"]', root).forEach(i => { const v = Number(i.value); if (i.value.trim() && Number.isFinite(v)) total += v; n++; });
+    if (locked) { el.textContent = `Gläser verteilt: ${o.computed.totalGlasses}${o.computed.target ? ' von ' + fmt(o.computed.target) : ''}`; return; }
+    const g = Number($('#guests').value), p = Number(($('#gpp').value || '').replace(',', '.'));
+    const target = g > 0 && p > 0 ? g * p : null;
+    el.innerHTML = `Gläser verteilt: <span style="color:${target === null || Math.abs(total - target) < 1e-9 ? 'inherit' : '#cc0000'}">${total}</span>${target !== null ? ` von ${fmt(String(Math.round(target * 100) / 100))} (${g} Gäste × ${fmt(String(p))})` : ' (Gästezahl oder Gläser pro Person fehlen noch)'}`;
+    el.dataset.target = target ?? '';
+  }
+
+  async function save() {
+    showErr('');
+    try { o = await api('PUT', '/orders/' + o.id, body()); dirty = false; draw(); toast('Gespeichert'); return true; }
+    catch (e) { showErr(e.message + (e.status === 409 ? ' (Seite neu laden mit F5)' : '')); return false; }
+  }
+
+  function bind() {
+    if (!locked) {
+      const mark = () => { dirty = true; updateSum(); };
+      root.addEventListener('input', mark, { once: false });
+      $$('[data-rm]', root).forEach(b => b.onclick = () => { b.closest('[data-line]').remove(); mark(); });
+      $$('[data-sug]', root).forEach(b => b.onclick = () => { $('[data-f="dish"]', b.closest('[data-line]')).value = b.dataset.sug; mark(); });
+      $('#addLine').onclick = () => {
+        const tmp = { id: 'neu' + Date.now(), dishId: null, glasses: null, rentmanName: null, rentmanRowId: null, blockName: null, dish: null, suggestion: null };
+        const lines = $('#lines'); if (!lines.querySelector('[data-line]')) lines.innerHTML = '';
+        lines.insertAdjacentHTML('beforeend', lineHtml(tmp));
+        const added = lines.lastElementChild;
+        $('[data-rm]', added).onclick = () => { added.remove(); mark(); };
+        mark();
+      };
+      $('#spread').onclick = () => {
+        const target = Number($('#sumline').dataset.target);
+        if (!target) { showErr('Bitte zuerst Gästezahl und Gläser pro Person eintragen.'); return; }
+        const inputs = $$('[data-f="glasses"]', root);
+        const total = Math.round(target), base = Math.floor(total / inputs.length), rest = total - base * inputs.length;
+        inputs.forEach((i, k) => { i.value = String(base + (k < rest ? 1 : 0)); });
+        showErr(Math.abs(target - total) > 1e-9 ? `Hinweis: Das Soll von ${fmt(String(target))} Gläsern wurde auf ${total} gerundet.` : '');
+        mark();
+      };
+      $('#save').onclick = save;
+      $('#finalize').onclick = async () => {
+        if (dirty && !(await save())) return;
+        if (!(await confirmDialog('Bestellung abschließen', 'Das Ergebnis wird eingefroren. Spätere Änderungen an den Speisen wirken sich nicht mehr darauf aus.', 'Abschließen'))) return;
+        try { o = await api('POST', `/orders/${o.id}/finalize`, { rev: o.rev }); draw(); toast('Abgeschlossen'); } catch (e) { showErr(e.message); }
+      };
+      $('#del').onclick = async () => {
+        if (!(await confirmDialog('Bestellung löschen', 'Diese Bestellung wird endgültig gelöscht.', 'Löschen'))) return;
+        try { await api('DELETE', '/orders/' + o.id); location.hash = '#/start'; } catch (e) { showErr(e.message); }
+      };
+    } else {
+      $('#reopen').onclick = async () => { try { o = await api('POST', `/orders/${o.id}/reopen`); location.reload(); } catch (e) { showErr(e.message); } };
+    }
+    $$('[data-ov]', root).forEach(b => b.onclick = async () => {
+      const item = o.computed.shopping.find(x => x.key === b.dataset.ov);
+      if (!item) return;
+      if (dirty && !(await save())) return;       // der Versionsstand muss zum gespeicherten Stand passen
+      overrideDialog(o.computed.shopping.find(x => x.key === b.dataset.ov));
+    });
+    const pdf = type => async () => {
+      if (dirty && !locked && !(await save())) return;      // PDF zeigt immer den gespeicherten Stand
+      window.open(`/api/catering/orders/${o.id}/pdf?type=${type}`, '_blank');
+    };
+    $('#pdf1').onclick = pdf('bestellung');
+    $('#pdf2').onclick = pdf('einkauf');
+  }
+
+  // Manuelle Gesamtmenge einer Garnitur, gilt nur für diese Bestellung
+  function overrideDialog(item) {
+    const units = ['stk', 'g', 'kg', 'ml', 'l', 'pkg'];
+    const m = CAT.modal(`${item.name}: Menge festlegen`, `
+      <div class="note" style="margin-bottom:10px">${item.need !== null && item.need !== undefined ? 'Berechnet: ' + esc(qty(item.need, item.needUnit || item.unit)) : 'Die Menge pro Glas ist noch offen.'}
+        Die Menge gilt nur für diese Bestellung und wird nicht auf ein Gebinde gerundet.</div>
+      <div class="grid2">
+        ${CAT.field('Menge', `<input type="text" inputmode="decimal" id="ov-qty" value="${item.overridden ? esc(fmt(item.qty)) : ''}" placeholder="z. B. 1">`)}
+        ${CAT.field('Einheit', `<select id="ov-unit">${CAT.options(units.map(u => [u, CAT.meta.units[u]]), item.overridden ? item.unit : item.unit)}</select>`)}
+      </div>
+      ${CAT.field('Bemerkung (optional)', `<input type="text" id="ov-note" maxlength="200" value="${esc(item.overrideNote)}" placeholder="z. B. 1 Bund">`)}`, {
+      extraButtons: item.overridden ? '<button class="btn btn-secondary" data-reset>Zurücksetzen</button>' : '',
+      onSave: async el => {
+        o = await api('POST', `/orders/${o.id}/garnish-override`, { rev: o.rev, key: item.key, qty: $('#ov-qty', el).value.trim(),
+          unit: $('#ov-unit', el).value, note: $('#ov-note', el).value.trim() || null });
+        draw(); toast('Menge festgelegt'); return true;
+      },
+    });
+    const reset = CAT.$('[data-reset]', m.el);
+    if (reset) reset.onclick = async () => {
+      try { o = await api('POST', `/orders/${o.id}/garnish-override`, { rev: o.rev, key: item.key, qty: null }); m.close(); draw(); toast('Zurückgesetzt'); }
+      catch (e) { m.showError(e.message); }
+    };
+  }
+
+  draw();
+});
