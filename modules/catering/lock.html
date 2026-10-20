@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>Catering-Kalkulator</title>
+  <meta name="theme-color" content="#000000">
+  <meta name="robots" content="noindex">
+  <link rel="stylesheet" href="/css/style.css">
+  <style>
+    .lock-wrap { max-width: 420px; margin: 24px auto; }
+    .lock-icon { font-size: 40px; text-align: center; margin-bottom: 8px; }
+    .lock-card h2 { text-align: center; font-size: 18px; margin-bottom: 6px; }
+    .lock-card p { text-align: center; color: var(--gray-dark); font-size: 14px; margin-bottom: 18px; }
+    .hdr-link { color:#fff; text-decoration:none; border:1.5px solid rgba(255,255,255,0.3); border-radius:8px; font-size:14px; padding:8px 12px; }
+  </style>
+</head>
+<body>
+  <header>
+    <img src="/assets/logo.jpg" alt="Munich Flavour" onerror="this.style.display='none'">
+    <div class="header-title"><h1>Catering-Kalkulator</h1><div class="header-sub">Admin</div></div>
+    <a href="/admin.html#programme" class="hdr-link">← Programme</a>
+  </header>
+  <main>
+    <div class="lock-wrap">
+      <form class="card lock-card" id="form" autocomplete="off">
+        <div class="lock-icon">🔒</div>
+        <h2>Passwort erforderlich</h2>
+        <p>Der Catering-Kalkulator ist noch in Entwicklung und deshalb passwortgeschützt.</p>
+        <div class="alert alert-error hidden" id="err"></div>
+        <div class="form-group">
+          <label for="pw">Passwort</label>
+          <input type="password" id="pw" autofocus autocomplete="off" autocapitalize="off" spellcheck="false" maxlength="200">
+        </div>
+        <button class="btn btn-primary btn-full" id="go" type="submit">Entsperren</button>
+      </form>
+    </div>
+  </main>
+  <script>
+    const $ = id => document.getElementById(id);
+    $('form').addEventListener('submit', async e => {
+      e.preventDefault();
+      const err = $('err'); err.classList.add('hidden');
+      $('go').disabled = true;
+      try {
+        const res = await fetch('/api/catering/unlock', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ password: $('pw').value }) });
+        const data = await res.json().catch(() => ({}));
+        if (res.ok) { location.reload(); return; }
+        if (res.status === 401 && !data.error) { location.href = '/login.html'; return; }
+        err.textContent = data.error || 'Das hat nicht geklappt. Bitte erneut versuchen.';
+        err.classList.remove('hidden');
+        $('pw').value = ''; $('pw').focus();
+      } catch { err.textContent = 'Keine Verbindung zum Server.'; err.classList.remove('hidden'); }
+      finally { $('go').disabled = false; }
+    });
+  </script>
+</body>
+</html>

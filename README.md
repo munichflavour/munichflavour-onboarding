@@ -76,6 +76,14 @@ Seite `/catering/`. Wie beim Kartengenerator prueft das Portal den Admin-Login (
 Angemeldete werden abgewiesen. Bedienung: [`docs/catering-kalkulator-anleitung.md`](docs/catering-kalkulator-anleitung.md),
 Architektur und Entscheidungen: [`docs/catering-kalkulator-bestandsaufnahme.md`](docs/catering-kalkulator-bestandsaufnahme.md).
 
+**Passwortschutz (solange der Kalkulator in Entwicklung ist):** Wer als Admin angemeldet ist, sieht beim Oeffnen des Kalkulators
+zuerst eine Passwortabfrage. Ohne Passwort sind Seite, Dateien und API gesperrt (HTTP 423). Das Entsperren gilt fuer die Sitzung
+(nach Abmelden wieder gesperrt; im Kalkulator sperrt der Knopf 🔒 sofort). Nach 5 Fehlversuchen gibt es eine Pause von 15 Minuten.
+- **Eigenes Passwort (empfohlen):** Im Portal-Dienst die Variable `CATERING_PASSWORT` setzen. Dann steht das Passwort nicht im Repository.
+- Ohne diese Variable gilt ein eingebautes Standardpasswort. Im Code steht davon nur der Hash (`modules/catering/lock.js`), das Passwort selbst wurde dem Auftraggeber direkt mitgeteilt.
+- **Abfrage abschalten** (wenn der Kalkulator fertig ist): Im Portal-Dienst die Variable `CATERING_OHNE_PASSWORT` auf `1` setzen. Die Admin-Pflicht bleibt bestehen.
+- Das ist ein zusaetzlicher Riegel, kein Ersatz fuer die Admin-Anmeldung. Der Schutz der Daten bleibt die Admin-Anmeldung.
+
 **Unterschied zum Kartengenerator:** Der Kalkulator ist Node.js und laeuft **im Portal-Dienst selbst** (`modules/catering`). Es ist
 kein zweiter Railway-Dienst und kein Proxy noetig. Seine Daten liegen in derselben SQLite-Datenbank wie das Portal
 (`db/onboarding.db`), in eigenen Tabellen (`catering_*`, `rentman_cache`). Sie werden beim Start automatisch angelegt oder
