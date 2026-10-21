@@ -9,7 +9,7 @@ CAT.register('start', async root => {
   root.innerHTML = `
     <div class="card">
       <div class="toolbar">
-        <div class="note" style="flex:1">Bestellungen für Speisen im Glas. Gästezahl und Speisen kommen aus Rentman, die Mengen rechnet das Tool.</div>
+        <div class="note" style="flex:1">Bestellungen für Salate im Glas und Brotzeit. Gästezahl und Speisen kommen aus Rentman, die Mengen rechnet das Tool.</div>
         <button class="btn btn-primary" id="newBtn">Neue Bestellung</button>
       </div>
       <div id="list"><div class="note">Lädt…</div></div>
@@ -19,7 +19,7 @@ CAT.register('start', async root => {
     <div class="row" data-id="${o.id}">
       <div class="row-main">
         <div class="row-title">${esc(o.name)}</div>
-        <div class="row-meta">${o.number ? 'Nr. ' + esc(o.number) + ' · ' : ''}${fmtDateDe(o.eventDate)} · ${o.guests ? esc(o.guests) + ' Gäste' : 'Gästezahl fehlt'} · ${esc(fmt(o.totalGlasses))} Gläser</div>
+        <div class="row-meta">${o.number ? 'Nr. ' + esc(o.number) + ' · ' : ''}${fmtDateDe(o.eventDate)} · ${o.guests ? esc(o.guests) + ' Gäste' : 'Gästezahl fehlt'} · ${esc(fmt(o.totalGlasses))} Portionen</div>
       </div>
       <div style="text-align:right">
         <span class="pill ${o.status === 'abgeschlossen' ? '' : 'sample'}">${o.status === 'abgeschlossen' ? 'abgeschlossen' : 'Entwurf'}</span>
@@ -111,7 +111,9 @@ CAT.register('start', async root => {
                 ${b.remark ? `<div class="row-meta">${esc(b.remark.slice(0, 160))}</div>` : ''}</div></div></label>`).join('')
             : '<div class="warn-box">In diesem Projekt wurden keine Speisenblöcke (Materialgruppe "Catering") gefunden. Du kannst die Bestellung trotzdem anlegen und Speisen später hinzufügen.</div>'}
           <div class="grid2" style="margin-top:12px">${field('Gäste', '<input type="text" inputmode="numeric" id="g-guests">')}
-            ${field('Gläser pro Person', '<input type="text" inputmode="decimal" id="g-gpp" placeholder="z. B. 2,6">', 'Wird von dir festgelegt, es gibt keinen Standard.')}</div>
+            ${field('Gläser pro Person', '<input type="text" inputmode="decimal" id="g-gpp" placeholder="z. B. 2,6">', 'Für Salate im Glas. Wird von dir festgelegt, es gibt keinen Standard.')}
+            ${field('Brote pro Person', '<input type="text" inputmode="decimal" id="g-bpp" placeholder="z. B. 2">', 'Für Brotzeit. Leer lassen, wenn keine Brotzeit dabei ist.')}</div>
+          <div class="hint">Die Portionen werden automatisch gleichmäßig auf die Speisen verteilt.</div>
           <div class="hint" id="g-src"></div>
           <div class="modal-actions"><button class="btn btn-primary" id="g-go" style="flex:1">Bestellung anlegen</button></div>`;
         let source = null;
@@ -128,7 +130,7 @@ CAT.register('start', async root => {
           const lines = sel.flatMap(b => b.dishes.map(d => ({ rentmanRowId: d.rowId, rentmanName: d.name, blockName: b.name })));
           create({ name: data.project.name, number: data.project.number, eventDate: data.project.start, rentmanProjectId: data.project.id,
             guests: guests || null, guestsSource: guests ? (guests === (sel[0] && sel.every(b => b.quantity === sel[0].quantity) ? sel[0].quantity : null) ? source : 'manuell eingegeben') : null,
-            glassesPerPerson: $('#g-gpp', det).value.trim() || null, lines });
+            glassesPerPerson: $('#g-gpp', det).value.trim() || null, brotzeitPerPerson: $('#g-bpp', det).value.trim() || null, lines });
         };
       }
     }
@@ -142,6 +144,9 @@ CAT.register('bestellung', async (root, arg) => {
   let locked = o.status === 'abgeschlossen';
   // Automatisches Speichern: `version` zählt jede Änderung der Eingaben, `savedVersion` den zuletzt gespeicherten Stand.
   let version = 0, savedVersion = 0, saving = false, timer = null;
+  let autoSplit = o.autoSplit;      // true: Portionen werden automatisch gleichmäßig verteilt, bis jemand eine Zahl von Hand ändert
+  const LABELS = { weckglas: ['Gläser', 'Gläser pro Person'], brotzeit: ['Brote', 'Brote pro Person'] };
+  const dishById = id => dishes.find(d => String(d.id) === String(id)) || null;
   const sleep = ms => new Promise(r => setTimeout(r, ms));
   const dishOpts = sel => options(dishes.map(d => [d.id, d.name]), sel, 'Speise wählen');
   // Wie im PDF: nach Lieferant gruppiert (benannte alphabetisch, "ohne Lieferant" zuletzt), Speisen vor Garnitur
@@ -159,7 +164,7 @@ CAT.register('bestellung', async (root, arg) => {
     const warn = o.computed.warnings.filter(w => w.lineId === l.id).map(w => esc(w.text));
     return `${!locked && !l.dishId && l.suggestion && !l.suggestion.auto ? `<div class="hint">Vorschlag: <b>${esc(l.suggestion.name)}</b> (Ähnlichkeit ${Math.round(l.suggestion.score * 100)} %)
         <button class="btn btn-secondary btn-sm" data-sug="${l.suggestion.dishId}" type="button">Übernehmen</button></div>` : ''}
-      ${c && c.orderGrams !== null ? `<div class="hint">${esc(c.weg.join(' · '))}</div>` : ''}
+      ${c && c.weg.length ? `<div class="hint">${esc(c.weg.join(' · '))}</div>` : ''}
       ${warn.map(w => `<div class="hint open-hint">${w}</div>`).join('')}`;
   };
 
@@ -167,7 +172,7 @@ CAT.register('bestellung', async (root, arg) => {
       <div class="row-meta" style="margin-bottom:6px">${l.rentmanName ? 'Rentman: ' + esc(l.rentmanName) : 'manuell hinzugefügt'}${l.blockName ? ' · ' + esc(l.blockName) : ''}</div>
       <div class="line-grid" style="grid-template-columns:2fr 1fr auto">
         <div><label>Speise</label>${locked ? `<div>${esc(l.dish ? l.dish.name : '?')}</div>` : `<select data-f="dish">${dishOpts(l.dishId)}</select>`}</div>
-        <div><label>Gläser</label>${locked ? `<div><b>${esc(l.glasses ?? '?')}</b></div>` : `<input type="text" inputmode="numeric" data-f="glasses" value="${esc(l.glasses)}" style="font-size:20px;font-weight:700">`}</div>
+        <div><label>${esc(((LABELS[l.dish && l.dish.category] || [])[0]) || 'Portionen')}</label>${locked ? `<div><b>${esc(l.glasses ?? '?')}</b></div>` : `<input type="text" inputmode="numeric" data-f="glasses" value="${esc(l.glasses)}" style="font-size:20px;font-weight:700">`}</div>
         ${locked ? '' : '<div><button class="btn btn-secondary btn-sm" data-rm>✕</button></div>'}
       </div>
       <div data-hints>${hintsHtml(l)}</div>
@@ -180,8 +185,8 @@ CAT.register('bestellung', async (root, arg) => {
         ${c.shopping.length ? `<div class="note" style="margin-bottom:6px">Einkaufsliste${c.complete ? '' : ' (unvollständig)'}</div>` + bySupplier(c.shopping).map(g => `
           <div style="margin:14px 0 2px;font-weight:700;font-size:15px">${esc(g.supplier || 'Ohne Lieferant')} <span class="pill">${g.items.length} Artikel</span></div>` + g.items.map(s => `
           <div class="row" style="cursor:default"><div class="row-main"><div class="row-title">${esc(s.name)}${s.kind === 'garnitur' ? ' <span class="pill">Garnitur</span>' : ''}${s.overridden ? ' <span class="pill sample">manuell</span>' : ''}</div>
-          <div class="row-meta">${s.articleNo ? 'Art. ' + esc(s.articleNo) + ' · ' : ''}${s.kind === 'speise' && s.glasses ? esc(s.glasses) + ' Gläser' : (s.sources && s.sources.length ? 'für ' + esc(s.sources.join(', ')) : '')}${s.overrideNote ? ' · ' + esc(s.overrideNote) : ''}</div></div>
-          <div style="text-align:right"><b ${s.qty === null ? 'style="color:#cc0000"' : ''}>${esc(qty(s.qty, s.unit))}</b>${s.need !== null && s.qty !== null && (s.need !== s.qty || s.needUnit !== s.unit) ? `<div class="row-meta">${s.overridden ? 'berechnet' : 'Bedarf'} ${esc(qty(s.need, s.needUnit || s.unit))}</div>` : ''}${s.overridden && s.need === null ? '<div class="row-meta">Menge pro Glas offen</div>' : ''}
+          <div class="row-meta">${s.articleNo ? 'Art. ' + esc(s.articleNo) + ' · ' : ''}${s.sources && s.sources.length ? 'für ' + esc(s.sources.join(', ')) : ''}${s.overrideNote ? ' · ' + esc(s.overrideNote) : ''}</div></div>
+          <div style="text-align:right"><b ${s.qty === null ? 'style="color:#cc0000"' : ''}>${esc(qty(s.qty, s.unit))}</b>${s.need !== null && s.qty !== null && (s.need !== s.qty || s.needUnit !== s.unit) ? `<div class="row-meta">${s.overridden ? 'berechnet' : 'Bedarf'} ${esc(qty(s.need, s.needUnit || s.unit))}</div>` : ''}${s.overridden && s.need === null ? '<div class="row-meta">Menge pro Portion offen</div>' : ''}
           ${s.kind === 'garnitur' && !locked ? `<button class="btn btn-secondary btn-sm" data-ov="${esc(s.key)}" style="margin-top:4px">${s.overridden ? 'Menge ändern' : s.qty === null ? 'Menge festlegen' : 'Menge ändern'}</button>` : ''}</div></div>`).join('')).join('')
           : '<div class="note">Noch nichts zu bestellen.</div>'}`;
   };
@@ -200,16 +205,19 @@ CAT.register('bestellung', async (root, arg) => {
         <div class="grid2">
           <div class="form-group"><label>Gäste</label>${locked ? `<div><b>${esc(o.guests ?? 'fehlt')}</b></div>` : '<input type="text" inputmode="numeric" id="guests" value="' + esc(o.guests) + '">'}
             <div class="hint">${o.guestsSource ? 'Quelle: ' + esc(o.guestsSource) : 'Quelle: nicht angegeben'}</div></div>
-          <div class="form-group"><label>Gläser pro Person</label>${locked ? `<div><b>${esc(fmt(o.glassesPerPerson) || 'fehlt')}</b></div>` : '<input type="text" inputmode="decimal" id="gpp" value="' + esc(fmt(o.glassesPerPerson)) + '" placeholder="z. B. 2,6">'}
-            <div class="hint">Wird von dir festgelegt (laut Angebot 2 bis 3).</div></div>
+          <div class="form-group"><label>Gläser pro Person</label>${locked ? `<div><b>${esc(fmt(o.glassesPerPerson) || '-')}</b></div>` : '<input type="text" inputmode="decimal" id="gpp" value="' + esc(fmt(o.glassesPerPerson)) + '" placeholder="z. B. 2,6">'}
+            <div class="hint">Salate im Glas. Wird von dir festgelegt (laut Angebot 2 bis 3).</div></div>
+          <div class="form-group"><label>Brote pro Person</label>${locked ? `<div><b>${esc(fmt(o.brotzeitPerPerson) || '-')}</b></div>` : '<input type="text" inputmode="decimal" id="bpp" value="' + esc(fmt(o.brotzeitPerPerson)) + '" placeholder="z. B. 2">'}
+            <div class="hint">Brotzeit. Leer lassen, wenn keine Brotzeit dabei ist.</div></div>
         </div>
         <div id="sumline" style="font-size:15px;font-weight:600"></div>
       </div>
       <div class="card">
-        <h3 style="font-size:15px;margin-bottom:10px;">Speisen und Gläser</h3>
+        <h3 style="font-size:15px;margin-bottom:6px;">Speisen und Portionen</h3>
+        <div class="hint" id="splitHint" style="margin:0 0 10px"></div>
         <div id="lines">${o.lines.map(lineHtml).join('') || '<div class="note">Keine Speisen. Füge unten Speisen hinzu.</div>'}</div>
         ${locked ? '' : `<div class="toolbar"><button class="btn btn-secondary" id="addLine">+ Speise hinzufügen</button>
-          <button class="btn btn-secondary" id="spread">Gläser gleichmäßig verteilen</button></div>`}
+          <button class="btn btn-secondary" id="spread">Automatisch gleichmäßig verteilen</button></div>`}
       </div>
       <div class="card" id="result">${resultHtml()}</div>
       <div class="sticky-bar">
@@ -229,25 +237,49 @@ CAT.register('bestellung', async (root, arg) => {
   const readLines = () => $$('[data-line]', root).map(el => ({ rentmanName: el.dataset.rname || null, rentmanRowId: el.dataset.rid || null, blockName: el.dataset.block || null,
     dishId: $('[data-f="dish"]', el).value || null, glasses: $('[data-f="glasses"]', el).value.trim() || null }));
   const body = () => ({ name: o.name, number: o.number, eventDate: o.eventDate, guests: $('#guests').value.trim() || null, guestsSource: o.guestsSource,
-    glassesPerPerson: $('#gpp').value.trim() || null, rev: o.rev, lines: readLines() });
+    glassesPerPerson: $('#gpp').value.trim() || null, brotzeitPerPerson: $('#bpp').value.trim() || null, autoSplit, rev: o.rev, lines: readLines() });
+
+  const splitHintText = () => (autoSplit
+    ? 'Die Portionen werden automatisch gleichmäßig auf die Speisen verteilt. Wenn du eine Zahl selbst änderst, bleibt sie stehen.'
+    : 'Die Portionen sind von Hand festgelegt. Mit "Automatisch gleichmäßig verteilen" rechnet das Tool sie neu.');
 
   function updateSum() {
     const el = $('#sumline');
     if (!el) return;
-    let total = 0;
-    $$('[data-f="glasses"]', root).forEach(i => { const v = Number(i.value); if (i.value.trim() && Number.isFinite(v)) total += v; });
-    if (locked) { el.textContent = `Gläser verteilt: ${o.computed.totalGlasses}${o.computed.target ? ' von ' + fmt(o.computed.target) : ''}`; return; }
-    const g = Number($('#guests').value), p = Number(($('#gpp').value || '').replace(',', '.'));
-    const target = g > 0 && p > 0 ? g * p : null;
-    el.innerHTML = `Gläser verteilt: <span style="color:${target === null || Math.abs(total - target) < 1e-9 ? 'inherit' : '#cc0000'}">${total}</span>${target !== null ? ` von ${fmt(String(Math.round(target * 100) / 100))} (${g} Gäste × ${fmt(String(p))})` : ' (Gästezahl oder Gläser pro Person fehlen noch)'}`;
-    el.dataset.target = target ?? '';
+    const sh = $('#splitHint'); if (sh) sh.textContent = locked ? '' : splitHintText();
+    if (locked) {
+      el.innerHTML = o.computed.categories.map(c => `${esc(c.label)} verteilt: ${esc(c.total)}${c.target ? ' von ' + esc(fmt(c.target)) : ''}`).join(' · ');
+      return;
+    }
+    // Live aus den Eingabefeldern: je Speisenart die Summe der Portionen gegen Gäste x Portionen pro Person
+    const totals = {}, present = new Set();
+    $$('[data-line]', root).forEach(line => {
+      const d = dishById($('[data-f="dish"]', line).value);
+      if (!d || !LABELS[d.category]) return;
+      present.add(d.category);
+      const i = $('[data-f="glasses"]', line), v = Number(i.value);
+      totals[d.category] = (totals[d.category] || 0) + (i.value.trim() && Number.isFinite(v) ? v : 0);
+    });
+    if (!present.size) present.add('weckglas');
+    const g = Number($('#guests').value);
+    const pp = { weckglas: Number(($('#gpp').value || '').replace(',', '.')), brotzeit: Number(($('#bpp').value || '').replace(',', '.')) };
+    el.innerHTML = [...present].map(cat => {
+      const total = totals[cat] || 0, p = pp[cat], target = g > 0 && p > 0 ? g * p : null;
+      const ok = target === null || Math.abs(total - target) < 1e-9 || total === Math.round(target);
+      return `${esc(LABELS[cat][0])} verteilt: <span style="color:${ok ? 'inherit' : '#cc0000'}">${total}</span>${target !== null ? ` von ${fmt(String(Math.round(target * 100) / 100))} (${g} Gäste × ${fmt(String(p))})` : ` (Gästezahl oder ${esc(LABELS[cat][1])} fehlen noch)`}`;
+    }).join('<br>');
   }
 
   // Nach dem Speichern nur die berechneten Teile erneuern (Hinweise, Ergebnis, Summe), nie die Eingabefelder:
   // So bleibt der Cursor stehen, und es werden keine veralteten Meldungen gezeigt.
   function refreshDynamic() {
     stale(false);
-    $$('[data-line]', root).forEach((el, i) => { const l = o.lines[i]; if (l) $('[data-hints]', el).innerHTML = hintsHtml(l); });
+    $$('[data-line]', root).forEach((el, i) => {
+      const l = o.lines[i];
+      if (!l) return;
+      if (autoSplit) $('[data-f="glasses"]', el).value = l.glasses ?? '';      // automatisch verteilte Zahlen anzeigen
+      $('[data-hints]', el).innerHTML = hintsHtml(l);
+    });
     $('#result').innerHTML = resultHtml();
     const fin = $('#finalize'); if (fin) fin.disabled = !o.computed.complete;
     bindOverrides();
@@ -264,7 +296,7 @@ CAT.register('bestellung', async (root, arg) => {
     if (version === savedVersion || !$('#orderpage')) return true;      // nichts zu speichern, oder die Seite wurde schon verlassen
     saving = true; showErr('');
     const v = version;
-    try { o = await api('PUT', '/orders/' + o.id, body()); savedVersion = v; }
+    try { o = await api('PUT', '/orders/' + o.id, body()); savedVersion = v; autoSplit = o.autoSplit; }
     catch (e) {
       saving = false;
       showErr(e.message + (e.status === 409 ? ' (Seite neu laden mit F5)' : ''));
@@ -289,7 +321,7 @@ CAT.register('bestellung', async (root, arg) => {
   function bind() {
     if (!locked) {
       const page = $('#orderpage');                  // Beobachter hängen an der Seite selbst und verschwinden mit ihr
-      page.addEventListener('input', mark);
+      page.addEventListener('input', e => { if (e.target.matches('[data-f="glasses"]')) autoSplit = false; mark(); });
       page.addEventListener('change', e => { if (e.target.matches('[data-f]')) mark(); });
       $$('[data-rm]', root).forEach(b => b.onclick = () => { b.closest('[data-line]').remove(); mark(); });
       page.addEventListener('click', e => {
@@ -304,15 +336,7 @@ CAT.register('bestellung', async (root, arg) => {
         $('[data-rm]', added).onclick = () => { added.remove(); mark(); };
         mark();
       };
-      $('#spread').onclick = () => {
-        const target = Number($('#sumline').dataset.target);
-        if (!target) { showErr('Bitte zuerst Gästezahl und Gläser pro Person eintragen.'); return; }
-        const inputs = $$('[data-f="glasses"]', root);
-        const total = Math.round(target), base = Math.floor(total / inputs.length), rest = total - base * inputs.length;
-        inputs.forEach((i, k) => { i.value = String(base + (k < rest ? 1 : 0)); });
-        showErr(Math.abs(target - total) > 1e-9 ? `Hinweis: Das Soll von ${fmt(String(target))} Gläsern wurde auf ${total} gerundet.` : '');
-        mark();
-      };
+      $('#spread').onclick = () => { autoSplit = true; mark(); };
       $('#save').onclick = async () => { if (await flush()) toast('Gespeichert'); };
       $('#finalize').onclick = async () => {
         if (!(await flush())) return;

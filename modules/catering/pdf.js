@@ -3,7 +3,7 @@
 // Unvollständige Bestellungen werden deutlich gekennzeichnet und nie als fertige Liste ausgegeben.
 const fs = require('fs');
 const PDFDocument = require('pdfkit');
-const { num, grams, perGlass, qtyUnit } = require('./format');
+const { num, perGlass, qtyUnit } = require('./format');
 const { groupBySupplier } = require('./order-calc');
 
 const M = 40;                       // Seitenrand
@@ -14,16 +14,12 @@ const dateDe = v => {
   return d && !isNaN(d) ? d.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' }) : 'ohne Datum';
 };
 
-// Woraus sich die Menge zusammensetzt: bei Speisen "22 Gläser x 40 g", bei Garnitur "22 x ½ + 19 x 1"
+// Woraus sich die Menge zusammensetzt: "22 x 40 g + 19 x 52 g" bzw. bei Garnitur "22 x ½ + 19 x 1"
 function detailText(s) {
-  if (s.kind === 'speise') {
-    if (s.glasses === null || s.glasses === undefined || !s.fillGrams) return '';
-    return `${num(s.glasses, 0)} Gläser x ${num(s.fillGrams, 2)} g = ${grams(s.need)}`;
-  }
   const known = (s.parts || []).filter(p => p.qtyPerGlass !== null && p.glasses !== null);
   const calc = known.length ? known.map(p => `${num(p.glasses, 0)} x ${perGlass(p.qtyPerGlass, s.unit)}`).join(' + ') : '';
-  if (s.overridden) return s.need === null ? 'Menge pro Glas offen' : `berechnet: ${qtyUnit(s.need, s.needUnit || s.unit)}`;
-  if (s.open || s.need === null) return 'Menge pro Glas offen';
+  if (s.overridden) return s.need === null ? 'Menge pro Portion offen' : `berechnet: ${qtyUnit(s.need, s.needUnit || s.unit)}`;
+  if (s.open || s.need === null) return 'Menge pro Portion offen';
   return `${calc} = ${qtyUnit(s.need, s.needUnit || s.unit)}`;
 }
 
@@ -46,8 +42,7 @@ function renderOrderPdf({ order, computed, logoPath }) {
       order.number ? `Nr. ${order.number}` : null,
       `Event: ${dateDe(order.eventDate)}`,
       computed.guests ? `Gäste: ${num(computed.guests, 0)}` : 'Gäste: fehlt',
-      computed.glassesPerPerson ? `${num(computed.glassesPerPerson, 2)} Gläser/Person` : null,
-      `${num(computed.totalGlasses, 0)} Gläser`,
+      ...(computed.categories || []).filter(c => c.perPerson !== null).map(c => `${num(c.total, 0)} ${c.label} (${num(c.perPerson, 2)}/Person)`),
       `Erstellt: ${dateDe(order.createdAt)}`,
       order.status === 'abgeschlossen' ? 'abgeschlossen' : 'Entwurf',
     ].filter(Boolean).join('   |   ');
@@ -111,7 +106,7 @@ function renderOrderPdf({ order, computed, logoPath }) {
       for (const s of g.items) {
         const sub = [s.articleNo ? `Art.-Nr. ${s.articleNo}` : null,
           s.overridden ? `manuell festgelegt${s.overrideNote ? ': ' + s.overrideNote : ''}` : null,
-          s.kind === 'garnitur' && s.sources && s.sources.length ? `für: ${s.sources.join(', ')}` : null].filter(Boolean).join('  |  ');
+          s.sources && s.sources.length ? `für: ${s.sources.join(', ')}` : null].filter(Boolean).join('  |  ');
         const buy = s.qty === null ? 'Menge offen' : qtyUnit(s.qty, s.unit) + (s.packs && s.packSize ? ` (${num(s.packs, 0)} x ${qtyUnit(s.packSize, s.unit)})` : '');
         const label2 = s.kind === 'garnitur' ? `${s.name} (Garnitur)` : s.name;
         const detail = detailText(s);

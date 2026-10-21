@@ -1,4 +1,4 @@
-// Bestellungen (Speisen im Glas): Gästezahl x Gläser pro Person, Verteilung auf Speisen, Bestellübersicht und
+// Bestellungen (Salate im Glas, Brotzeit): Gästezahl x Portionen pro Person, Verteilung auf die Speisen und
 // Einkaufsliste als PDF. Entwürfe sind änderbar, abgeschlossene Bestellungen tragen ein eingefrorenes Ergebnis.
 const path = require('path');
 const express = require('express');
@@ -6,7 +6,7 @@ const V = require('../validate');
 const { ApiError } = V;
 const rentman = require('../rentman');
 const { normName, suggest, autoMatch } = require('../match');
-const { computeOrder, keyOf } = require('../order-calc');
+const { computeOrder, autoSplit } = require('../order-calc');
 const { loadDish } = require('./dishes');
 const { renderOrderPdf } = require('../pdf');
 
@@ -38,12 +38,12 @@ function createOrdersRouter(db, audit) {
       return { id: l.id, dishId: l.dish_id, rentmanRowId: l.rentman_row_id, rentmanName: l.rentman_name, blockName: l.block_name, glasses: l.glasses, dish, suggestion };
     });
     const garnishOverrides = db.prepare('SELECT key, name, qty, unit, note FROM catering_order_garnish_overrides WHERE order_id = ? ORDER BY name').all(id);
-    const live = computeOrder({ guests: o.guests, glassesPerPerson: o.glasses_per_person, garnishOverrides,
+    const live = computeOrder({ guests: o.guests, glassesPerPerson: o.glasses_per_person, brotzeitPerPerson: o.brotzeit_per_person, garnishOverrides,
       lines: lines.map(l => ({ id: l.id, glasses: l.glasses, rentmanName: l.rentmanName || l.blockName, dish: l.dish })) });
     const computed = o.status === 'abgeschlossen' && o.snapshot ? JSON.parse(o.snapshot).computed : live;
     return {
       id: o.id, rentmanProjectId: o.rentman_project_id, number: o.number, name: o.name, eventDate: o.event_date, guests: o.guests,
-      guestsSource: o.guests_source, glassesPerPerson: o.glasses_per_person, status: o.status, rev: o.rev, createdAt: o.created_at, updatedAt: o.updated_at,
+      guestsSource: o.guests_source, glassesPerPerson: o.glasses_per_person, brotzeitPerPerson: o.brotzeit_per_person, autoSplit: !!o.auto_split, status: o.status, rev: o.rev, createdAt: o.created_at, updatedAt: o.updated_at,
       finalizedAt: o.snapshot ? JSON.parse(o.snapshot).finalizedAt : null,
       lines, computed, garnishOverrides,
     };
@@ -59,6 +59,7 @@ function createOrdersRouter(db, audit) {
       guests,
       guestsSource: V.str(b.guestsSource, 'Quelle der Gästezahl', { max: 200 }),
       glassesPerPerson: V.dec(b.glassesPerPerson, 'Gläser pro Person', { minExclusive: 0, max: 50 }),
+      brotzeitPerPerson: V.dec(b.brotzeitPerPerson, 'Brote pro Person', { minExclusive: 0, max: 50 }),
     };
   }
   function parseGlasses(v, label) {
@@ -66,6 +67,19 @@ function createOrdersRouter(db, audit) {
     const s = String(v).trim();
     if (!/^\d{1,5}$/.test(s)) throw V.bad(`${label}: Die Anzahl der Gläser muss eine ganze Zahl sein.`);
     return String(Number(s));
+  }
+
+  // Automatische Verteilung: Gäste x Portionen pro Person gleichmäßig auf die Zeilen der jeweiligen Speisenart.
+  // Gilt nur, solange die Bestellung im Modus "automatisch" ist; sobald jemand eine Zahl von Hand ändert, bleibt sie stehen.
+  function applySplit(id) {
+    const o = db.prepare('SELECT * FROM catering_orders WHERE id = ?').get(id);
+    if (!o || !o.auto_split) return;
+    const rows = db.prepare('SELECT id, dish_id FROM catering_order_lines WHERE order_id = ? ORDER BY sort, id').all(id);
+    const dishes = new Map();
+    const lines = rows.map(l => ({ dish: l.dish_id ? (dishes.get(l.dish_id) || dishes.set(l.dish_id, loadDish(db, l.dish_id)).get(l.dish_id)) : null }));
+    const parts = autoSplit({ guests: o.guests, glassesPerPerson: o.glasses_per_person, brotzeitPerPerson: o.brotzeit_per_person, lines });
+    const upd = db.prepare('UPDATE catering_order_lines SET glasses = ? WHERE id = ?');
+    rows.forEach((l, i) => upd.run(parts[i], l.id));
   }
 
   // ---- Rentman: Blöcke und Speisen eines Projekts ----
@@ -102,9 +116,9 @@ function createOrdersRouter(db, audit) {
     const saveAlias = db.prepare('INSERT OR IGNORE INTO catering_dish_aliases (dish_id, alias) VALUES (?, ?)');
     let id;
     db.transaction(() => {
-      id = db.prepare(`INSERT INTO catering_orders (rentman_project_id, number, name, event_date, guests, guests_source, glasses_per_person, created_by, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))`)
-        .run(rentmanProjectId, head.number, head.name, head.eventDate, head.guests, head.guestsSource, head.glassesPerPerson, req.session.userId).lastInsertRowid;
+      id = db.prepare(`INSERT INTO catering_orders (rentman_project_id, number, name, event_date, guests, guests_source, glasses_per_person, brotzeit_per_person, auto_split, created_by, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?, datetime('now'))`)
+        .run(rentmanProjectId, head.number, head.name, head.eventDate, head.guests, head.guestsSource, head.glassesPerPerson, head.brotzeitPerPerson, req.session.userId).lastInsertRowid;
       const ins = db.prepare('INSERT INTO catering_order_lines (order_id, dish_id, rentman_row_id, rentman_name, block_name, sort) VALUES (?, ?, ?, ?, ?, ?)');
       lines.forEach((l, i) => {
         const rentmanName = V.str(l.rentmanName, 'Name der Speise', { max: 200 });
@@ -118,6 +132,7 @@ function createOrdersRouter(db, audit) {
         }
         ins.run(id, dishId, V.str(l.rentmanRowId, 'Rentman-Zeile', { max: 40 }), rentmanName, V.str(l.blockName, 'Block', { max: 200 }), i);
       });
+      applySplit(id);
     })();
     audit(req, 'bestellung', id, 'angelegt', { name: head.name, rentmanProjectId });
     res.json(loadOrder(id));
@@ -131,6 +146,7 @@ function createOrdersRouter(db, audit) {
     const rev = V.id(req.body.rev, 'Versionsstand');
     const lines = Array.isArray(req.body.lines) ? req.body.lines : null;
     if (!lines) throw V.bad('Die Speisenliste fehlt.');
+    const autoFlag = V.bool(req.body.autoSplit) ? 1 : 0;        // ohne Angabe gelten die gesendeten Zahlen (von Hand festgelegt)
     if (lines.length > 200) throw V.bad('Zu viele Speisen (höchstens 200).');
     const parsed = lines.map((l, i) => {
       const where = `Zeile ${i + 1}`;
@@ -146,8 +162,9 @@ function createOrdersRouter(db, audit) {
       const cur = db.prepare('SELECT status FROM catering_orders WHERE id = ?').get(id);
       if (!cur) throw new ApiError(404, 'Bestellung nicht gefunden.');
       if (cur.status !== 'entwurf') throw new ApiError(409, 'Eine abgeschlossene Bestellung lässt sich nicht ändern. Bitte zuerst wieder öffnen.');
-      const info = db.prepare(`UPDATE catering_orders SET name = ?, number = ?, event_date = ?, guests = ?, guests_source = ?, glasses_per_person = ?,
-        rev = rev + 1, updated_at = datetime('now') WHERE id = ? AND rev = ?`).run(head.name, head.number, head.eventDate, head.guests, head.guestsSource, head.glassesPerPerson, id, rev);
+      const info = db.prepare(`UPDATE catering_orders SET name = ?, number = ?, event_date = ?, guests = ?, guests_source = ?, glasses_per_person = ?, brotzeit_per_person = ?,
+        auto_split = ?, rev = rev + 1, updated_at = datetime('now') WHERE id = ? AND rev = ?`)
+        .run(head.name, head.number, head.eventDate, head.guests, head.guestsSource, head.glassesPerPerson, head.brotzeitPerPerson, autoFlag, id, rev);
       if (!info.changes) throw conflictChanged();
       db.prepare('DELETE FROM catering_order_lines WHERE order_id = ?').run(id);
       const ins = db.prepare('INSERT INTO catering_order_lines (order_id, dish_id, rentman_row_id, rentman_name, block_name, glasses, sort) VALUES (?, ?, ?, ?, ?, ?, ?)');
@@ -157,8 +174,9 @@ function createOrdersRouter(db, audit) {
         // Die Auswahl des Benutzers ist die Bestätigung und gilt für künftige Importe
         if (l.dishId && l.rentmanName && normName(l.rentmanName)) saveAlias.run(l.dishId, normName(l.rentmanName));
       });
+      applySplit(id);
     })();
-    audit(req, 'bestellung', id, 'geändert', { guests: head.guests, glassesPerPerson: head.glassesPerPerson, zeilen: parsed.length });
+    audit(req, 'bestellung', id, 'geändert', { guests: head.guests, glassesPerPerson: head.glassesPerPerson, brotzeitPerPerson: head.brotzeitPerPerson, zeilen: parsed.length });
     res.json(loadOrder(id));
   });
 

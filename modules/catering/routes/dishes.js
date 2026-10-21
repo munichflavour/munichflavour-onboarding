@@ -1,25 +1,30 @@
-// Speisenkatalog (Speisen im Glas): Füllmenge pro Glas, Gebinde, Lieferant, Garnitur, bestätigte Rentman-Namen.
+// Speisenkatalog: Zutaten und Garnituren (jeweils mit optionalem Lieferant), Speisenart, bestätigte Rentman-Namen.
 const express = require('express');
 const V = require('../validate');
 const { ApiError } = V;
 const { normName } = require('../match');
 
-const CATEGORIES = ['weckglas', 'brotzeit', 'dessert'];   // Brotzeit und Desserts werden später berechnet
+const CATEGORIES = ['weckglas', 'brotzeit', 'dessert'];   // Desserts werden später berechnet
 const GARNISH_UNITS = ['g', 'kg', 'ml', 'l', 'stk', 'pkg'];
 const uniqueViolation = e => e && e.code === 'SQLITE_CONSTRAINT_UNIQUE';
 const conflictChanged = () => new ApiError(409, 'Diese Speise wurde zwischenzeitlich von jemand anderem geändert. Bitte neu laden und die Änderung erneut vornehmen.');
 
 function loadDish(db, id) {
-  const d = db.prepare(`SELECT d.*, s.name AS supplier_name FROM catering_dishes d LEFT JOIN catering_suppliers s ON s.id = d.supplier_id WHERE d.id = ?`).get(id);
+  const d = db.prepare('SELECT * FROM catering_dishes WHERE id = ?').get(id);
   if (!d) return null;
+  const ingredients = db.prepare(`SELECT i.*, s.name AS supplier_name FROM catering_dish_ingredients i LEFT JOIN catering_suppliers s ON s.id = i.supplier_id
+    WHERE i.dish_id = ? ORDER BY i.sort, i.id`).all(id);
   const garnish = db.prepare(`SELECT g.*, s.name AS supplier_name FROM catering_dish_garnish g LEFT JOIN catering_suppliers s ON s.id = g.supplier_id
     WHERE g.dish_id = ? ORDER BY g.sort, g.id`).all(id);
   const aliases = db.prepare('SELECT alias FROM catering_dish_aliases WHERE dish_id = ? ORDER BY alias').all(id).map(a => a.alias);
-  return {
-    id: d.id, name: d.name, category: d.category, supplierId: d.supplier_id, supplierName: d.supplier_name, articleNo: d.article_no, fillGrams: d.fill_grams,
-    stepGrams: d.step_grams, note: d.note, archived: !!d.archived, rev: d.rev, aliases,
+  const dish = {
+    id: d.id, name: d.name, category: d.category, note: d.note, archived: !!d.archived, rev: d.rev, aliases,
+    ingredients: ingredients.map(i => ({ id: i.id, name: i.name, qtyPerPortion: i.qty_per_portion, unit: i.unit, packSize: i.pack_size, articleNo: i.article_no,
+      supplierId: i.supplier_id, supplierName: i.supplier_name })),
     garnish: garnish.map(g => ({ id: g.id, name: g.name, qtyPerGlass: g.qty_per_glass, unit: g.unit, packSize: g.pack_size, supplierId: g.supplier_id, supplierName: g.supplier_name })),
   };
+  dish.missingSupplier = [...dish.ingredients, ...dish.garnish].some(x => !x.supplierId);   // nur zur Anzeige
+  return dish;
 }
 
 // Beispieldaten: Namen, Artikelnummern und Gebinde laut Kugler-Shop (kugler.de, abgerufen am 20.10.2026), Füllmengen aus der
@@ -44,40 +49,57 @@ const EXAMPLE_DISHES = [
 function createDishesRouter(db, audit) {
   const r = express.Router();
 
+  // Der Lieferant ist freiwillig: Artikel ohne Lieferant stehen auf der Einkaufsliste unter "Ohne Lieferant" (z. B. Einkauf im Supermarkt)
+  const supplierOf = (v, where) => {
+    if (V.isEmpty(v)) return null;
+    const id = V.id(v, `${where}: Lieferant`);
+    if (!db.prepare('SELECT 1 FROM catering_suppliers WHERE id = ?').get(id)) throw V.bad(`${where}: Den Lieferanten gibt es nicht.`);
+    return id;
+  };
+
   function parseBody(b) {
     const name = V.str(b.name, 'Name der Speise', { required: true, max: 120 });
-    const category = V.str(b.category, 'Kategorie') || 'weckglas';
-    if (!CATEGORIES.includes(category)) throw V.bad('Die Kategorie ist unbekannt.');
-    let supplierId = null;
-    if (!V.isEmpty(b.supplierId)) {
-      supplierId = V.id(b.supplierId, 'Lieferant');
-      if (!db.prepare('SELECT 1 FROM catering_suppliers WHERE id = ?').get(supplierId)) throw V.bad('Der Lieferant gibt es nicht.');
-    }
-    const fillGrams = V.dec(b.fillGrams, 'Füllmenge pro Glas', { minExclusive: 0, max: 100000 });
-    const stepGrams = V.dec(b.stepGrams, 'Gebinde', { minExclusive: 0, max: 1000000 });
-    const articleNo = V.str(b.articleNo, 'Artikelnummer', { max: 40 });
+    const category = V.str(b.category, 'Speisenart') || 'weckglas';
+    if (!CATEGORIES.includes(category)) throw V.bad('Die Speisenart ist unbekannt.');
     const note = V.str(b.note, 'Bemerkung', { max: 1000 });
     const aliasList = Array.isArray(b.aliases) ? b.aliases : [];
     if (aliasList.length > 30) throw V.bad('Zu viele Rentman-Namen (höchstens 30).');
     const aliases = [...new Set(aliasList.map(a => normName(V.str(a, 'Rentman-Name', { max: 160 }) || '')).filter(Boolean))];
+
+    // Ältere Aufrufe ohne `ingredients`: Füllmenge, Gebinde, Artikelnummer und Lieferant der Speise werden zur einzigen Zutat
+    let ingredientList = b.ingredients;
+    if (ingredientList === undefined && ['fillGrams', 'stepGrams', 'supplierId', 'articleNo'].some(k => b[k] !== undefined)) {
+      ingredientList = [{ name, qtyPerPortion: b.fillGrams, unit: 'g', packSize: b.stepGrams, articleNo: b.articleNo, supplierId: b.supplierId }];
+    }
+    ingredientList = Array.isArray(ingredientList) ? ingredientList : [];
+    if (!ingredientList.length) throw V.bad('Eine Speise braucht mindestens eine Zutat.');
+    if (ingredientList.length > 20) throw V.bad('Zu viele Zutaten (höchstens 20).');
+    const ingredients = ingredientList.map((g, i) => {
+      const where = `Zutat Nr. ${i + 1}`;
+      return { name: V.str(g.name, `${where}: Name`, { required: true, max: 100 }),
+        unit: V.unit(g.unit || 'g', `${where}: Einheit`, { only: GARNISH_UNITS }),
+        qtyPerPortion: V.dec(g.qtyPerPortion, `${where}: Menge pro Portion`, { minExclusive: 0, max: 100000 }),
+        packSize: V.dec(g.packSize, `${where}: Gebinde`, { minExclusive: 0, max: 1000000 }),
+        articleNo: V.str(g.articleNo, `${where}: Artikelnummer`, { max: 40 }),
+        supplierId: supplierOf(g.supplierId, `${where} (${V.str(g.name, 'Name', { max: 100 }) || 'ohne Name'})`) };
+    });
     const garnishList = Array.isArray(b.garnish) ? b.garnish : [];
     if (garnishList.length > 20) throw V.bad('Zu viele Garnitur-Positionen (höchstens 20).');
     const garnish = garnishList.map((g, i) => {
       const where = `Garnitur Nr. ${i + 1}`;
-      const gname = V.str(g.name, `${where}: Name`, { required: true, max: 100 });
-      const unit = V.unit(g.unit || 'stk', `${where}: Einheit`, { only: GARNISH_UNITS });
-      let gSupplier = null;
-      if (!V.isEmpty(g.supplierId)) {
-        gSupplier = V.id(g.supplierId, `${where}: Lieferant`);
-        if (!db.prepare('SELECT 1 FROM catering_suppliers WHERE id = ?').get(gSupplier)) throw V.bad(`${where}: Der Lieferant gibt es nicht.`);
-      }
-      return { name: gname, unit, qtyPerGlass: V.dec(g.qtyPerGlass, `${where}: Menge pro Glas`, { minExclusive: 0, max: 100000 }),
-        packSize: V.dec(g.packSize, `${where}: Gebinde`, { minExclusive: 0, max: 1000000 }), supplierId: gSupplier };
+      return { name: V.str(g.name, `${where}: Name`, { required: true, max: 100 }),
+        unit: V.unit(g.unit || 'stk', `${where}: Einheit`, { only: GARNISH_UNITS }),
+        qtyPerGlass: V.dec(g.qtyPerGlass, `${where}: Menge pro Portion`, { minExclusive: 0, max: 100000 }),
+        packSize: V.dec(g.packSize, `${where}: Gebinde`, { minExclusive: 0, max: 1000000 }),
+        supplierId: supplierOf(g.supplierId, `${where} (${V.str(g.name, 'Name', { max: 100 }) || 'ohne Name'})`) };
     });
-    return { name, category, supplierId, articleNo, fillGrams, stepGrams, note, aliases, garnish };
+    return { name, category, note, aliases, ingredients, garnish };
   }
 
   function writeChildren(dishId, b) {
+    db.prepare('DELETE FROM catering_dish_ingredients WHERE dish_id = ?').run(dishId);
+    const insI = db.prepare('INSERT INTO catering_dish_ingredients (dish_id, name, qty_per_portion, unit, pack_size, article_no, supplier_id, sort) VALUES (?, ?, ?, ?, ?, ?, ?, ?)');
+    b.ingredients.forEach((g, i) => insI.run(dishId, g.name, g.qtyPerPortion, g.unit, g.packSize, g.articleNo, g.supplierId, i));
     db.prepare('DELETE FROM catering_dish_garnish WHERE dish_id = ?').run(dishId);
     const ins = db.prepare('INSERT INTO catering_dish_garnish (dish_id, name, qty_per_glass, unit, pack_size, supplier_id, sort) VALUES (?, ?, ?, ?, ?, ?, ?)');
     b.garnish.forEach((g, i) => ins.run(dishId, g.name, g.qtyPerGlass, g.unit, g.packSize, g.supplierId, i));
@@ -105,8 +127,8 @@ function createDishesRouter(db, audit) {
     let id;
     try {
       db.transaction(() => {
-        id = db.prepare("INSERT INTO catering_dishes (name, category, supplier_id, article_no, fill_grams, step_grams, note, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'))")
-          .run(b.name, b.category, b.supplierId, b.articleNo, b.fillGrams, b.stepGrams, b.note).lastInsertRowid;
+        id = db.prepare("INSERT INTO catering_dishes (name, category, note, updated_at) VALUES (?, ?, ?, datetime('now'))")
+          .run(b.name, b.category, b.note).lastInsertRowid;
         writeChildren(id, b);
       })();
     } catch (e) {
@@ -123,8 +145,8 @@ function createDishesRouter(db, audit) {
     const rev = V.id(req.body.rev, 'Versionsstand');
     try {
       db.transaction(() => {
-        const info = db.prepare(`UPDATE catering_dishes SET name = ?, category = ?, supplier_id = ?, article_no = ?, fill_grams = ?, step_grams = ?, note = ?,
-          rev = rev + 1, updated_at = datetime('now') WHERE id = ? AND rev = ?`).run(b.name, b.category, b.supplierId, b.articleNo, b.fillGrams, b.stepGrams, b.note, id, rev);
+        const info = db.prepare(`UPDATE catering_dishes SET name = ?, category = ?, note = ?,
+          rev = rev + 1, updated_at = datetime('now') WHERE id = ? AND rev = ?`).run(b.name, b.category, b.note, id, rev);
         if (!info.changes) {
           if (!db.prepare('SELECT 1 FROM catering_dishes WHERE id = ?').get(id)) throw new ApiError(404, 'Speise nicht gefunden.');
           throw conflictChanged();
@@ -135,7 +157,7 @@ function createDishesRouter(db, audit) {
       if (uniqueViolation(e)) throw new ApiError(409, 'Eine Speise mit diesem Namen gibt es bereits.');
       throw e;
     }
-    audit(req, 'speise', id, 'geändert', { name: b.name, fillGrams: b.fillGrams, stepGrams: b.stepGrams });
+    audit(req, 'speise', id, 'geändert', { name: b.name, zutaten: b.ingredients.length, garnituren: b.garnish.length });
     res.json(loadDish(db, id));
   });
 
@@ -161,8 +183,10 @@ function createDishesRouter(db, audit) {
       if (!supplier) supplier = { id: db.prepare("INSERT INTO catering_suppliers (name, updated_at) VALUES ('Kugler', datetime('now'))").run().lastInsertRowid };
       for (const ex of EXAMPLE_DISHES) {
         if (db.prepare('SELECT 1 FROM catering_dishes WHERE lower(name) = lower(?) AND archived = 0').get(ex.name)) continue;
-        const id = db.prepare("INSERT INTO catering_dishes (name, category, supplier_id, article_no, fill_grams, step_grams, note, updated_at) VALUES (?, 'weckglas', ?, ?, ?, ?, ?, datetime('now'))")
-          .run(ex.name, supplier.id, ex.articleNo, ex.fillGrams, ex.stepGrams, ex.note).lastInsertRowid;
+        const id = db.prepare("INSERT INTO catering_dishes (name, category, note, updated_at) VALUES (?, 'weckglas', ?, datetime('now'))")
+          .run(ex.name, ex.note).lastInsertRowid;
+        db.prepare('INSERT INTO catering_dish_ingredients (dish_id, name, qty_per_portion, unit, pack_size, article_no, supplier_id, sort) VALUES (?, ?, ?, ?, ?, ?, ?, 0)')
+          .run(id, ex.name, ex.fillGrams, 'g', ex.stepGrams, ex.articleNo, supplier.id);
         const ins = db.prepare('INSERT INTO catering_dish_garnish (dish_id, name, qty_per_glass, unit, sort) VALUES (?, ?, ?, ?, ?)');
         ex.garnish.forEach((g, i) => ins.run(id, g.name, g.qtyPerGlass, g.unit, i));
         created.push(ex.name);

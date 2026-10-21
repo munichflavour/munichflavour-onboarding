@@ -291,6 +291,26 @@ const MIGRATIONS = [
     PRIMARY KEY (order_id, key)
   );
   `,
+  // 6: Speisen bestehen aus Zutaten (Einkaufsartikel pro Portion) und Garnituren, beide mit Lieferant.
+  //    Je Bestellung eine Portionszahl pro Person für Brotzeit und eine Option für die automatische Verteilung.
+  //    Die bisherigen Felder der Speise (Füllmenge, Gebinde, Artikelnummer, Lieferant) werden zur ersten Zutat.
+  `
+  CREATE TABLE catering_dish_ingredients (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    dish_id INTEGER NOT NULL REFERENCES catering_dishes(id),
+    name TEXT NOT NULL,
+    qty_per_portion TEXT,                  -- NULL = Menge noch offen (wird nicht als 0 gerechnet)
+    unit TEXT NOT NULL DEFAULT 'g',
+    pack_size TEXT,                        -- Gebinde in der Einheit der Zeile, NULL = nicht runden
+    article_no TEXT,
+    supplier_id INTEGER REFERENCES catering_suppliers(id),
+    sort INTEGER NOT NULL DEFAULT 0
+  );
+  INSERT INTO catering_dish_ingredients (dish_id, name, qty_per_portion, unit, pack_size, article_no, supplier_id, sort)
+    SELECT id, name, fill_grams, 'g', step_grams, article_no, supplier_id, 0 FROM catering_dishes;
+  ALTER TABLE catering_orders ADD COLUMN brotzeit_per_person TEXT;
+  ALTER TABLE catering_orders ADD COLUMN auto_split INTEGER NOT NULL DEFAULT 0;   -- bestehende Bestellungen behalten ihre Mengen
+  `,
 ];
 
 const DEFAULT_GOODS_GROUPS = ['Obst und Gemüse', 'Fleisch', 'Fisch', 'Milchprodukte', 'Backwaren', 'Trockenwaren',
