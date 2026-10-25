@@ -112,7 +112,7 @@ CAT.register('start', async root => {
             : '<div class="warn-box">In diesem Projekt wurden keine Speisenblöcke (Materialgruppe "Catering") gefunden. Du kannst die Bestellung trotzdem anlegen und Speisen später hinzufügen.</div>'}
           <div class="grid2" style="margin-top:12px">${field('Gäste', '<input type="text" inputmode="numeric" id="g-guests">')}
             ${field('Gläser pro Person', '<input type="text" inputmode="decimal" id="g-gpp" placeholder="z. B. 2,6">', 'Für Salate im Glas. Wird von dir festgelegt, es gibt keinen Standard.')}
-            ${field('Brote pro Person', '<input type="text" inputmode="decimal" id="g-bpp" placeholder="z. B. 2">', 'Für Brotzeit. Leer lassen, wenn keine Brotzeit dabei ist.')}</div>
+            ${field('Halbe Scheiben pro Person', '<input type="text" inputmode="decimal" id="g-bpp" placeholder="z. B. 3">', 'Für Brotzeit. Leer lassen, wenn keine Brotzeit dabei ist.')}</div>
           <div class="hint">Die Portionen werden automatisch gleichmäßig auf die Speisen verteilt.</div>
           <div class="hint" id="g-src"></div>
           <div class="modal-actions"><button class="btn btn-primary" id="g-go" style="flex:1">Bestellung anlegen</button></div>`;
@@ -145,7 +145,7 @@ CAT.register('bestellung', async (root, arg) => {
   // Automatisches Speichern: `version` zählt jede Änderung der Eingaben, `savedVersion` den zuletzt gespeicherten Stand.
   let version = 0, savedVersion = 0, saving = false, timer = null;
   let autoSplit = o.autoSplit;      // true: Portionen werden automatisch gleichmäßig verteilt, bis jemand eine Zahl von Hand ändert
-  const LABELS = { weckglas: ['Gläser', 'Gläser pro Person'], brotzeit: ['Brote', 'Brote pro Person'] };
+  const LABELS = { weckglas: ['Gläser', 'Gläser pro Person'], brotzeit: ['halbe Scheiben', 'halbe Scheiben pro Person'] };
   const dishById = id => dishes.find(d => String(d.id) === String(id)) || null;
   const sleep = ms => new Promise(r => setTimeout(r, ms));
   const dishOpts = sel => options(dishes.map(d => [d.id, d.name]), sel, 'Speise wählen');
@@ -207,7 +207,7 @@ CAT.register('bestellung', async (root, arg) => {
             <div class="hint">${o.guestsSource ? 'Quelle: ' + esc(o.guestsSource) : 'Quelle: nicht angegeben'}</div></div>
           <div class="form-group"><label>Gläser pro Person</label>${locked ? `<div><b>${esc(fmt(o.glassesPerPerson) || '-')}</b></div>` : '<input type="text" inputmode="decimal" id="gpp" value="' + esc(fmt(o.glassesPerPerson)) + '" placeholder="z. B. 2,6">'}
             <div class="hint">Salate im Glas. Wird von dir festgelegt (laut Angebot 2 bis 3).</div></div>
-          <div class="form-group"><label>Brote pro Person</label>${locked ? `<div><b>${esc(fmt(o.brotzeitPerPerson) || '-')}</b></div>` : '<input type="text" inputmode="decimal" id="bpp" value="' + esc(fmt(o.brotzeitPerPerson)) + '" placeholder="z. B. 2">'}
+          <div class="form-group"><label>Halbe Scheiben pro Person</label>${locked ? `<div><b>${esc(fmt(o.brotzeitPerPerson) || '-')}</b></div>` : '<input type="text" inputmode="decimal" id="bpp" value="' + esc(fmt(o.brotzeitPerPerson)) + '" placeholder="z. B. 3">'}
             <div class="hint">Brotzeit. Leer lassen, wenn keine Brotzeit dabei ist.</div></div>
         </div>
         <div id="sumline" style="font-size:15px;font-weight:600"></div>
@@ -361,7 +361,7 @@ CAT.register('bestellung', async (root, arg) => {
 
   // Manuelle Gesamtmenge einer Garnitur, gilt nur für diese Bestellung
   function overrideDialog(item) {
-    const units = ['stk', 'g', 'kg', 'ml', 'l', 'pkg'];
+    const units = ['stk', 'g', 'kg', 'ml', 'l', 'pkg', 'bund', 'hscheibe'];
     const m = CAT.modal(`${item.name}: Menge festlegen`, `
       <div class="note" style="margin-bottom:10px">${item.need !== null && item.need !== undefined ? 'Berechnet: ' + esc(qty(item.need, item.needUnit || item.unit)) : 'Die Menge pro Glas ist noch offen.'}
         Die Menge gilt nur für diese Bestellung und wird nicht auf ein Gebinde gerundet.</div>

@@ -20,7 +20,7 @@ const keyOf = (name, unit) => `${String(name).trim().toLowerCase().replace(/\s+/
 // Speisenarten: Anzeigename der Portion und das Feld der Bestellung mit den Portionen pro Person
 const CATEGORIES = {
   weckglas: { label: 'Gläser', perPersonLabel: 'Gläser pro Person', field: 'glassesPerPerson', warn: 'gpp' },
-  brotzeit: { label: 'Brote', perPersonLabel: 'Brote pro Person', field: 'brotzeitPerPerson', warn: 'bpp' },
+  brotzeit: { label: 'halbe Scheiben', perPersonLabel: 'Halbe Scheiben pro Person', field: 'brotzeitPerPerson', warn: 'bpp' },
 };
 const categoryOf = dish => (dish && dish.category) || 'weckglas';
 

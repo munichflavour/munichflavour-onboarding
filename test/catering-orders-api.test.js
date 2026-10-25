@@ -297,7 +297,7 @@ test('Garnitur-Menge: Rechte, Prüfungen, Konflikt und gesperrter Zustand', asyn
     assert.equal((await t.admin('POST', url, { rev: order.rev, key, qty: '0', unit: 'stk' })).status, 400);
     assert.equal((await t.admin('POST', url, { rev: order.rev, key, qty: '-2', unit: 'stk' })).status, 400);
     assert.equal((await t.admin('POST', url, { rev: order.rev, key, qty: 'viel', unit: 'stk' })).status, 400);
-    assert.equal((await t.admin('POST', url, { rev: order.rev, key, qty: '1', unit: 'bund' })).status, 400);
+    assert.equal((await t.admin('POST', url, { rev: order.rev, key, qty: '1', unit: 'eimer' })).status, 400);
     assert.equal((await t.admin('POST', url, { rev: order.rev, key: 'gibtsnicht|g', qty: '1', unit: 'g' })).status, 400);
     const ok = await t.admin('POST', url, { rev: order.rev, key, qty: '1', unit: 'stk' });
     assert.equal(ok.status, 200);
@@ -519,5 +519,45 @@ test('Automatische Verteilung rät nichts: ohne Portionen pro Person bleiben die
     assert.deepEqual(o.lines.map(l => l.glasses), ['66', null]);
     assert.equal(o.computed.complete, false);
     assert.ok(o.computed.warnings.some(w => w.code === 'bpp'));
+  } finally { t.close(); }
+});
+
+test('Brotzeit Hausbau: Katalog nur auf Knopfdruck, und die Rückrechnung ergibt genau den Einkauf für 50 Gäste', async () => {
+  const t = await setup();
+  try {
+    assert.equal((await t.employee('POST', '/api/catering/dishes/import-brotzeit')).status, 403);
+    const first = await t.admin('POST', '/api/catering/dishes/import-brotzeit');
+    assert.equal(first.json.created.length, 6);
+    assert.equal((await t.admin('POST', '/api/catering/dishes/import-brotzeit')).json.created.length, 0);
+    const plan = [['Rucola-Parmaschinken', 25], ['Chicken Curry', 20], ['Radiserl Frischkäse', 25], ['Trüffel Frischkäse', 25], ['Lachs-Meerrettich', 30], ['Basilikum-Avocado', 30]];
+    const o = (await t.admin('POST', '/api/catering/orders', { name: 'Hausbau Brotzeit (Testdaten)', guests: 50, brotzeitPerPerson: '3.1', lines: plan.map(([n]) => ({ rentmanName: n })) })).json;
+    assert.deepEqual(o.lines.map(l => l.dishId !== null), plan.map(() => true));                       // Namen werden automatisch zugeordnet
+    assert.deepEqual(o.lines.map(l => l.glasses), ['26', '26', '26', '26', '26', '25']);               // gleichmäßig: 155 halbe Scheiben
+    const saved = (await t.admin('PUT', `/api/catering/orders/${o.id}`, { name: o.name, guests: '50', brotzeitPerPerson: '3.1', autoSplit: false, rev: o.rev,
+      lines: o.lines.map((l, i) => ({ rentmanName: l.rentmanName, dishId: l.dishId, glasses: String(plan[i][1]) })) })).json;
+    const c = saved.computed;
+    assert.equal(c.complete, true);
+    assert.equal(c.warnings.length, 0);
+    const buy = Object.fromEntries(c.shopping.map(s => [s.name, [s.qty, s.unit, s.packs]]));
+    assert.deepEqual(buy['Schwabinger Doppelkruste'], ['155', 'hscheibe', '5']);                        // 5 ganze Brote
+    assert.deepEqual(buy['Rucolafrischkäsezubereitung'], ['1000', 'g', '1']);
+    assert.deepEqual(buy['Parmaschinken'], ['200', 'g', '1']);
+    assert.deepEqual(buy['Rucola'], ['150', 'g', '1']);
+    assert.deepEqual(buy['Porree-Sprossen'], ['100', 'g', '1']);                                        // 2 Brote zusammengezählt: 50 + 50 g
+    assert.deepEqual(buy['Rote-Bete-Sprossen'], ['100', 'g', '1']);                                     // Chicken 50 g + Basilikum 48 g
+    assert.deepEqual(buy['DeliSpread Chicken-Curry'], ['1000', 'g', '1']);
+    assert.deepEqual(buy['Radieschen'], ['1', 'bund', '1']);
+    assert.deepEqual(buy['Radieschen-Microgreens'], ['100', 'g', '1']);
+    assert.deepEqual(buy['Trüffel (Scheiben)'], ['100', 'g', '1']);
+    assert.deepEqual(buy['Lachsfrischkäsezubereitung'], ['1000', 'g', '1']);                            // 30 x 33,3 g = 999 g
+    assert.deepEqual(buy['Frischer Lachs'], ['300', 'g', '2']);
+    assert.deepEqual(buy['Dill'], ['200', 'g', '1']);                                                   // 30 x 2 g = 60 g, Packung 200 g
+    assert.deepEqual(buy['DeliSpread Basilikum'], ['500', 'g', '1']);                                   // 30 x 16,6 g = 498 g, keine zweite Packung
+    assert.equal(buy['Avocado'][0], '6');
+    // Lieferanten stehen bei den Artikeln
+    assert.equal(c.shopping.find(s => s.name === 'Dill').supplier, 'METRO');
+    assert.equal(c.shopping.find(s => s.name === 'Rucolafrischkäsezubereitung').articleNo, '3080');
+    const res = await t.admin('GET', `/api/catering/orders/${o.id}/pdf`, undefined, true);
+    assert.equal(res.status, 200);
   } finally { t.close(); }
 });

@@ -5,7 +5,7 @@ const { ApiError } = V;
 const { normName } = require('../match');
 
 const CATEGORIES = ['weckglas', 'brotzeit', 'dessert'];   // Desserts werden später berechnet
-const GARNISH_UNITS = ['g', 'kg', 'ml', 'l', 'stk', 'pkg'];
+const GARNISH_UNITS = ['g', 'kg', 'ml', 'l', 'stk', 'pkg', 'bund', 'hscheibe'];
 const uniqueViolation = e => e && e.code === 'SQLITE_CONSTRAINT_UNIQUE';
 const conflictChanged = () => new ApiError(409, 'Diese Speise wurde zwischenzeitlich von jemand anderem geändert. Bitte neu laden und die Änderung erneut vornehmen.');
 
@@ -44,6 +44,25 @@ const EXAMPLE_DISHES = [
     note: note(true, 'Gebinde 1000 g (Art. 360), Becher ca. 530 g, Gebinde 270 g') },
   { name: 'Kartoffel-Gurken-Salat', articleNo: '3591', fillGrams: '51', stepGrams: '1500', garnish: [{ name: 'Mini-Fleischpflanzerl am Spieß', qtyPerGlass: '1', unit: 'stk' }],
     note: note(true, 'Gebinde 1500 g (Art. 3591), Gebinde 5000 g, Becher ca. 550 g, Becher ca. 350 g') },
+];
+
+// Brotzeit Hausbau (Event vom 20.10.2026): Rezepte aus der ausgefüllten Excel-Datei des Betriebs, Menge pro halber Brotscheibe.
+// Einkaufsmengen für 155 halbe Scheiben (50 Gäste) geteilt durch die Scheiben je Brot, auf 0,1 g abgerundet, damit die Rückrechnung
+// nie mehr Packungen ergibt als gekauft wurden. Packungsgrößen und Artikelnummern laut Betrieb.
+const BROT = { name: 'Schwabinger Doppelkruste', qtyPerPortion: '1', unit: 'hscheibe', packSize: '31', supplier: 'Bäckerei Wimmer' };
+const kug = (name, qty, articleNo, pack = '1000') => ({ name, qtyPerPortion: qty, unit: 'g', packSize: pack, articleNo, supplier: 'Kugler' });
+const metro = (name, qty, pack, unit = 'g') => ({ name, qtyPerPortion: qty, unit, packSize: pack, supplier: 'METRO' });
+const EXAMPLE_BROTZEIT = [
+  { name: 'Rucola-Parmaschinken', ingredients: [BROT, kug('Rucolafrischkäsezubereitung', '40', '3080'), metro('Parmaschinken', '8', '200')],
+    garnish: [metro('Rucola', '6', '150'), metro('Porree-Sprossen', '2', '100')] },
+  { name: 'Chicken Curry', ingredients: [BROT, kug('DeliSpread Chicken-Curry', '50', '7680')], garnish: [metro('Rote-Bete-Sprossen', '2.5', '100')] },
+  { name: 'Radiserl Frischkäse', ingredients: [BROT, kug('Radiserlfrischkäsezubereitung', '40', '2520')],
+    garnish: [metro('Radieschen', '0.04', '1', 'bund'), metro('Radieschen-Microgreens', '4', '100')] },
+  { name: 'Trüffel Frischkäse', ingredients: [BROT, kug('Trüffelfrischkäsezubereitung', '40', '4350'), metro('Trüffel (Scheiben)', '4', '100')],
+    garnish: [metro('Porree-Sprossen', '2', '100')] },
+  { name: 'Lachs-Meerrettich', ingredients: [BROT, kug('Lachsfrischkäsezubereitung', '33.3', '1100'), metro('Frischer Lachs', '10', '150')], garnish: [metro('Dill', '2', '200')] },
+  { name: 'Basilikum-Avocado', ingredients: [BROT, kug('DeliSpread Basilikum', '16.6', '299', '500'), metro('Avocado', '0.2', null, 'stk')],
+    garnish: [metro('Rote-Bete-Sprossen', '1.6', '100')] },
 ];
 
 function createDishesRouter(db, audit) {
@@ -193,6 +212,29 @@ function createDishesRouter(db, audit) {
       }
     })();
     created.forEach(n => audit(req, 'speise', n, 'aus Bestellübersicht angelegt'));
+    res.json({ created });
+  });
+
+  // Legt die sechs Brotzeiten vom Hausbau-Event samt Lieferanten an (nur wenn es sie noch nicht gibt). Ausdrücklich ausgelöst.
+  r.post('/dishes/import-brotzeit', (req, res) => {
+    const created = [];
+    db.transaction(() => {
+      const supplierId = name => {
+        const s = db.prepare('SELECT id FROM catering_suppliers WHERE lower(name) = lower(?)').get(name);
+        return s ? s.id : db.prepare("INSERT INTO catering_suppliers (name, updated_at) VALUES (?, datetime('now'))").run(name).lastInsertRowid;
+      };
+      const insI = db.prepare('INSERT INTO catering_dish_ingredients (dish_id, name, qty_per_portion, unit, pack_size, article_no, supplier_id, sort) VALUES (?, ?, ?, ?, ?, ?, ?, ?)');
+      const insG = db.prepare('INSERT INTO catering_dish_garnish (dish_id, name, qty_per_glass, unit, pack_size, supplier_id, sort) VALUES (?, ?, ?, ?, ?, ?, ?)');
+      for (const ex of EXAMPLE_BROTZEIT) {
+        if (db.prepare('SELECT 1 FROM catering_dishes WHERE lower(name) = lower(?) AND archived = 0').get(ex.name)) continue;
+        const id = db.prepare("INSERT INTO catering_dishes (name, category, note, updated_at) VALUES (?, 'brotzeit', ?, datetime('now'))")
+          .run(ex.name, 'Menge pro halber Brotscheibe aus dem Hausbau-Event (Einkauf für 50 Gäste, 155 halbe Scheiben) zurückgerechnet.').lastInsertRowid;
+        ex.ingredients.forEach((g, i) => insI.run(id, g.name, g.qtyPerPortion, g.unit, g.packSize, g.articleNo || null, supplierId(g.supplier), i));
+        ex.garnish.forEach((g, i) => insG.run(id, g.name, g.qtyPerPortion, g.unit, g.packSize, supplierId(g.supplier), i));
+        created.push(ex.name);
+      }
+    })();
+    created.forEach(n => audit(req, 'speise', n, 'Brotzeit Hausbau angelegt'));
     res.json({ created });
   });
 

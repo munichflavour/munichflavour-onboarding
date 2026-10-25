@@ -15,6 +15,8 @@ const UNITS = {
   l:   { label: 'l',        dim: 'volume', factor: new Decimal(1000) },
   stk: { label: 'Stück',    dim: 'count' },
   pkg: { label: 'Packung',  dim: 'pack' },
+  bund:     { label: 'Bund',          dim: 'count' },
+  hscheibe: { label: 'halbe Scheibe', dim: 'count' },
 };
 
 class UnitError extends Error {}

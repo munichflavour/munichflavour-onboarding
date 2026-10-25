@@ -20,9 +20,17 @@ CAT.register('speisen', async root => {
   const render = () => {
     const q = $('#q').value.trim().toLowerCase();
     const list = dishes.filter(d => !q || d.name.toLowerCase().includes(q));
-    $('#hint').innerHTML = dishes.length ? '' : `<div class="warn-box">Noch keine Speisen angelegt. Du kannst die Salate der Menükarte vom 20.10. anlegen
+    const brotHint = dishes.some(d => d.category === 'brotzeit') ? '' : `<div class="warn-box">Noch keine Brotzeit angelegt. Du kannst die sechs Brotzeiten vom Hausbau-Event anlegen
+      (Mengen pro halber Brotscheibe aus deinem Einkauf für 50 Gäste zurückgerechnet, mit Lieferanten Kugler, METRO und Bäckerei Wimmer).
+      <div style="margin-top:8px"><button class="btn btn-secondary btn-sm" id="brotBtn">Brotzeit Hausbau anlegen</button></div></div>`;
+    $('#hint').innerHTML = (dishes.length ? '' : `<div class="warn-box">Noch keine Speisen angelegt. Du kannst die Salate der Menükarte vom 20.10. anlegen
       (Gebinde und Artikelnummern aus dem Kugler-Shop, Füllmengen aus der Bestellübersicht zurückgerechnet, bitte prüfen) oder eine neue Speise erfassen.
-      <div style="margin-top:8px"><button class="btn btn-secondary btn-sm" id="exampleBtn">Salate (Kugler) anlegen</button></div></div>`;
+      <div style="margin-top:8px"><button class="btn btn-secondary btn-sm" id="exampleBtn">Salate (Kugler) anlegen</button></div></div>`) + brotHint;
+    const bb = $('#brotBtn');
+    if (bb) bb.onclick = async () => {
+      bb.disabled = true;
+      try { const r = await api('POST', '/dishes/import-brotzeit'); toast(`${r.created.length} Brotzeiten angelegt`); await load(); } catch (e) { toast(e.message); bb.disabled = false; }
+    };
     const ex = $('#exampleBtn');
     if (ex) ex.onclick = async () => {
       ex.disabled = true;
@@ -49,7 +57,7 @@ CAT.register('speisen', async root => {
       <div class="line-grid">
         <div class="span2"><label>Zutat</label><input type="text" data-i="name" value="${esc(g.name)}" maxlength="100"></div>
         <div><label>Menge pro Portion</label><input type="text" inputmode="decimal" data-i="qtyPerPortion" value="${esc(fmt(g.qtyPerPortion))}" placeholder="offen"></div>
-        <div><label>Einheit</label><select data-i="unit">${unitOptions(g.unit || 'g', ['stk', 'g', 'kg', 'ml', 'l', 'pkg'])}</select></div>
+        <div><label>Einheit</label><select data-i="unit">${unitOptions(g.unit || 'g', ['g', 'kg', 'ml', 'l', 'stk', 'pkg', 'bund', 'hscheibe'])}</select></div>
         <div><label>Gebinde (Einheit)</label><input type="text" inputmode="decimal" data-i="packSize" value="${esc(fmt(g.packSize))}" placeholder="keins"></div>
         <div><label>Artikelnummer</label><input type="text" data-i="articleNo" value="${esc(g.articleNo)}" maxlength="40"></div>
         <div class="span2"><label>Lieferant</label>${supplierSelect('i', g.supplierId)}</div>
@@ -61,7 +69,7 @@ CAT.register('speisen', async root => {
       <div class="line-grid">
         <div class="span2"><label>Garnitur / Beilage</label><input type="text" data-g="name" value="${esc(g.name)}" maxlength="100"></div>
         <div><label>Menge pro Portion</label><input type="text" inputmode="decimal" data-g="qtyPerGlass" value="${esc(fmt(g.qtyPerGlass))}" placeholder="offen"></div>
-        <div><label>Einheit</label><select data-g="unit">${unitOptions(g.unit || 'stk', ['stk', 'g', 'kg', 'ml', 'l', 'pkg'])}</select></div>
+        <div><label>Einheit</label><select data-g="unit">${unitOptions(g.unit || 'stk', ['g', 'kg', 'ml', 'l', 'stk', 'pkg', 'bund', 'hscheibe'])}</select></div>
         <div><label>Gebinde (Einheit)</label><input type="text" inputmode="decimal" data-g="packSize" value="${esc(fmt(g.packSize))}" placeholder="keins"></div>
         <div class="span2"><label>Lieferant</label>${supplierSelect('g', g.supplierId)}</div>
         <div><button class="btn btn-secondary btn-sm" data-rm style="width:100%">Entfernen</button></div>
@@ -79,7 +87,7 @@ CAT.register('speisen', async root => {
       <div class="grid2">
         ${field('Name der Speise', `<input type="text" id="d-name" value="${esc(d.name)}" maxlength="120">`)}
         ${field('Speisenart', `<select id="d-cat">${options([['weckglas', CATEGORY_LABELS.weckglas], ['brotzeit', CATEGORY_LABELS.brotzeit]], d.category)}</select>`,
-          'Bestimmt, ob mit Gläsern oder Broten pro Person gerechnet wird.')}
+          'Bestimmt, ob mit Gläsern oder halben Brotscheiben pro Person gerechnet wird.')}
       </div>
       <h3 style="font-size:15px;margin:8px 0;">Zutaten (pro Portion)</h3>
       <div class="hint" style="margin:0 0 8px">Einkaufsartikel, aus denen eine Portion besteht, zum Beispiel Brot, Frischkäse oder der fertige Salat. Gleiche Zutaten verschiedener Speisen werden zusammengezählt und erst dann auf das Gebinde aufgerundet.</div>
