@@ -36,6 +36,11 @@ function stubRentman(state) {
     if (p === '/statuses') return json([{ id: 3, name: 'Bestätigt' }, { id: 1, name: 'Anfrage' }]);
     if (p === '/subprojects') return json(state.projects.map(x => ({ id: x.id, project: `/projects/${x.id}`, status: `/statuses/${x.status}` })));
     if (p === '/projects') return json(state.projects.map(x => ({ id: x.id, number: x.number, name: x.name, planperiod_start: x.start, modified: state.modified[x.id] || 'v1' })));
+    const single = p.match(/^\/projects\/(\d+)$/);
+    if (single) {
+      const x = state.projects.find(q => q.id === Number(single[1]));
+      return x ? json({ id: x.id, number: x.number, name: x.name, planperiod_start: x.start }) : json({}, 404);
+    }
     const m = p.match(/^\/projects\/(\d+)\/(projectequipment|projectequipmentgroup)$/);
     if (m) {
       const proj = state.projects.find(x => x.id === Number(m[1]));
@@ -144,4 +149,60 @@ test('Prüfung bleibt begrenzt: höchstens 60 Projekte je Anfrage', async () => 
   }, state => {
     for (let i = 0; i < 100; i++) state.projects.push({ id: 1000 + i, number: 2000 + i, name: `Gleich ${i}`, start: iso(-i * DAY), status: 3, equipment: NO_FOOD });
   });
+});
+
+// ---- Kalkulation direkt aus einem Rentman-Projekt starten ----
+const mkDish = (t, name) => t.admin('POST', '/api/catering/dishes', { name, ingredients: [{ name, qtyPerPortion: '40', unit: 'g', packSize: '100', supplierId: 1 }], garnish: [] });
+
+test('Kalkulation aus Rentman starten: Speisen und Gäste übernommen, automatisch zugeordnet und verteilt', async () => {
+  await withRentman(async t => {
+    await t.admin('POST', '/api/catering/suppliers', { name: 'Testlieferant' });
+    await mkDish(t, 'Wurstsalat'); await mkDish(t, 'Penne');
+    assert.equal((await t.employee('PUT', '/api/catering/settings', { glassesPerPerson: '2' })).status, 403);
+    assert.deepEqual((await t.admin('GET', '/api/catering/settings')).json, { glassesPerPerson: null, brotzeitPerPerson: null });      // kein eingebauter Standard
+    assert.equal((await t.admin('PUT', '/api/catering/settings', { glassesPerPerson: '0' })).status, 400);
+    assert.deepEqual((await t.admin('PUT', '/api/catering/settings', { glassesPerPerson: '2,6', brotzeitPerPerson: '3.1' })).json, { glassesPerPerson: '2.6', brotzeitPerPerson: '3.1' });
+    const r = await t.admin('POST', '/api/catering/orders/from-rentman/1');
+    assert.equal(r.status, 200);
+    const o = r.json;
+    assert.equal(o.name, 'Firmenfeier mit Essen');
+    assert.equal(o.rentmanProjectId, '1');
+    assert.equal(o.guests, '50');
+    assert.match(o.guestsSource, /Rentman, Block "Speisen im Weckglas" \(Menge 50\)/);
+    assert.deepEqual(o.lines.map(l => [l.rentmanName, l.dish && l.dish.name]), [['Wurstsalat', 'Wurstsalat'], ['Penne', 'Penne']]);
+    assert.deepEqual(o.lines.map(l => l.glasses), ['65', '65']);                      // 50 x 2,6 = 130 gleichmäßig
+    assert.equal(o.autoSplit, true);
+    assert.equal(o.computed.complete, true);
+    assert.equal(o.computed.shopping.find(s => s.name === 'Wurstsalat').qty, '2600');
+    // zweiter Aufruf: es gibt schon eine offene Kalkulation
+    const again = await t.admin('POST', '/api/catering/orders/from-rentman/1');
+    assert.equal(again.status, 409);
+    assert.equal(again.json.openOrderId, o.id);
+    // Rentman wurde nur gelesen
+    assert.ok((await t.admin('GET', '/api/catering/orders')).json.some(x => x.rentmanProjectId === '1'));
+  });
+});
+
+test('Kalkulation aus Rentman: ohne Standardwerte, ohne Speisen und bei abweichenden Blöcken wird nichts geraten', async () => {
+  await withRentman(async t => {
+    await t.admin('POST', '/api/catering/suppliers', { name: 'Testlieferant' });
+    await mkDish(t, 'Wurstsalat'); await mkDish(t, 'Penne');
+    const o = (await t.admin('POST', '/api/catering/orders/from-rentman/1')).json;
+    assert.deepEqual(o.lines.map(l => l.glasses), [null, null]);                      // keine Portionen pro Person: nichts verteilt
+    assert.equal(o.computed.complete, false);
+    assert.ok(o.computed.warnings.some(w => w.code === 'gpp'));
+    assert.equal((await t.admin('POST', '/api/catering/orders/from-rentman/2')).status, 400);     // Projekt ohne Speisen
+    assert.equal((await t.admin('POST', '/api/catering/orders/from-rentman/abc')).status, 400);
+  });
+  await withRentman(async t => {
+    const o = (await t.admin('POST', '/api/catering/orders/from-rentman/1')).json;
+    assert.equal(o.guests, '50');                                                    // gleiche Menge in beiden Blöcken: einmal gezählt, nicht addiert
+    assert.match(o.guestsSource, /Blöcke "Speisen im Weckglas", "Zweiter Block" \(Menge 50\)/);
+  }, st => { st.projects[0].equipment = [...WITH_FOOD, ROW(30, null, 2, 50, 'Zweiter Block'), ROW(31, 30, 2, 0, 'Couscous')]; });
+  await withRentman(async t => {
+    const o = (await t.admin('POST', '/api/catering/orders/from-rentman/1')).json;
+    assert.equal(o.guests, null);                                                    // Blöcke mit 50 und 40 werden nicht addiert oder geraten
+    assert.match(o.guestsSource, /unterschiedliche Mengen \(50, 40\)/);
+    assert.equal(o.lines.length, 3);
+  }, st => { st.projects[0].equipment = [...WITH_FOOD, ROW(30, null, 2, 40, 'Zweiter Block'), ROW(31, 30, 2, 0, 'Couscous')]; });
 });
