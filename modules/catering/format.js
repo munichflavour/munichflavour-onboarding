@@ -19,6 +19,7 @@ const FRACTIONS = { '0.25': '¼', '0.5': '½', '0.75': '¾' };
 function perGlass(qty, unit) {
   const d = new Decimal(qty);
   if (unit === 'g' || unit === 'kg' || unit === 'ml' || unit === 'l') return `${num(d, 2)} ${UNITS[unit].label}`;
+  if (unit !== 'stk') return `${num(d, 2)} ${UNITS[unit] ? UNITS[unit].label : unit}`;     // Bund, Packung, halbe Scheibe: mit Einheit
   const whole = d.floor();
   const frac = FRACTIONS[d.minus(whole).toFixed()];
   if (frac) return whole.isZero() ? frac : `${whole.toFixed()}${frac}`;
