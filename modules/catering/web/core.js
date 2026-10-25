@@ -21,7 +21,7 @@ const CAT = (() => {
       throw new Error('Nicht angemeldet');
     }
     const data = await res.json().catch(() => ({}));
-    if (!res.ok) { const e = new Error(data.error || `Fehler ${res.status}`); e.status = res.status; throw e; }
+    if (!res.ok) { const e = new Error(data.error || `Fehler ${res.status}`); e.status = res.status; e.openOrderId = data.openOrderId; throw e; }
     return data;
   }
 

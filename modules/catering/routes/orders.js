@@ -96,21 +96,14 @@ function createOrdersRouter(db, audit) {
     const rows = db.prepare('SELECT id FROM catering_orders ORDER BY COALESCE(event_date, created_at) DESC, id DESC LIMIT 200').all();
     res.json(rows.map(x => {
       const o = loadOrder(x.id);
-      return { id: o.id, name: o.name, number: o.number, eventDate: o.eventDate, status: o.status, guests: o.guests,
+      return { id: o.id, rentmanProjectId: o.rentmanProjectId, name: o.name, number: o.number, eventDate: o.eventDate, status: o.status, guests: o.guests,
         totalGlasses: o.computed.totalGlasses, complete: o.computed.complete, lineCount: o.lines.length, updatedAt: o.updatedAt || o.createdAt };
     }));
   });
 
-  r.post('/orders', (req, res) => {
-    const head = parseHead(req.body);
-    const rentmanProjectId = V.isEmpty(req.body.rentmanProjectId) ? null : String(req.body.rentmanProjectId).trim();
-    if (rentmanProjectId && !/^\d+$/.test(rentmanProjectId)) throw V.bad('Die Rentman-Projekt-ID ist ungültig.');
-    const lines = Array.isArray(req.body.lines) ? req.body.lines : [];
-    if (lines.length > 200) throw V.bad('Zu viele Speisen (höchstens 200).');
-    if (rentmanProjectId) {
-      const open = db.prepare("SELECT id FROM catering_orders WHERE rentman_project_id = ? AND status = 'entwurf'").get(rentmanProjectId);
-      if (open) throw new ApiError(409, 'Für dieses Projekt gibt es bereits eine offene Bestellung.', { openOrderId: open.id });
-    }
+  // Legt eine Bestellung samt Zeilen an. Zuordnung der Speisen: gespeicherter Rentman-Name, sonst eindeutiger Treffer im Katalog
+  // (gleicher oder vorangestellter Name). Unklares bleibt offen. Die Portionen werden automatisch gleichmäßig verteilt.
+  function createOrder({ head, rentmanProjectId, lines, userId }) {
     const aliasDish = db.prepare('SELECT dish_id FROM catering_dish_aliases a JOIN catering_dishes d ON d.id = a.dish_id WHERE a.alias = ? AND d.archived = 0');
     const catalog = activeDishes();
     const saveAlias = db.prepare('INSERT OR IGNORE INTO catering_dish_aliases (dish_id, alias) VALUES (?, ?)');
@@ -118,11 +111,10 @@ function createOrdersRouter(db, audit) {
     db.transaction(() => {
       id = db.prepare(`INSERT INTO catering_orders (rentman_project_id, number, name, event_date, guests, guests_source, glasses_per_person, brotzeit_per_person, auto_split, created_by, updated_at)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?, datetime('now'))`)
-        .run(rentmanProjectId, head.number, head.name, head.eventDate, head.guests, head.guestsSource, head.glassesPerPerson, head.brotzeitPerPerson, req.session.userId).lastInsertRowid;
+        .run(rentmanProjectId, head.number, head.name, head.eventDate, head.guests, head.guestsSource, head.glassesPerPerson, head.brotzeitPerPerson, userId).lastInsertRowid;
       const ins = db.prepare('INSERT INTO catering_order_lines (order_id, dish_id, rentman_row_id, rentman_name, block_name, sort) VALUES (?, ?, ?, ?, ?, ?)');
       lines.forEach((l, i) => {
         const rentmanName = V.str(l.rentmanName, 'Name der Speise', { max: 200 });
-        // Zuordnung: gespeicherter Name, sonst eindeutiger Treffer im Katalog (gleicher oder vorangestellter Name). Unklares bleibt offen.
         let dishId = null;
         const known = rentmanName ? aliasDish.get(normName(rentmanName)) : null;
         if (known) dishId = known.dish_id;
@@ -134,9 +126,71 @@ function createOrdersRouter(db, audit) {
       });
       applySplit(id);
     })();
+    return id;
+  }
+  const openOrderOf = projectId => db.prepare("SELECT id FROM catering_orders WHERE rentman_project_id = ? AND status = 'entwurf'").get(projectId);
+
+  r.post('/orders', (req, res) => {
+    const head = parseHead(req.body);
+    const rentmanProjectId = V.isEmpty(req.body.rentmanProjectId) ? null : String(req.body.rentmanProjectId).trim();
+    if (rentmanProjectId && !/^\d+$/.test(rentmanProjectId)) throw V.bad('Die Rentman-Projekt-ID ist ungültig.');
+    const lines = Array.isArray(req.body.lines) ? req.body.lines : [];
+    if (lines.length > 200) throw V.bad('Zu viele Speisen (höchstens 200).');
+    if (rentmanProjectId) {
+      const open = openOrderOf(rentmanProjectId);
+      if (open) throw new ApiError(409, 'Für dieses Projekt gibt es bereits eine offene Bestellung.', { openOrderId: open.id });
+    }
+    const id = createOrder({ head, rentmanProjectId, lines, userId: req.session.userId });
     audit(req, 'bestellung', id, 'angelegt', { name: head.name, rentmanProjectId });
     res.json(loadOrder(id));
   });
+
+  // Standardwerte für neue Kalkulationen: Portionen pro Person. Sie werden vom Benutzer festgelegt und sichtbar angezeigt,
+  // es gibt keinen eingebauten Wert. Leer heißt: Die Zahl muss in jeder Kalkulation selbst eingetragen werden.
+  const readDefaults = () => {
+    const row = db.prepare("SELECT value FROM catering_meta WHERE key = 'defaults'").get();
+    const d = row ? JSON.parse(row.value) : {};
+    return { glassesPerPerson: d.glassesPerPerson ?? null, brotzeitPerPerson: d.brotzeitPerPerson ?? null };
+  };
+  r.get('/settings', (req, res) => res.json(readDefaults()));
+  r.put('/settings', (req, res) => {
+    const d = { glassesPerPerson: V.dec(req.body.glassesPerPerson, 'Gläser pro Person', { minExclusive: 0, max: 50 }),
+      brotzeitPerPerson: V.dec(req.body.brotzeitPerPerson, 'Halbe Scheiben pro Person', { minExclusive: 0, max: 50 }) };
+    db.prepare("INSERT OR REPLACE INTO catering_meta (key, value) VALUES ('defaults', ?)").run(JSON.stringify(d));
+    audit(req, 'einstellung', 'defaults', 'geändert', d);
+    res.json(d);
+  });
+
+  // Kalkulation für ein Rentman-Projekt starten: Speisen und Gästezahl kommen aus Rentman (nur lesend), die Portionen pro Person aus den
+  // Standardwerten. Gästezahl = Menge der Cateringblöcke mit Speisen; weichen die Blöcke voneinander ab, bleibt sie leer (wird nie addiert oder geraten).
+  r.post('/orders/from-rentman/:projectId', ah(async (req, res) => {
+    if (!rentman.isConfigured()) throw new ApiError(503, 'Rentman ist nicht angebunden (RENTMAN_API fehlt).');
+    const projectId = String(req.params.projectId);
+    if (!/^\d+$/.test(projectId)) throw V.bad('Die Rentman-Projekt-ID ist ungültig.');
+    const open = openOrderOf(projectId);
+    if (open) throw new ApiError(409, 'Für dieses Projekt gibt es bereits eine offene Bestellung.', { openOrderId: open.id });
+    let data;
+    try { data = await rentman.fetchProjectCatering(projectId); }
+    catch (e) { throw new ApiError(e.status === 400 ? 400 : 502, e.status === 400 ? e.message : `Die Rentman-Verbindung ist derzeit nicht verfügbar. ${e.message}`); }
+    const blocks = data.blocks.filter(b => b.dishes.length);
+    if (!blocks.length) throw new ApiError(400, 'In diesem Projekt gibt es keine Speisen.');
+    const quantities = [...new Set(blocks.map(b => String(b.quantity)))];
+    const blockNames = blocks.map(b => `"${b.name}"`).join(', ');
+    let guests = null, guestsSource;
+    if (quantities.length === 1 && /^\d+$/.test(quantities[0])) {
+      guests = quantities[0];
+      guestsSource = `Rentman, ${blocks.length === 1 ? 'Block' : 'Blöcke'} ${blockNames} (Menge ${guests})`;
+    } else {
+      guestsSource = `Rentman: Die Blöcke haben unterschiedliche Mengen (${quantities.join(', ')}). Bitte Gästezahl selbst eintragen.`;
+    }
+    const defaults = readDefaults();
+    const head = { name: data.project.name || `Projekt ${projectId}`, number: data.project.number, eventDate: data.project.start, guests, guestsSource,
+      glassesPerPerson: defaults.glassesPerPerson, brotzeitPerPerson: defaults.brotzeitPerPerson };
+    const lines = blocks.flatMap(b => b.dishes.map(d => ({ rentmanRowId: d.rowId, rentmanName: d.name, blockName: b.name })));
+    const id = createOrder({ head, rentmanProjectId: projectId, lines, userId: req.session.userId });
+    audit(req, 'bestellung', id, 'aus Rentman gestartet', { name: head.name, rentmanProjectId: projectId, guests });
+    res.json(loadOrder(id));
+  }));
 
   r.get('/orders/:id', (req, res) => res.json(loadOrder(V.id(req.params.id, 'Bestellung'))));
 

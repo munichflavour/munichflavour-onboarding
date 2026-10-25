@@ -5,136 +5,115 @@ const fmtDateDe = iso => {
 };
 
 CAT.register('start', async root => {
-  const { $, $$, esc, fmt, api, field, modal, toast } = CAT;
+  const { $, $$, esc, fmt, api, field, modal, toast, confirmDialog } = CAT;
   root.innerHTML = `
     <div class="card">
-      <div class="toolbar">
-        <div class="note" style="flex:1">Bestellungen für Salate im Glas und Brotzeit. Gästezahl und Speisen kommen aus Rentman, die Mengen rechnet das Tool.</div>
-        <button class="btn btn-primary" id="newBtn">Neue Bestellung</button>
-      </div>
+      <h2 style="font-size:17px;margin-bottom:4px;">Projekte aus Rentman mit Speisen</h2>
+      <div class="note" style="margin-bottom:10px">Tippe auf ein Projekt, um die Kalkulation zu starten. Speisen und Gästezahl kommen aus Rentman, die Mengen rechnet das Tool. Danach kannst du alles bearbeiten.</div>
+      <div class="toolbar"><input type="search" id="p-q" placeholder="Projektname oder Nummer" autocomplete="off"></div>
+      <label style="display:flex;gap:8px;align-items:center;text-transform:none;font-weight:400;margin-bottom:8px;">
+        <input type="checkbox" id="p-all" style="width:20px;height:20px"> auch vergangene und unbestätigte Projekte</label>
+      <div class="hint" style="margin:0 0 8px">Nur Projekte, die Speisen enthalten. <button class="btn btn-secondary btn-sm" id="p-refresh" type="button">Aktualisieren</button></div>
+      <div id="p-list"><div class="note">Lädt Rentman-Projekte…</div></div>
+    </div>
+    <div class="card">
+      <details id="defaults"><summary style="cursor:pointer;font-weight:600">Standard-Portionen pro Person für neue Kalkulationen</summary>
+        <div class="note" style="margin:8px 0">Diese Werte setzt du selbst, es gibt keinen eingebauten Standard. Sie gelten nur für neue Kalkulationen und sind in jeder Kalkulation änderbar. Leer heißt: Die Zahl wird in der Kalkulation eingetragen.</div>
+        <div class="grid2">${field('Gläser pro Person (Salate)', '<input type="text" inputmode="decimal" id="d-gpp" placeholder="z. B. 2,6">')}
+          ${field('Halbe Scheiben pro Person (Brotzeit)', '<input type="text" inputmode="decimal" id="d-bpp" placeholder="z. B. 3,1">')}</div>
+        <button class="btn btn-secondary btn-sm" id="d-save" type="button">Speichern</button>
+      </details>
+    </div>
+    <div class="card">
+      <div class="toolbar"><h2 style="font-size:17px;flex:1">Bisherige Kalkulationen</h2><button class="btn btn-secondary btn-sm" id="manualBtn">Manuell anlegen</button></div>
       <div id="list"><div class="note">Lädt…</div></div>
     </div>`;
-  const list = await api('GET', '/orders');
-  $('#list').innerHTML = list.length ? list.map(o => `
-    <div class="row" data-id="${o.id}">
-      <div class="row-main">
-        <div class="row-title">${esc(o.name)}</div>
-        <div class="row-meta">${o.number ? 'Nr. ' + esc(o.number) + ' · ' : ''}${fmtDateDe(o.eventDate)} · ${o.guests ? esc(o.guests) + ' Gäste' : 'Gästezahl fehlt'} · ${esc(fmt(o.totalGlasses))} Portionen</div>
-      </div>
-      <div style="text-align:right">
-        <span class="pill ${o.status === 'abgeschlossen' ? '' : 'sample'}">${o.status === 'abgeschlossen' ? 'abgeschlossen' : 'Entwurf'}</span>
-        ${o.status === 'entwurf' && !o.complete ? '<div class="row-meta">unvollständig</div>' : ''}
-      </div>
-    </div>`).join('') : '<div class="note">Noch keine Bestellung angelegt.</div>';
-  $$('.row', root).forEach(r => r.onclick = () => { location.hash = '#/bestellung/' + r.dataset.id; });
-  $('#newBtn').onclick = () => newOrderDialog();
 
-  function newOrderDialog() {
-    const m = modal('Neue Bestellung', `
-      <div class="tabs" id="mode"><button class="tab-btn active" data-m="rentman">Aus Rentman</button><button class="tab-btn" data-m="manuell">Manuell</button></div>
-      <div id="pane"></div>`, {});
-    const pane = $('#pane', m.el);
-    const modes = { rentman: rentmanPane, manuell: manualPane };
-    $$('[data-m]', m.el).forEach(b => b.onclick = () => {
-      $$('[data-m]', m.el).forEach(x => x.classList.toggle('active', x === b));
-      modes[b.dataset.m]();
-    });
-    rentmanPane();
+  // ---- Kalkulationen ----
+  let orders = [];
+  const statusPill = o => `<span class="pill ${o.status === 'abgeschlossen' ? '' : 'sample'}">${o.status === 'abgeschlossen' ? 'abgeschlossen' : 'Entwurf'}</span>`;
+  const renderOrders = () => {
+    $('#list').innerHTML = orders.length ? orders.map(o => `
+      <div class="row" data-id="${o.id}">
+        <div class="row-main">
+          <div class="row-title">${esc(o.name)}</div>
+          <div class="row-meta">${o.number ? 'Nr. ' + esc(o.number) + ' · ' : ''}${fmtDateDe(o.eventDate)} · ${o.guests ? esc(o.guests) + ' Gäste' : 'Gästezahl fehlt'} · ${esc(fmt(o.totalGlasses))} Portionen</div>
+        </div>
+        <div style="text-align:right">${statusPill(o)}${o.status === 'entwurf' && !o.complete ? '<div class="row-meta">unvollständig</div>' : ''}</div>
+      </div>`).join('') : '<div class="note">Noch keine Kalkulation angelegt.</div>';
+    $$('#list .row', root).forEach(r => r.onclick = () => { location.hash = '#/bestellung/' + r.dataset.id; });
+  };
+  orders = await api('GET', '/orders');
+  renderOrders();
 
-    async function create(body) {
-      try { const o = await api('POST', '/orders', body); m.close(); location.hash = '#/bestellung/' + o.id; }
-      catch (e) {
-        if (e.status === 409 && e.openOrderId) location.hash = '#/bestellung/' + e.openOrderId;
-        m.showError(e.message);
-      }
-    }
+  // ---- Standardwerte ----
+  try {
+    const d = await api('GET', '/settings');
+    $('#d-gpp').value = fmt(d.glassesPerPerson); $('#d-bpp').value = fmt(d.brotzeitPerPerson);
+  } catch (e) { toast(e.message); }
+  $('#d-save').onclick = async () => {
+    try {
+      const d = await api('PUT', '/settings', { glassesPerPerson: $('#d-gpp').value.trim() || null, brotzeitPerPerson: $('#d-bpp').value.trim() || null });
+      $('#d-gpp').value = fmt(d.glassesPerPerson); $('#d-bpp').value = fmt(d.brotzeitPerPerson); toast('Gespeichert');
+    } catch (e) { toast(e.message); }
+  };
 
-    function manualPane() {
-      pane.innerHTML = field('Name', '<input type="text" id="n-name" maxlength="200" placeholder="z. B. Firmenfeier Müller">') +
-        '<div class="grid2">' + field('Datum', '<input type="date" id="n-date">') + field('Gäste', '<input type="text" inputmode="numeric" id="n-guests">') + '</div>' +
-        '<div class="modal-actions"><button class="btn btn-primary" id="n-go" style="flex:1">Anlegen</button></div>';
-      $('#n-go', pane).onclick = () => create({ name: $('#n-name', pane).value, eventDate: $('#n-date', pane).value || null,
-        guests: $('#n-guests', pane).value || null, guestsSource: $('#n-guests', pane).value ? 'manuell eingegeben' : null });
-    }
+  // ---- Rentman-Projekte mit Speisen ----
+  let timer = null, seq = 0;
+  const orderFor = projectId => {          // eine offene Kalkulation hat Vorrang, sonst die zuletzt bearbeitete
+    const mine = orders.filter(o => String(o.rentmanProjectId) === String(projectId));
+    return mine.find(o => o.status === 'entwurf') || mine[0] || null;
+  };
+  const loadProjects = async (refresh = false) => {
+    const mine = ++seq;                    // nur die jeweils letzte Anfrage darf die Liste zeichnen
+    $('#p-list').innerHTML = '<div class="note">Prüft Rentman-Projekte auf Speisen…</div>';
+    let r;
+    try { r = await api('GET', `/rentman/projects-with-food?all=${$('#p-all').checked ? 1 : 0}&q=${encodeURIComponent($('#p-q').value.trim())}${refresh === true ? '&refresh=1' : ''}`); }
+    catch (e) { if (mine === seq) $('#p-list').innerHTML = `<div class="alert alert-error">${esc(e.message)}</div>`; return; }
+    if (mine !== seq) return;
+    if (!r.configured) { $('#p-list').innerHTML = `<div class="warn-box">${esc(r.hinweis)}</div>`; return; }
+    $('#p-list').innerHTML = (r.projects.length ? r.projects.map(p => {
+      const o = orderFor(p.id);
+      return `<div class="row" data-pid="${esc(p.id)}"><div class="row-main"><div class="row-title">${esc(p.name)}</div>
+        <div class="row-meta">Nr. ${esc(p.number ?? '-')} · ${fmtDateDe(p.start)} · ${p.speisen} Speisen</div></div>
+        <div style="text-align:right">${o ? statusPill(o) + (o.status === 'entwurf' && !o.complete ? '<div class="row-meta">unvollständig</div>' : '') : '<span class="pill">neu</span>'}</div></div>`;
+    }).join('') : '<div class="note">Keine Projekte mit Speisen gefunden.</div>')
+      + (r.fehler ? `<div class="hint">Bei ${r.fehler} Projekten war die Prüfung nicht möglich (Rentman). Bitte später erneut versuchen.</div>` : '')
+      + (r.mehr ? '<div class="hint">Es gibt weitere Projekte. Bitte den Suchbegriff genauer eingeben.</div>' : '');
+    $$('[data-pid]', root).forEach(el => el.onclick = () => openProject(r.projects.find(p => p.id === el.dataset.pid)));
+  };
 
-    async function rentmanPane() {
-      pane.innerHTML = `<div class="toolbar"><input type="search" id="p-q" placeholder="Projektname oder Nummer"></div>
-        <label style="display:flex;gap:8px;align-items:center;text-transform:none;font-weight:400;margin-bottom:8px;">
-          <input type="checkbox" id="p-all" style="width:20px;height:20px"> auch vergangene und unbestätigte Projekte</label>
-        <div class="hint" style="margin:0 0 8px">Angezeigt werden nur Projekte, die Speisen enthalten. <button class="btn btn-secondary btn-sm" id="p-refresh" type="button">Aktualisieren</button></div>
-        <div id="p-list"><div class="note">Lädt Rentman-Projekte…</div></div><div id="p-detail"></div>`;
-      let timer = null, seq = 0;
-      const load = async (refresh = false) => {
-        const mine = ++seq;                                  // nur die jeweils letzte Anfrage darf die Liste zeichnen
-        $('#p-list', pane).innerHTML = '<div class="note">Prüft Rentman-Projekte auf Speisen…</div>';
-        let r;
-        try { r = await api('GET', `/rentman/projects-with-food?all=${$('#p-all', pane).checked ? 1 : 0}&q=${encodeURIComponent($('#p-q', pane).value.trim())}${refresh === true ? '&refresh=1' : ''}`); }
-        catch (e) { if (mine === seq) $('#p-list', pane).innerHTML = `<div class="alert alert-error">${esc(e.message)}</div>`; return; }
-        if (mine !== seq) return;
-        if (!r.configured) { pane.innerHTML = `<div class="warn-box">${esc(r.hinweis)}</div>`; return; }
-        $('#p-list', pane).innerHTML = (r.projects.length ? r.projects.map(p => `<div class="row" data-pid="${esc(p.id)}"><div class="row-main"><div class="row-title">${esc(p.name)}</div>
-          <div class="row-meta">Nr. ${esc(p.number ?? '-')} · ${fmtDateDe(p.start)} · ${p.speisen} Speisen</div></div><span class="pill">${esc(p.status)}</span></div>`).join('')
-          : '<div class="note">Keine Projekte mit Speisen gefunden.</div>')
-          + (r.fehler ? `<div class="hint">Bei ${r.fehler} Projekten war die Prüfung nicht möglich (Rentman). Bitte später erneut versuchen.</div>` : '')
-          + (r.mehr ? '<div class="hint">Es gibt weitere Projekte. Bitte den Suchbegriff genauer eingeben.</div>' : '');
-        $$('[data-pid]', pane).forEach(el => el.onclick = () => pick(r.projects.find(p => p.id === el.dataset.pid)));
-      };
-      $('#p-q', pane).oninput = () => { clearTimeout(timer); timer = setTimeout(load, 350); };
-      $('#p-all', pane).onchange = () => load();
-      $('#p-refresh', pane).onclick = () => load(true);
-      load();
-
-      async function pick(p) {
-        $('#p-list', pane).classList.add('hidden');
-        $('#p-q', pane).parentElement.classList.add('hidden');
-        const det = $('#p-detail', pane);
-        det.innerHTML = '<div class="note">Lädt Speisen aus Rentman…</div>';
-        let data;
-        try { data = await api('GET', '/orders/rentman/' + encodeURIComponent(p.id)); }
-        catch (e) { det.innerHTML = `<div class="alert alert-error">${esc(e.message)}</div>`; return; }
-        if (data.openOrderId) {
-          det.innerHTML = `<div class="warn-box">Für dieses Projekt gibt es bereits eine offene Bestellung.</div>
-            <button class="btn btn-primary btn-full" id="open-existing">Bestehende Bestellung öffnen</button>`;
-          $('#open-existing', det).onclick = () => { m.close(); location.hash = '#/bestellung/' + data.openOrderId; };
-          return;
-        }
-        const blocks = data.blocks;
-        det.innerHTML = `<h3 style="font-size:16px;margin-bottom:4px;">${esc(data.project.name)}</h3>
-          <div class="note" style="margin-bottom:10px;">Nr. ${esc(data.project.number ?? '-')} · ${fmtDateDe(data.project.start)}</div>
-          ${blocks.length ? `<div class="warn-box">Die Personenzahl steht in Rentman als Menge der Blockzeile. Mehrere Blöcke dürfen nicht addiert werden.
-            Wähle die Blöcke, deren Speisen berechnet werden sollen.</div>` + blocks.map(b => `
-            <label class="line" style="display:block;text-transform:none;font-weight:400;cursor:pointer">
-              <div style="display:flex;gap:10px;align-items:flex-start">
-                <input type="checkbox" data-block="${esc(b.rowId)}" style="width:22px;height:22px;margin-top:2px">
-                <div><div style="font-weight:600">${esc(b.name)}</div>
-                <div class="row-meta">Menge in Rentman (Personen): <b>${esc(b.quantity)}</b> · ${b.dishes.length} Speisen</div>
-                ${b.remark ? `<div class="row-meta">${esc(b.remark.slice(0, 160))}</div>` : ''}</div></div></label>`).join('')
-            : '<div class="warn-box">In diesem Projekt wurden keine Speisenblöcke (Materialgruppe "Catering") gefunden. Du kannst die Bestellung trotzdem anlegen und Speisen später hinzufügen.</div>'}
-          <div class="grid2" style="margin-top:12px">${field('Gäste', '<input type="text" inputmode="numeric" id="g-guests">')}
-            ${field('Gläser pro Person', '<input type="text" inputmode="decimal" id="g-gpp" placeholder="z. B. 2,6">', 'Für Salate im Glas. Wird von dir festgelegt, es gibt keinen Standard.')}
-            ${field('Halbe Scheiben pro Person', '<input type="text" inputmode="decimal" id="g-bpp" placeholder="z. B. 3">', 'Für Brotzeit. Leer lassen, wenn keine Brotzeit dabei ist.')}</div>
-          <div class="hint">Die Portionen werden automatisch gleichmäßig auf die Speisen verteilt.</div>
-          <div class="hint" id="g-src"></div>
-          <div class="modal-actions"><button class="btn btn-primary" id="g-go" style="flex:1">Bestellung anlegen</button></div>`;
-        let source = null;
-        const update = () => {
-          const sel = blocks.filter(b => $(`[data-block="${b.rowId}"]`, det).checked);
-          const values = [...new Set(sel.map(b => b.quantity))];
-          if (values.length === 1) { $('#g-guests', det).value = values[0]; source = `Rentman, Block "${sel[0].name}" (Menge ${values[0]})`; $('#g-src', det).textContent = 'Quelle der Gästezahl: ' + source; }
-          else if (values.length > 1) { $('#g-guests', det).value = ''; source = null; $('#g-src', det).textContent = `Die gewählten Blöcke haben unterschiedliche Mengen (${values.join(', ')}). Bitte Gästezahl selbst eintragen.`; }
-        };
-        $$('[data-block]', det).forEach(c => c.onchange = update);
-        $('#g-go', det).onclick = () => {
-          const sel = blocks.filter(b => $(`[data-block="${b.rowId}"]`, det).checked);
-          const guests = $('#g-guests', det).value.trim();
-          const lines = sel.flatMap(b => b.dishes.map(d => ({ rentmanRowId: d.rowId, rentmanName: d.name, blockName: b.name })));
-          create({ name: data.project.name, number: data.project.number, eventDate: data.project.start, rentmanProjectId: data.project.id,
-            guests: guests || null, guestsSource: guests ? (guests === (sel[0] && sel.every(b => b.quantity === sel[0].quantity) ? sel[0].quantity : null) ? source : 'manuell eingegeben') : null,
-            glassesPerPerson: $('#g-gpp', det).value.trim() || null, brotzeitPerPerson: $('#g-bpp', det).value.trim() || null, lines });
-        };
-      }
+  async function openProject(p) {
+    const existing = orderFor(p.id);
+    if (existing) { location.hash = '#/bestellung/' + existing.id; return; }      // es gibt schon eine Kalkulation: einfach öffnen
+    const ok = await confirmDialog('Kalkulation starten', `Für "${p.name}" (${fmtDateDe(p.start)}, ${p.speisen} Speisen) eine Kalkulation starten? `
+      + 'Speisen und Gästezahl werden aus Rentman übernommen und die Mengen automatisch berechnet. Danach kannst du alles bearbeiten.', 'Kalkulation starten');
+    if (!ok) return;
+    toast('Kalkulation wird erstellt …');
+    try { const o = await api('POST', '/orders/from-rentman/' + encodeURIComponent(p.id)); location.hash = '#/bestellung/' + o.id; }
+    catch (e) {
+      if (e.status === 409 && e.openOrderId) { location.hash = '#/bestellung/' + e.openOrderId; return; }
+      toast(e.message);
     }
   }
+  $('#p-q').oninput = () => { clearTimeout(timer); timer = setTimeout(loadProjects, 350); };
+  $('#p-all').onchange = () => loadProjects();
+  $('#p-refresh').onclick = () => loadProjects(true);
+  loadProjects();
+
+  // ---- Manuell (ohne Rentman) ----
+  $('#manualBtn').onclick = () => {
+    const m = modal('Manuelle Kalkulation', field('Name', '<input type="text" id="n-name" maxlength="200" placeholder="z. B. Firmenfeier Müller">') +
+      '<div class="grid2">' + field('Datum', '<input type="date" id="n-date">') + field('Gäste', '<input type="text" inputmode="numeric" id="n-guests">') + '</div>', {
+      saveLabel: 'Anlegen',
+      onSave: async el => {
+        const g = $('#n-guests', el).value.trim();
+        const o = await api('POST', '/orders', { name: $('#n-name', el).value, eventDate: $('#n-date', el).value || null, guests: g || null, guestsSource: g ? 'manuell eingegeben' : null });
+        location.hash = '#/bestellung/' + o.id; return true;
+      },
+    });
+    return m;
+  };
 });
 
 CAT.register('bestellung', async (root, arg) => {
