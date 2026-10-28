@@ -160,6 +160,12 @@
   <main>
     <div id="offlineBanner" class="offline-banner hidden">📡 Offline – zuvor angesehene Inhalte sind verfügbar.</div>
 
+    <div id="pushReminderBanner" class="push-reminder-banner hidden">
+      <span class="push-reminder-text">🔔 Benachrichtigungen aktivieren, um nichts zu verpassen</span>
+      <button class="push-reminder-enable" onclick="enablePushFromBanner()">Aktivieren</button>
+      <button class="push-reminder-dismiss" onclick="dismissPushBanner()" title="Schließen">✕</button>
+    </div>
+
     <!-- Überstundenkonto -->
     <div id="overtimeCard" class="card hidden" style="padding:16px;margin-bottom:20px;">
       <div class="section-title" style="margin:0;">⏱ Überstundenkonto</div>

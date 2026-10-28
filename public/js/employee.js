@@ -244,8 +244,39 @@ async function initPushButton() {
     if (sub && Notification.permission === 'granted') {
       btn.textContent = '🔔'; btn.style.opacity = '1';
       await fetch('/api/push/subscribe', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(sub.toJSON()) });
-    } else { btn.textContent = '🔕'; btn.style.opacity = '0.6'; }
+    } else {
+      btn.textContent = '🔕'; btn.style.opacity = '0.6';
+      updatePushReminderBanner();
+    }
   } catch(e) { btn.style.display = 'none'; }
+}
+
+// ===== PUSH-ERINNERUNGS-BANNER =====
+// Erinnert Mitarbeiter ohne aktivierte Benachrichtigungen, diese einzuschalten. Ein
+// Ausblenden wird 7 Tage im Browser gemerkt, danach taucht der Hinweis wieder auf.
+const PUSH_BANNER_DISMISS_KEY = 'pushReminderDismissedUntil';
+function updatePushReminderBanner() {
+  const banner = document.getElementById('pushReminderBanner');
+  if (!banner) return;
+  try {
+    const dismissedUntil = Number(localStorage.getItem(PUSH_BANNER_DISMISS_KEY) || 0);
+    if (Date.now() < dismissedUntil) return;
+  } catch (e) { /* localStorage evtl. nicht verfügbar – Banner trotzdem zeigen */ }
+  banner.classList.remove('hidden');
+}
+function dismissPushBanner() {
+  const banner = document.getElementById('pushReminderBanner');
+  if (banner) banner.classList.add('hidden');
+  try { localStorage.setItem(PUSH_BANNER_DISMISS_KEY, String(Date.now() + 7*24*60*60*1000)); } catch (e) {}
+}
+async function enablePushFromBanner() {
+  await togglePush();
+  const reg = await navigator.serviceWorker.ready;
+  const sub = await reg.pushManager.getSubscription();
+  if (sub && Notification.permission === 'granted') {
+    const banner = document.getElementById('pushReminderBanner');
+    if (banner) banner.classList.add('hidden');
+  }
 }
 async function togglePush() {
   if (!('PushManager' in window)) { alert('Push-Benachrichtigungen werden von diesem Browser nicht unterstützt.\n\nAuf iOS: App zum Home-Bildschirm hinzufügen.'); return; }
