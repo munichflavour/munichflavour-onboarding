@@ -618,6 +618,42 @@ canvas.sig-pad {
   margin-bottom: 16px;
 }
 
+/* ===== Push-Erinnerungs-Banner ===== */
+.push-reminder-banner {
+  background: var(--black);
+  color: var(--white);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+  font-weight: 600;
+  padding: 10px 12px 10px 16px;
+  border-radius: var(--radius);
+  margin-bottom: 16px;
+}
+.push-reminder-banner span.push-reminder-text { flex: 1; }
+.push-reminder-banner button.push-reminder-enable {
+  background: var(--white);
+  color: var(--black);
+  border: none;
+  border-radius: 6px;
+  padding: 8px 12px;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+.push-reminder-banner button.push-reminder-dismiss {
+  background: none;
+  border: none;
+  color: rgba(255,255,255,0.7);
+  font-size: 16px;
+  cursor: pointer;
+  flex-shrink: 0;
+  padding: 4px;
+}
+
 /* ===== "Neu"-Kennzeichnung ===== */
 .badge-new {
   display: inline-block;
