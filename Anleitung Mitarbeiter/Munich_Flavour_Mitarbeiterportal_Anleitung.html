@@ -200,6 +200,43 @@
   }
   .hint strong { color: #8a6800; }
 
+  /* ── CREDENTIALS ──────────────────────────────────────────── */
+  .creds {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1rem;
+    margin: 1rem 0;
+  }
+  @media (max-width: 480px) { .creds { grid-template-columns: 1fr; } }
+  .cred-card {
+    background: var(--grey-light);
+    border-radius: 10px;
+    padding: 1rem 1.25rem;
+  }
+  .cred-label {
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--grey-text);
+    margin-bottom: 0.4rem;
+  }
+  .cred-value {
+    font-family: var(--mono);
+    font-size: 14px;
+    font-weight: 500;
+    background: var(--white);
+    border: 1px solid var(--grey-mid);
+    border-radius: 6px;
+    padding: 0.4rem 0.7rem;
+    display: inline-block;
+    margin-bottom: 0.35rem;
+  }
+  .cred-example {
+    font-size: 12px;
+    color: var(--grey-text);
+  }
+
   /* ── VORTEIL BOX ──────────────────────────────────────────── */
   .vorteil {
     background: var(--green-light);
@@ -284,7 +321,19 @@
     <div class="two-col">
       <div>
         <div class="hint">
-          <strong>Deine Zugangsdaten</strong> (Benutzername und Passwort) bekommst du von der Geschäftsführung mitgeteilt. Du kannst sie nicht selbst anlegen.
+          <strong>Deine Zugangsdaten</strong> werden automatisch aus deinem Namen und Geburtsjahr generiert – du bekommst sie von der Geschäftsführung mitgeteilt.
+        </div>
+        <div class="creds">
+          <div class="cred-card">
+            <div class="cred-label">Benutzername</div>
+            <div class="cred-value">vorname.nachname</div>
+            <div class="cred-example">Beispiel: max.mustermann</div>
+          </div>
+          <div class="cred-card">
+            <div class="cred-label">Passwort</div>
+            <div class="cred-value">vorname + geburtsjahr</div>
+            <div class="cred-example">Beispiel: max1999</div>
+          </div>
         </div>
         <ul class="steps" style="margin-top:1rem">
           <li><div class="step-n">1</div>App öffnen – der Anmelde-Screen „MF Portal" erscheint automatisch.</li>
