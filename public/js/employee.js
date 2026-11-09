@@ -193,7 +193,7 @@ function clearSearch() {
 // ===== FILE ITEM =====
 function fileIcon(name) {
   const ext = name.split('.').pop().toLowerCase();
-  if (['pdf'].includes(ext)) return '📕';
+  if (['pdf'].includes(ext)) return '📄';
   if (['doc','docx'].includes(ext)) return '📘';
   if (['xls','xlsx','csv'].includes(ext)) return '📗';
   if (['ppt','pptx'].includes(ext)) return '📙';
@@ -214,9 +214,7 @@ function fileItemHtml(doc) {
       ${doc.description ? `<div class="file-desc">${escHtml(doc.description)}</div>` : ''}
       <div class="file-meta">${date}</div>
     </div>
-    <div class="file-actions">
-      <span class="file-btn file-btn-view">👁</span>
-    </div>
+    <span class="list-row-chevron">›</span>
   </a>`;
 }
 

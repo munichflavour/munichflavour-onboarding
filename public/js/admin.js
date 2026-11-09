@@ -9,17 +9,42 @@ let editingEmpId = null;
 const NEW_THRESHOLD_MS = 7 * 24 * 60 * 60 * 1000; // 7 Tage
 function isNew(dateStr) { return (Date.now() - Date.parse(dateStr + 'Z')) < NEW_THRESHOLD_MS; }
 
+// ===== NEUTRALE ICONS (einfarbige Strichzeichnungen statt bunter Emojis) =====
+const ICON_PATHS = {
+  folder: '<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7z"/>',
+  file: '<path d="M6 2h8l5 5v14a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1z"/><path d="M14 2v5h5"/>',
+  filePlus: '<path d="M6 2h8l5 5v14a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1z"/><path d="M14 2v5h5"/><path d="M9 14h6M12 11v6"/>',
+  folderPlus: '<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7z"/><path d="M12 11v4M10 13h4"/>',
+  edit: '<path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/>',
+  trash: '<path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>',
+  bell: '<path d="M18 8a6 6 0 1 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/>',
+  users: '<circle cx="9" cy="8" r="3.2"/><path d="M3 20c0-3.5 2.7-6 6-6s6 2.5 6 6"/><circle cx="17.5" cy="9" r="2.6"/><path d="M15.5 14.3c2.6.4 4.5 2.5 4.5 5.7"/>',
+  megaphone: '<path d="M3 10v4a1 1 0 0 0 1 1h2l10 4V5L6 9H4a1 1 0 0 0-1 1z"/><path d="M17 9.5a3 3 0 0 1 0 5"/>',
+  grid: '<rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/>',
+  lock: '<rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/>',
+  clock: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
+  eye: '<path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7z"/><circle cx="12" cy="12" r="3"/>',
+  receipt: '<path d="M6 2h12v19l-3-2-3 2-3-2-3 2V2z"/><path d="M9 7h6M9 11h6M9 15h4"/>',
+  layout: '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18"/><path d="M8 13h8M8 16h5"/>',
+  chevronDown: '<path d="M6 9l6 6 6-6"/>',
+  upload: '<path d="M12 16V4"/><path d="M7 9l5-5 5 5"/><path d="M4 16v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3"/>',
+};
+function icon(name, size) {
+  size = size || 18;
+  return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;flex-shrink:0;">${ICON_PATHS[name] || ''}</svg>`;
+}
+
 // Programme, die im Admin-Bereich zur Auswahl stehen. Ein weiteres Programm = eine Zeile mehr.
 const PROGRAMS = [
-  { icon: '🍽️', title: 'Catering-Kalkulator', text: 'Bestellmengen und Einkaufslisten für Speisen im Glas berechnen (passwortgeschützt)', href: '/catering/', locked: true },
-  { icon: '🍹', title: 'Kartengenerator', text: 'Speisen- und Getränkekarten aus Rentman als PDF erstellen', href: '/karten/' },
+  { icon: 'receipt', title: 'Catering-Kalkulator', text: 'Bestellmengen und Einkaufslisten für Speisen im Glas berechnen (passwortgeschützt)', href: '/catering/', locked: true },
+  { icon: 'layout', title: 'Kartengenerator', text: 'Speisen- und Getränkekarten aus Rentman als PDF erstellen', href: '/karten/' },
 ];
 
 function renderPrograms() {
   document.getElementById('programList').innerHTML = PROGRAMS.map(p => `
     <a class="prog-card" href="${escHtml(p.href)}">
-      <span class="prog-icon">${p.icon}</span>
-      <span class="prog-info"><span class="prog-title">${escHtml(p.title)}${p.locked ? ' 🔒' : ''}</span><span class="prog-text">${escHtml(p.text)}</span></span>
+      <span class="prog-icon">${icon(p.icon, 20)}</span>
+      <span class="prog-info"><span class="prog-title">${escHtml(p.title)}${p.locked ? ` <span style="display:inline-flex;vertical-align:middle;">${icon('lock',14)}</span>` : ''}</span><span class="prog-text">${escHtml(p.text)}</span></span>
       <span class="prog-arrow">›</span>
     </a>`).join('');
 }
@@ -100,12 +125,12 @@ async function loadEmployees() {
       <div class="employee-info">
         <div class="employee-name">${escHtml(emp.full_name)}</div>
         <div class="employee-username">@${escHtml(emp.username)}</div>
-        <div class="employee-overtime">⏱ ${overtimeText}</div>
+        <div class="employee-overtime">${icon('clock',12)} ${overtimeText}</div>
       </div>
       <div style="display:flex;gap:8px;flex-shrink:0;">
-        <button class="btn btn-secondary btn-sm" title="Überstunden bearbeiten" onclick="openOvertimeModal(${emp.id},'${escHtml(emp.full_name)}',${hasOvertime ? emp.overtime_hours : 0})">⏱</button>
-        <button class="btn btn-secondary btn-sm" title="Mitarbeiter bearbeiten" onclick="openEditEmpModal(${emp.id},'${escHtml(emp.full_name)}')">✏️</button>
-        <button class="btn btn-danger btn-sm" title="Mitarbeiter löschen" onclick="deleteEmployee(${emp.id},'${escHtml(emp.full_name)}')">🗑</button>
+        <button class="btn btn-secondary btn-sm" title="Überstunden bearbeiten" onclick="openOvertimeModal(${emp.id},'${escHtml(emp.full_name)}',${hasOvertime ? emp.overtime_hours : 0})">${icon('clock',16)}</button>
+        <button class="btn btn-secondary btn-sm" title="Mitarbeiter bearbeiten" onclick="openEditEmpModal(${emp.id},'${escHtml(emp.full_name)}')">${icon('edit',16)}</button>
+        <button class="btn btn-danger btn-sm" title="Mitarbeiter löschen" onclick="deleteEmployee(${emp.id},'${escHtml(emp.full_name)}')">${icon('trash',16)}</button>
       </div>
     </div>`;
   }).join('');
@@ -213,12 +238,16 @@ function renderFolder(folder) {
   const docs = docData.documents.filter(d=>d.folder_id===folder.id);
   const node = document.createElement('div'); node.className='folder-node';
   const header = document.createElement('div'); header.className='folder-header';
-  header.innerHTML=`<div class="folder-top"><span class="folder-icon">📁</span><span class="folder-name">${escHtml(folder.name)}</span></div>
+  header.innerHTML=`<div class="folder-top">
+      <span class="folder-icon">${icon('folder')}</span>
+      <span class="folder-name">${escHtml(folder.name)}</span>
+      <span class="folder-chevron">${icon('chevronDown',16)}</span>
+    </div>
     <div class="folder-actions" onclick="event.stopPropagation()">
-      <button class="btn btn-secondary btn-sm" title="Ordner umbenennen" onclick="openFolderModal(${folder.parent_id||'null'},${folder.id})">✏️</button>
-      <button class="btn btn-secondary btn-sm" title="Unterordner hinzufügen" onclick="openFolderModal(${folder.id})">📂+</button>
-      <button class="btn btn-primary btn-sm" title="Datei hochladen" onclick="openUploadModal(${folder.id})">📄+</button>
-      <button class="btn btn-danger btn-sm" title="Ordner löschen" onclick="deleteFolder(${folder.id},'${escHtml(folder.name)}')">🗑</button>
+      <button class="btn btn-secondary btn-sm" title="Ordner umbenennen" onclick="openFolderModal(${folder.parent_id||'null'},${folder.id})">${icon('edit',16)}</button>
+      <button class="btn btn-secondary btn-sm" title="Unterordner hinzufügen" onclick="openFolderModal(${folder.id})">${icon('folderPlus',16)}</button>
+      <button class="btn btn-primary btn-sm" title="Datei hochladen" onclick="openUploadModal(${folder.id})">${icon('filePlus',16)}</button>
+      <button class="btn btn-danger btn-sm" title="Ordner löschen" onclick="deleteFolder(${folder.id},'${escHtml(folder.name)}')">${icon('trash',16)}</button>
     </div>`;
   const childrenEl = document.createElement('div'); childrenEl.className='folder-children';
   children.forEach(c=>childrenEl.appendChild(renderFolder(c)));
@@ -228,26 +257,24 @@ function renderFolder(folder) {
   header.addEventListener('click', () => {
     collapsed=!collapsed;
     childrenEl.style.display=collapsed?'none':'';
-    header.querySelector('.folder-icon').textContent=collapsed?'📁':'📂';
+    header.querySelector('.folder-chevron').style.transform=collapsed?'':'rotate(180deg)';
   });
   node.appendChild(header); node.appendChild(childrenEl); return node;
 }
 
 function renderDocItem(doc) {
   const row=document.createElement('div'); row.className='doc-row';
-  const ext = doc.original_name.split('.').pop().toLowerCase();
-  const icon = ['pdf'].includes(ext)?'📕':['doc','docx'].includes(ext)?'📘':['xls','xlsx'].includes(ext)?'📗':['jpg','jpeg','png','gif','webp'].includes(ext)?'🖼️':'📄';
   const badge = isNew(doc.uploaded_at) ? '<span class="badge-new">Neu</span>' : '';
   const date = new Date(doc.uploaded_at+'Z').toLocaleDateString('de-DE');
   row.innerHTML=`<a href="/api/documents/${doc.id}/view" target="_blank" class="doc-item" title="Ansehen">
-      <span class="doc-icon">${icon}</span>
+      <span class="doc-icon">${icon('file')}</span>
       <span class="doc-info">
         <span class="doc-name" title="${escHtml(doc.original_name)}">${escHtml(doc.original_name)}${badge}</span>
         ${doc.description?`<span class="doc-desc" title="${escHtml(doc.description)}">${escHtml(doc.description)}</span>`:''}
         <span class="doc-date">${date}</span>
       </span>
     </a>
-    <button class="btn btn-danger btn-sm doc-delete" title="Löschen" onclick="deleteDocument(${doc.id},'${escHtml(doc.original_name)}')">🗑</button>`;
+    <button class="btn btn-danger btn-sm doc-delete" title="Löschen" onclick="deleteDocument(${doc.id},'${escHtml(doc.original_name)}')">${icon('trash',16)}</button>`;
   return row;
 }
 
@@ -385,8 +412,8 @@ function renderAnnouncementAdminList(list) {
   container.innerHTML = `<div class="card" style="padding:0;overflow:hidden;">${list.map(a => {
     const date = new Date(a.created_at+'Z').toLocaleDateString('de-DE');
     const confirmLine = a.requires_confirmation
-      ? `<div class="announcement-admin-stats">👁 ${a.seen}/${a.totalEmployees} gesehen · ✓ ${a.confirmed}/${a.totalEmployees} bestätigt</div>`
-      : `<div class="announcement-admin-stats">👁 ${a.seen}/${a.totalEmployees} gesehen</div>`;
+      ? `<div class="announcement-admin-stats">${icon('eye',13)} ${a.seen}/${a.totalEmployees} gesehen · ✓ ${a.confirmed}/${a.totalEmployees} bestätigt</div>`
+      : `<div class="announcement-admin-stats">${icon('eye',13)} ${a.seen}/${a.totalEmployees} gesehen</div>`;
     return `<div class="announcement-admin-row">
       <div class="announcement-admin-content">
         <div style="font-weight:700;font-size:15px;">${escHtml(a.title)}</div>
@@ -394,7 +421,7 @@ function renderAnnouncementAdminList(list) {
         <div style="font-size:12px;color:var(--text-tertiary);margin-top:4px;">${date}</div>
         ${confirmLine}
       </div>
-      <button class="btn btn-danger btn-sm" onclick="deleteAnnouncement(${a.id})">🗑</button>
+      <button class="btn btn-danger btn-sm" onclick="deleteAnnouncement(${a.id})">${icon('trash',16)}</button>
     </div>`;
   }).join('')}</div>`;
 }
@@ -426,14 +453,15 @@ function urlBase64ToUint8Array(b64) {
 async function initPushButton() {
   const btn=document.getElementById('pushBtn');
   if (!btn||!('serviceWorker' in navigator)||!('PushManager' in window)||!('Notification' in window)) return;
+  btn.innerHTML=icon('bell',20);
   btn.style.display='';
   try {
     const reg=await navigator.serviceWorker.ready;
     const sub=await reg.pushManager.getSubscription();
     if (sub && Notification.permission==='granted') {
-      btn.textContent='🔔'; btn.style.opacity='1';
+      btn.style.opacity='1';
       await fetch('/api/push/subscribe',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(sub.toJSON())});
-    } else { btn.textContent='🔕'; btn.style.opacity='0.6'; }
+    } else { btn.style.opacity='0.5'; }
   } catch(e) { btn.style.display='none'; }
 }
 async function togglePush() {
@@ -444,7 +472,7 @@ async function togglePush() {
     const existing=await reg.pushManager.getSubscription();
     if (existing) {
       await fetch('/api/push/subscribe',{method:'DELETE',headers:{'Content-Type':'application/json'},body:JSON.stringify({endpoint:existing.endpoint})});
-      await existing.unsubscribe(); btn.textContent='🔕'; btn.style.opacity='0.6'; return;
+      await existing.unsubscribe(); btn.style.opacity='0.5'; return;
     }
     const perm=await Notification.requestPermission();
     if (perm==='denied') { alert('Benachrichtigungen blockiert – bitte in den Einstellungen erlauben.'); return; }
@@ -452,7 +480,7 @@ async function togglePush() {
     const {key}=await fetch('/api/push/vapid-public-key').then(r=>r.json());
     const sub=await reg.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:urlBase64ToUint8Array(key)});
     await fetch('/api/push/subscribe',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(sub.toJSON())});
-    btn.textContent='🔔'; btn.style.opacity='1'; alert('✅ Benachrichtigungen aktiviert!');
+    btn.style.opacity='1'; alert('✅ Benachrichtigungen aktiviert!');
   } catch(err) { alert('Fehler: '+err.message); }
 }
 
