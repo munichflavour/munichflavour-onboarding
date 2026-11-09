@@ -9,27 +9,6 @@ let editingEmpId = null;
 const NEW_THRESHOLD_MS = 7 * 24 * 60 * 60 * 1000; // 7 Tage
 function isNew(dateStr) { return (Date.now() - Date.parse(dateStr + 'Z')) < NEW_THRESHOLD_MS; }
 
-// ===== FARB-AKZENTE =====
-// Kleiner farbiger Rand als Status-Akzent (wie Linear): pro Dateityp eine feste Farbe,
-// pro Ordner eine aus dem Namen abgeleitete Farbe – dieselbe Logik wie in employee.js,
-// damit Admin- und Mitarbeiteransicht für denselben Ordner/Dateityp dieselbe Farbe zeigen.
-const FILE_TYPE_COLORS = {
-  pdf: '#dc2626', doc: '#2563eb', docx: '#2563eb', xls: '#16a34a', xlsx: '#16a34a', csv: '#16a34a',
-  ppt: '#ea580c', pptx: '#ea580c', jpg: '#db2777', jpeg: '#db2777', png: '#db2777', gif: '#db2777',
-  webp: '#db2777', svg: '#db2777', mp4: '#7c3aed', mov: '#7c3aed', avi: '#7c3aed', mkv: '#7c3aed',
-  mp3: '#0d9488', wav: '#0d9488', m4a: '#0d9488', zip: '#64748b', rar: '#64748b', '7z': '#64748b'
-};
-function fileColor(name) {
-  const ext = name.split('.').pop().toLowerCase();
-  return FILE_TYPE_COLORS[ext] || '#94a3b8';
-}
-const FOLDER_COLORS = ['#2563eb', '#16a34a', '#ea580c', '#7c3aed', '#0d9488', '#db2777', '#ca8a04', '#475569'];
-function folderColor(name) {
-  let hash = 0;
-  for (let i = 0; i < name.length; i++) hash = (hash * 31 + name.charCodeAt(i)) >>> 0;
-  return FOLDER_COLORS[hash % FOLDER_COLORS.length];
-}
-
 // Programme, die im Admin-Bereich zur Auswahl stehen. Ein weiteres Programm = eine Zeile mehr.
 const PROGRAMS = [
   { icon: '🍽️', title: 'Catering-Kalkulator', text: 'Bestellmengen und Einkaufslisten für Speisen im Glas berechnen (passwortgeschützt)', href: '/catering/', locked: true },
@@ -234,7 +213,6 @@ function renderFolder(folder) {
   const docs = docData.documents.filter(d=>d.folder_id===folder.id);
   const node = document.createElement('div'); node.className='folder-node';
   const header = document.createElement('div'); header.className='folder-header';
-  header.style.borderLeft = `3px solid ${folderColor(folder.name)}`;
   header.innerHTML=`<div class="folder-top"><span class="folder-icon">📁</span><span class="folder-name">${escHtml(folder.name)}</span></div>
     <div class="folder-actions" onclick="event.stopPropagation()">
       <button class="btn btn-secondary btn-sm" title="Ordner umbenennen" onclick="openFolderModal(${folder.parent_id||'null'},${folder.id})">✏️</button>
@@ -261,7 +239,7 @@ function renderDocItem(doc) {
   const icon = ['pdf'].includes(ext)?'📕':['doc','docx'].includes(ext)?'📘':['xls','xlsx'].includes(ext)?'📗':['jpg','jpeg','png','gif','webp'].includes(ext)?'🖼️':'📄';
   const badge = isNew(doc.uploaded_at) ? '<span class="badge-new">Neu</span>' : '';
   const date = new Date(doc.uploaded_at+'Z').toLocaleDateString('de-DE');
-  row.innerHTML=`<a href="/api/documents/${doc.id}/view" target="_blank" class="doc-item" title="Ansehen" style="border-left:3px solid ${fileColor(doc.original_name)};">
+  row.innerHTML=`<a href="/api/documents/${doc.id}/view" target="_blank" class="doc-item" title="Ansehen">
       <span class="doc-icon">${icon}</span>
       <span class="doc-info">
         <span class="doc-name" title="${escHtml(doc.original_name)}">${escHtml(doc.original_name)}${badge}</span>
