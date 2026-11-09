@@ -266,7 +266,7 @@ function renderDocItem(doc) {
   const row=document.createElement('div'); row.className='doc-row';
   const badge = isNew(doc.uploaded_at) ? '<span class="badge-new">Neu</span>' : '';
   const date = new Date(doc.uploaded_at+'Z').toLocaleDateString('de-DE');
-  row.innerHTML=`<a href="/api/documents/${doc.id}/view" target="_blank" class="doc-item" title="Ansehen">
+  row.innerHTML=`<a href="/view.html?id=${doc.id}&name=${encodeURIComponent(doc.original_name)}" class="doc-item" title="Ansehen">
       <span class="doc-icon">${icon('file')}</span>
       <span class="doc-info">
         <span class="doc-name" title="${escHtml(doc.original_name)}">${escHtml(doc.original_name)}${badge}</span>
