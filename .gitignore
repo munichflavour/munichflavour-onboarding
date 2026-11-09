@@ -1,3 +1,15 @@
 node_modules/
 db/
 *.db
+__pycache__/
+*.pyc
+tools/cocktailkarte/*.pdf
+tools/cocktailkarte/.env
+tools/cocktailkarte/.venv/
+
+.cache/
+tools/cocktailkarte/daten/
+tools/cocktailkarte/*.otf
+tools/cocktailkarte/*.ttf
+!tools/cocktailkarte/assets/**/*.ttf
+!tools/cocktailkarte/assets/*.ttf

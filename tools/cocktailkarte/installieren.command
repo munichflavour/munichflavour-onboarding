@@ -1,0 +1,52 @@
+#!/bin/bash
+# Installiert (oder aktualisiert) den Kartengenerator unter ~/Kartengenerator
+# und legt auf dem Schreibtisch den Starter "Kartengenerator" an.
+# Der heruntergeladene Ordner kann danach geloescht werden. Token und Einstellungen bleiben bei Updates erhalten.
+set -e
+QUELLE="$(cd "$(dirname "$0")" && pwd)"
+ZIEL="$HOME/Kartengenerator"
+STARTER="$HOME/Desktop/Kartengenerator.command"
+
+mkdir -p "$ZIEL"
+# Programmdateien kopieren (die Muster * schliessen unsichtbare Dateien wie .venv und .env aus)
+for f in "$QUELLE"/*; do
+  name="$(basename "$f")"
+  case "$name" in *.pdf|__pycache__) continue ;; esac
+  rm -rf "$ZIEL/$name"
+  cp -R "$f" "$ZIEL/$name"
+done
+cp "$QUELLE/.env.example" "$ZIEL/.env.example" 2>/dev/null || true
+# vorhandenen Token mitnehmen, falls er noch nicht am Zielort liegt
+if [ -f "$QUELLE/.env" ] && [ ! -f "$ZIEL/.env" ]; then cp "$QUELLE/.env" "$ZIEL/.env"; fi
+chmod +x "$ZIEL/start.command"
+
+# Pinselschrift "Active" (urheberrechtlich geschuetzt, gehoert nicht ins Repository): liegt die Datei neben dem Installer,
+# wird sie in den eigenen Datenordner uebernommen (bleibt bei Updates erhalten)
+for f in "$QUELLE"/[Aa]ctive*.otf "$QUELLE"/[Aa]ctive*.ttf; do
+  if [ -f "$f" ]; then
+    mkdir -p "$ZIEL/daten"
+    cp "$f" "$ZIEL/daten/Active-Regular.${f##*.}"
+    echo "Pinselschrift uebernommen: $(basename "$f")"
+    break
+  fi
+done
+
+# Schrift "Agrandir" fuer das neue Design (ebenfalls lizenzpflichtig, nicht im Repository)
+for f in "$QUELLE"/[Aa]grandir*.otf "$QUELLE"/[Aa]grandir*.ttf; do
+  if [ -f "$f" ]; then
+    mkdir -p "$ZIEL/daten"
+    cp "$f" "$ZIEL/daten/Agrandir-Black.${f##*.}"
+    echo "Agrandir uebernommen: $(basename "$f")"
+    break
+  fi
+done
+
+mkdir -p "$HOME/Desktop"
+printf '#!/bin/bash\nexec "%s/start.command"\n' "$ZIEL" > "$STARTER"
+chmod +x "$STARTER"
+xattr -dr com.apple.quarantine "$ZIEL" "$STARTER" 2>/dev/null || true
+
+echo
+echo "Fertig. Auf dem Schreibtisch liegt jetzt 'Kartengenerator' - Doppelklick startet das Programm."
+echo "(Falls macOS fragt, ob Terminal auf den Schreibtisch zugreifen darf: bitte erlauben.)"
+read -r -p "Enter zum Schliessen"

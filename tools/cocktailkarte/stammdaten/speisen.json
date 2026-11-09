@@ -1,0 +1,24 @@
+{
+  "_hinweis": "Kartentexte der Speisen aus den Karten Manitz Finsterwald und Hausbau. Schluessel = Rentman-Name in Kleinbuchstaben (ohne Klammern, Anfuehrungszeichen, fuehrenden Strich, 'im Glas'). 'allergene' = Buchstaben der Allergen-Legende auf der Karte, 'ernaehrung' = V (vegetarisch) oder VG (vegan). ACHTUNG: Die Angaben wurden aus den bisherigen Karten uebernommen und NICHT neu geprueft. Bitte vor dem Druck kontrollieren.",
+  "rote-beete-humus": {"name": "Rote Beete Humus", "beschreibung": "mit cremigen Rote Beete Aufstrich und Kichererbsen", "allergene": ["N"], "ernaehrung": "VG"},
+  "basilikum-tomate": {"name": "Basilikum Tomate", "beschreibung": "mit leichtem Basilikum Aufstrich und Tomaten", "allergene": ["C", "M"], "ernaehrung": "V"},
+  "chicken curry": {"name": "Chicken Curry", "beschreibung": "mit herzhaftem Chicken Curry Aufstrich und Rucola", "allergene": ["C", "M"], "ernaehrung": ""},
+  "radiserl frischkäse": {"name": "Radiserl Frischkäse", "beschreibung": "mit feinem Radiserl Frischkäse und Radiserl", "allergene": ["G"], "ernaehrung": "V"},
+  "trüffel frischkäse": {"name": "Trüffel Frischkäse", "beschreibung": "mit feinem Trüffelfrischkäse und Schnittlauch", "allergene": ["G"], "ernaehrung": ""},
+  "lachs-meerrettich": {"name": "Lachs-Meerrettich", "beschreibung": "mit Lachs, Meerrettich und Dillspitzen", "allergene": ["H", "G"], "ernaehrung": ""},
+  "lachs-dill-canapés": {"name": "Lachs-Meerrettich", "beschreibung": "mit Lachs, Meerrettich und Dillspitzen", "allergene": ["H", "G"], "ernaehrung": ""},
+
+  "bulgursalat grüne minze": {"name": "Bulgursalat “Grüne Minze”", "beschreibung": "Bulgur mit Gemüse, Aprikosen und Minze", "allergene": ["F"], "ernaehrung": ""},
+  "gambas coco-ginger": {"name": "Gambas “Coco-Ginger”", "beschreibung": "Riesengarnelen in Kokos-Ingwer-Marinade", "allergene": ["B"], "ernaehrung": ""},
+  "mediterraner nudelsalat": {"name": "Mediterraner Nudelsalat", "beschreibung": "Nudeln mit gegrilltem Gemüse, getrockneten Tomaten und Kapern", "allergene": [], "ernaehrung": "VG"},
+  "hausgemachtes anti pasti gemüse": {"name": "Anti Pasti Gemüse", "beschreibung": "Zucchini, Paprika, Aubergine, Champignons, Zwiebeln, Knoblauch", "allergene": ["D"], "ernaehrung": "VG"},
+
+  "caprese-canapés": {"name": "Caprese", "beschreibung": "mit Tomate, Mozzarella, Pesto und Basilikum", "allergene": ["C"], "ernaehrung": "V"},
+  "hähnchen-pesto-canapés": {"name": "Hähnchen-Pesto", "beschreibung": "mit Hähnchen und Pesto", "allergene": ["G"], "ernaehrung": ""},
+  "rucola-parmaschinken-canapés": {"name": "Rucola-Parmaschinken", "beschreibung": "Frischkäse, Rucola, Parmaschinken", "allergene": ["G"], "ernaehrung": ""},
+  "bruschetta-canapés": {"name": "Bruschetta", "beschreibung": "Tomate, Zwiebel, Knoblauch", "allergene": [], "ernaehrung": "V"},
+
+  "cheesecake im glas mit mangopüre": {"name": "Cheesecake Mango", "beschreibung": "Cheesecake im Glas mit Mangopüree", "allergene": ["C", "G"], "ernaehrung": ""},
+  "himbeertraum": {"name": "Himbeertraum", "beschreibung": "Joghurt-Quark-Creme mit Himbeerspiegel", "allergene": ["C", "G"], "ernaehrung": ""},
+  "mousse au chocolat": {"name": "Mousse au Chocolat", "beschreibung": "Schokoladen Mousse", "allergene": ["C", "G"], "ernaehrung": ""}
+}

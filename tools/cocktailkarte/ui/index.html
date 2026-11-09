@@ -1,0 +1,509 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#232220">
+<title>Kartengenerator</title>
+<script>
+/* Im Portal (Adresse /karten/) im Portal-Design zeigen. Lokal (Mac/Windows) bleibt alles wie bisher. */
+if (location.pathname.indexOf('/karten') === 0) {
+  document.documentElement.classList.add('portal');
+  document.querySelector('meta[name=theme-color]').content = '#000000';
+}
+</script>
+<style>
+@font-face{font-family:Pinsel;src:url(schrift.ttf)}
+:root{--ink:#232220;--muted:#6f6b64;--line:#dedbd4;--bg:#fff;--soft:#f4f2ee;--warn:#fff4d6;--warnb:#e5c36a;--err:#b3261e;--ok:#1d6b3a;--okbg:#e8f5ec}
+@media (prefers-color-scheme:dark){:root{--ink:#f1eee8;--muted:#a39e94;--line:#3a3834;--bg:#171614;--soft:#22211e;--warn:#3a3118;--warnb:#7a6428;--err:#ff8a80;--ok:#7fd69a;--okbg:#17301f}}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif}
+main{max-width:1180px;margin:0 auto;padding:36px 24px 80px}
+h1{font-family:Pinsel,sans-serif;font-weight:400;font-size:46px;letter-spacing:.06em;margin:0;line-height:1.1}
+.sub{color:var(--muted);margin:6px 0 24px;letter-spacing:.04em}
+form{display:flex;gap:10px;max-width:920px}
+input[type=text],input:not([type]),select{font:inherit;min-width:0;padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--ink)}
+#q{flex:1;padding:14px 16px;border-radius:10px}
+input:focus,select:focus{outline:2px solid var(--ink);outline-offset:1px}
+button,a.btn{font:inherit;cursor:pointer;border-radius:10px;border:1px solid var(--ink);background:var(--ink);color:var(--bg);padding:12px 20px;font-weight:600;text-decoration:none;display:inline-block;line-height:1.5}
+button.zweit,a.btn.zweit{background:transparent;color:var(--ink);border-color:var(--line);font-weight:500;padding:11px 16px}
+button.klein{padding:3px 8px;border-radius:6px;font-size:13px;font-weight:500;background:transparent;color:var(--ink);border-color:var(--line)}
+button:disabled,a.btn[aria-disabled=true]{opacity:.5;cursor:default;pointer-events:none}
+h2{font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);margin:30px 0 10px;font-weight:600}
+.liste{display:flex;flex-wrap:wrap;gap:8px}
+.chip{border:1px solid var(--line);background:var(--soft);color:var(--ink);padding:8px 14px;font-weight:400;border-radius:999px;font-size:14px}
+.chip small{color:var(--muted);margin-left:6px}
+.treffer{display:flex;flex-direction:column;gap:8px;max-width:920px}
+.treffer button{display:flex;justify-content:space-between;gap:16px;text-align:left;background:var(--soft);color:var(--ink);border-color:var(--line);font-weight:400}
+.treffer small{color:var(--muted);white-space:nowrap}
+.status{margin:20px 0 0;color:var(--muted)}
+.fehler{margin:20px 0 0;color:var(--err);font-weight:600}
+.stand{margin:14px 0 0;font-size:13px;color:var(--muted)}
+.schriften{margin:36px 0 0;font-size:13px;color:var(--muted)}
+.schriften summary{cursor:pointer}
+.schriften label{display:flex;align-items:center;gap:10px;margin:10px 0 0}
+.stand button{padding:2px 8px;font-size:12px;border-radius:6px;margin-left:8px}
+.leiste{display:flex;gap:10px;flex-wrap:wrap;margin:8px 0 6px}
+.designwahl{display:flex;align-items:center;gap:8px;margin:14px 0 0;font-size:13px;color:var(--muted)}
+.designwahl button{background:none;border:0;color:var(--muted);text-decoration:underline;padding:4px 0;font-size:13px;font-weight:400;border-radius:0}
+.zeile select.abschnitt{width:112px}
+/* Karte: Ansicht = Vorschau + Aktionen, Bearbeiten = Editor + Vorschau */
+.karte{border:1px solid var(--line);border-radius:14px;padding:18px;background:var(--soft);margin-top:18px}
+.kopf{display:flex;align-items:baseline;gap:12px}
+.kopf h3{margin:0;font-size:20px}.anz{color:var(--muted);font-size:14px}
+.spalten{display:grid;gap:22px;margin-top:12px}
+.spalten.ansicht{grid-template-columns:minmax(260px,380px) minmax(0,1fr);grid-template-areas:"vorschau info"}
+.spalten.edit{grid-template-columns:minmax(0,1fr) 320px;grid-template-areas:"editor vorschau"}
+.vorschau{grid-area:vorschau}.info{grid-area:info}.editor{grid-area:editor}
+@media (max-width:900px){.spalten.ansicht,.spalten.edit{grid-template-columns:1fr;grid-template-areas:"vorschau" "info" "editor"}}
+.editor h4{margin:14px 0 6px;font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);display:flex;align-items:center;gap:8px}
+.editor h4 input{flex:0 1 220px;text-transform:uppercase;font-size:13px;padding:4px 8px}
+.zeile{display:flex;align-items:center;gap:6px;flex-wrap:wrap;padding:6px 0;border-bottom:1px solid var(--line)}
+.zeile.aus input:not([data-f=aktiv]):not([data-f=merken]),.zeile.aus select{opacity:.45}
+.zeile .name{flex:1 1 150px;font-weight:600}
+.zeile .zut,.zeile .besch{flex:2 1 200px}
+.zeile .all{width:78px}
+.zeile select{width:64px}
+.mini{font-size:12px;color:var(--muted);white-space:nowrap;display:flex;align-items:center;gap:3px}
+.pfeile{display:flex;gap:3px}
+.badge{font-size:11px;border-radius:999px;padding:1px 8px;white-space:nowrap;border:1px solid var(--line);color:var(--muted)}
+.badge.neu{border-color:var(--warnb);background:var(--warn);color:var(--ink)}
+.badge.stamm{border-color:var(--ok);color:var(--ok)}
+.plus{margin-top:8px}
+.vorschau img{width:100%;height:auto;border:1px solid var(--line);border-radius:6px;background:#fff;display:block;min-height:120px}
+.vs{font-size:12px;color:var(--muted);min-height:18px;margin-top:4px}
+.vs.err{color:var(--err);font-weight:600}
+.aktion{display:flex;gap:8px;margin-top:10px;flex-wrap:wrap}
+.ok{margin-top:10px;padding:9px 11px;border-radius:8px;background:var(--okbg);border:1px solid var(--ok);font-size:13px;word-break:break-all}
+.warn{margin-top:10px;padding:9px 12px;border-radius:8px;background:var(--warn);border:1px solid var(--warnb);font-size:13px}
+.warn b{display:block;margin-bottom:2px}.warn ul{margin:4px 0 0;padding-left:18px}
+.info .hinweis{color:var(--muted);font-size:14px;margin:6px 0 0}
+.schritt{margin-top:22px;padding:12px 14px;border-radius:10px;border:1px solid var(--line);background:var(--soft);font-size:14px;max-width:920px}
+.leer{color:var(--muted)}
+
+/* ---------- Portal-Design (nur im Portal unter /karten/) ----------
+   Gleiche Kopfleiste, Farben und Schaltflächen wie das Mitarbeiterportal, immer hell. */
+.portal-header{display:none}
+html.portal{--ink:#000;--muted:#666;--line:#e0e0e0;--bg:#f5f5f5;--soft:#fff;--warn:#fff4d6;--warnb:#e5c36a;--err:#cc0000;--ok:#166534;--okbg:#f0fff4;color-scheme:light}
+html.portal .portal-header{display:flex;align-items:center;gap:14px;background:#000;color:#fff;padding:12px 20px;position:sticky;top:0;z-index:100;box-shadow:0 2px 6px rgba(0,0,0,.3)}
+.portal-header img{height:44px;width:44px;object-fit:contain;border-radius:4px;background:#fff;padding:2px}
+.portal-header .ph-title{flex:1;min-width:0;line-height:1.3}
+.portal-header .ph-title b{display:block;font-size:17px;letter-spacing:.3px}
+.portal-header .ph-title span{font-size:12px;color:#aaa}
+.portal-header a{color:#fff;text-decoration:none;border:1.5px solid rgba(255,255,255,.3);border-radius:8px;font-size:14px;padding:8px 12px;white-space:nowrap}
+html.portal h1{display:none}
+html.portal .sub{margin:0 0 18px;letter-spacing:0}
+html.portal main{padding-top:20px}
+html.portal input[type=text],html.portal input:not([type]),html.portal select,html.portal textarea{background:#fff;border-width:1.5px;border-radius:8px}
+html.portal #q{border-radius:8px}
+html.portal button,html.portal a.btn{border-radius:8px}
+html.portal button.zweit,html.portal a.btn.zweit{background:#fff;border-width:1.5px}
+html.portal .karte{border-radius:12px;box-shadow:0 2px 8px rgba(0,0,0,.12);border-color:#e0e0e0}
+html.portal .chip,html.portal .treffer button{background:#fff}
+
+/* ---------- Handy ---------- */
+@media (max-width:640px){
+  main{padding:20px 16px max(64px,env(safe-area-inset-bottom))}
+  h1{font-size:30px}
+  .sub{margin-bottom:18px;font-size:14px}
+  form{flex-direction:column}
+  input,select,textarea{font-size:16px}               /* verhindert das Hineinzoomen in iOS */
+  #q{width:100%;min-height:50px}
+  button,a.btn{min-height:46px}
+  form button{width:100%}
+  .stand{line-height:2}
+  .stand button{min-height:36px;padding:4px 12px;font-size:13px}
+  .designwahl{margin-top:6px}
+  .designwahl button{min-height:36px;font-size:14px}
+  .treffer button{flex-direction:column;gap:2px}
+  .treffer small{white-space:normal}
+  .chip{padding:11px 16px;font-size:15px}
+  .karte{padding:14px;border-radius:12px}
+  .kopf{flex-wrap:wrap;gap:4px 12px}
+  .spalten{gap:14px}
+  .spalten.edit{grid-template-areas:"editor" "vorschau"}      /* beim Bearbeiten zuerst die Eintraege */
+  .aktion{flex-direction:column}
+  .aktion>*{width:100%;text-align:center}
+  .leiste button{width:100%}
+  .ok{word-break:break-word}
+  .schritt{font-size:13px}
+  /* Editor: Name und Text jeweils auf voller Breite, Schalter darunter */
+  .zeile{gap:8px;padding:10px 0}
+  .zeile input[type=checkbox]{width:24px;height:24px;flex:0 0 24px}
+  .zeile .name{flex:1 1 calc(100% - 40px)}
+  .zeile .zut,.zeile .besch{flex:1 1 100%}
+  .zeile .all{flex:1 1 90px;width:auto}
+  .zeile select,.zeile select.abschnitt{flex:1 1 110px;width:auto}
+  .zeile input,.zeile select{min-height:44px}
+  .mini{font-size:14px;gap:6px}
+  .mini input{width:22px;height:22px}
+  button.klein{padding:9px 14px;font-size:15px}
+  .editor h4{flex-wrap:wrap}
+  .editor h4 input{flex:1 1 100%}
+  .schriften label{flex-direction:column;align-items:flex-start;gap:6px}
+}
+</style>
+</head>
+<body>
+<header class="portal-header">
+  <img src="/assets/logo.jpg" alt="Munich Flavour" onerror="this.style.display='none'">
+  <div class="ph-title"><b>Kartengenerator</b><span>Admin</span></div>
+  <a href="/admin.html#programme">&larr; Programme</a>
+</header>
+<main>
+  <h1>MUNICH FLAVOUR</h1>
+  <p class="sub">Kartengenerator &middot; Daten direkt aus Rentman</p>
+
+  <form id="form">
+    <input id="q" autocomplete="off" autocapitalize="off" spellcheck="false" enterkeyhint="search" placeholder="Name oder Nummer eines bestätigten Projekts, z. B. Böttcher">
+    <button id="los">Karten laden</button>
+  </form>
+  <div class="stand" id="stand"></div>
+  <div class="designwahl" id="designwahl"></div>
+
+  <div id="meldung"></div>
+  <div id="auswahl"></div>
+  <div id="ergebnis"></div>
+
+  <h2 id="bald-titel" hidden>Bestätigte Events der nächsten 21 Tage</h2>
+  <div id="bald" class="liste"></div>
+  <details id="schriften" class="schriften" hidden></details>
+</main>
+
+<script>
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const datum = d => d ? d.split('-').reverse().join('.') : 'ohne Datum';
+const uhr = t => new Date(t * 1000).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
+const post = (url, body) => api(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body || {}) });
+
+function status(text, klasse = 'status') { $('meldung').innerHTML = text ? `<p class="${klasse}">${esc(text)}</p>` : ''; }
+function sperre(an) { $('los').disabled = an; $('q').disabled = an; }
+
+async function api(url, opts) {
+  const r = await fetch(url, opts);
+  const j = await r.json();
+  if (!r.ok) throw new Error(j.fehler || 'Unbekannter Fehler');
+  return j;
+}
+
+/* ---------- Projektliste: Stand + Aktualisieren ---------- */
+let standTimer = null;
+async function stand() {
+  clearTimeout(standTimer);
+  try {
+    const s = await api('api/stand');
+    $('stand').innerHTML = (s.laedt ? 'Projektliste wird aktualisiert …' :
+      s.stand ? `Projektliste: Stand ${uhr(s.stand)} Uhr (${s.anzahl} Projekte)` : '') +
+      (s.laedt ? '' : ' <button class="zweit" id="aktu">Aktualisieren</button>') +
+      (s.fehler ? ` <span class="fehler">${esc(s.fehler)}</span>` : '');
+    if ($('aktu')) $('aktu').onclick = async () => { await post('api/aktualisieren'); stand(); };
+    if (s.laedt) standTimer = setTimeout(stand, 1500); else if (stand.vorher && stand.vorher !== s.stand) bald();
+    stand.vorher = s.stand;
+  } catch (err) { $('stand').textContent = ''; }
+}
+
+async function bald() {
+  try {
+    const { projekte } = await api('api/anstehende');
+    $('bald-titel').hidden = !projekte.length;
+    $('bald').innerHTML = projekte.map(p => `<button class="chip" data-id="${p.id}">${esc(p.name)}<small>${datum(p.datum)}</small></button>`).join('');
+    $('bald').querySelectorAll('button').forEach(b => b.onclick = () => laden(projekte.find(p => p.id == b.dataset.id)));
+  } catch (err) { status(err.message, 'fehler'); }
+}
+
+/* ---------- Suche ---------- */
+async function suchen(e) {
+  e && e.preventDefault();
+  const q = $('q').value.trim();
+  if (!q) return;
+  $('auswahl').innerHTML = ''; $('ergebnis').innerHTML = ''; Z.projekt = null;
+  sperre(true); status('Suche in Rentman …');
+  try {
+    const { projekte, andere } = await api('api/suche?q=' + encodeURIComponent(q));
+    if (!projekte.length) {
+      if (andere.length) {
+        status(`Kein bestätigtes Projekt zu „${q}“ gefunden. Es gibt aber: ` + andere.map(p => `${p.name} (${p.status}, ${datum(p.datum)})`).join('; ') + '. Karten gibt es nur für bestätigte Projekte.', 'fehler');
+      } else status(`Kein Projekt zu „${q}“ gefunden.`, 'fehler');
+      sperre(false); return;
+    }
+    if (projekte.length === 1) { await laden(projekte[0]); return; }
+    status(`${projekte.length} Projekte gefunden – bitte auswählen (das nächste Event steht oben):`);
+    $('auswahl').innerHTML = '<div class="treffer">' + projekte.slice(0, 30).map(p =>
+      `<button data-id="${p.id}"><span>${esc(p.name)}</span><small>Nr. ${p.nummer} &middot; ${datum(p.datum)}</small></button>`).join('') + '</div>';
+    $('auswahl').querySelectorAll('button').forEach(b => b.onclick = () => laden(projekte.find(p => p.id == b.dataset.id)));
+  } catch (err) { status(err.message, 'fehler'); }
+  sperre(false);
+}
+
+/* ---------- Karten: Zustand ---------- */
+let Z = { projekt: null, e: [], arten: [] };
+let EINST = { bearbeiten: true };
+let DESIGN = 'neu';       // neues Design ist der Standard, das alte nur noch als Option
+function zeigeDesign() {
+  $('designwahl').innerHTML = DESIGN === 'neu'
+    ? '<button data-a="design" data-d="alt">Altes Design verwenden</button>'
+    : 'Altes Design aktiv. <button data-a="design" data-d="neu">Zum neuen Design wechseln</button>';
+}
+const timers = {}, tokens = {};
+
+function eintraege(e) { return e.karte === 'essen' ? e.abschnitte.flatMap(a => a.items) : e.items; }
+function sauber(e) { return JSON.parse(JSON.stringify(e, (k, v) => k.startsWith('_') ? undefined : v)); }
+function vorbereiten(e) {
+  e._v = { png: null, anzahl: '', warn: [], text: 'Vorschau wird erstellt …', err: false, laedt: true, token: null };
+  e._erg = null; e._edit = false; e.design = DESIGN;
+  eintraege(e).forEach(i => { i.merken = i.merken || i.quelle === 'manuell'; if (e.karte === 'essen') i.allergene = Array.isArray(i.allergene) ? i.allergene.join(', ') : (i.allergene || ''); });
+  return e;
+}
+
+async function laden(p, nur) {
+  if (!nur) { $('auswahl').innerHTML = ''; $('ergebnis').innerHTML = ''; }
+  sperre(true); status(nur ? 'Erstelle Karte …' : `Lade Material von „${p.name}“ aus Rentman …`);
+  try {
+    const r = await post('api/entwurf', { id: p.id, nur });
+    Z.projekt = r.projekt; Z.arten = r.arten;
+    const neu = r.entwuerfe.map(vorbereiten);
+    Z.e = nur ? Z.e.filter(e => e.karte !== nur).concat(neu) : neu;
+    status(''); zeige();
+    neu.forEach(e => vorschau(Z.e.indexOf(e)));
+  } catch (err) { status(err.message, 'fehler'); }
+  sperre(false);
+}
+
+/* ---------- Editor ---------- */
+const BADGES = { stamm: ['stamm', 'Stammliste'], rentman: ['neu', 'neu aus Rentman'], standard: ['stamm', 'Standardliste'], manuell: ['neu', 'manuell'] };
+const badge = q => BADGES[q] ? `<span class="badge ${BADGES[q][0]}">${BADGES[q][1]}</span>` : '';
+const knoepfe = `<span class="pfeile"><button class="klein" data-a="auf" title="nach oben">▲</button><button class="klein" data-a="ab" title="nach unten">▼</button><button class="klein" data-a="weg" title="Eintrag entfernen">✕</button></span>`;
+const haken = (f, an, text) => `<label class="mini"><input type="checkbox" data-f="${f}" ${an ? 'checked' : ''}>${text}</label>`;
+
+function zeileGetraenk(it, i, j) {
+  return `<div class="zeile ${it.aktiv ? '' : 'aus'}" data-e="${i}" data-i="${j}">
+    <input type="checkbox" data-f="aktiv" ${it.aktiv ? 'checked' : ''} title="steht auf der Karte">
+    <input class="name" data-f="name" value="${esc(it.name)}" placeholder="Name">
+    <input class="zut" data-f="zutaten" value="${esc(it.zutaten)}" placeholder="Zutaten">
+    ${haken('alkoholfrei', it.alkoholfrei, 'alkoholfrei')}${knoepfe}${haken('merken', it.merken, 'merken')}${badge(it.quelle)}</div>`;
+}
+function zeileKaffee(it, i, j) {
+  return `<div class="zeile ${it.aktiv ? '' : 'aus'}" data-e="${i}" data-i="${j}">
+    <input type="checkbox" data-f="aktiv" ${it.aktiv ? 'checked' : ''} title="steht auf der Karte">
+    <input class="name" data-f="name" value="${esc(it.name)}" placeholder="Name">
+    <input class="zut" data-f="zusatz" value="${esc(it.zusatz)}" placeholder="Zusatzzeile (optional)">
+    ${Z.e[i].design === 'neu' ? `<select class="abschnitt" data-f="abschnitt" title="Abschnitt auf der Karte (neues Design)">${['COFFEE', 'HOT DRINKS', 'TEA'].map(v => `<option value="${v}" ${(it.abschnitt || 'COFFEE') === v ? 'selected' : ''}>${v}</option>`).join('')}</select>` : ''}
+    ${knoepfe}${badge(it.quelle)}</div>`;
+}
+function zeileSpeise(it, i, s, j) {
+  const sel = v => `<option value="${v}" ${it.ernaehrung === v ? 'selected' : ''}>${v || '–'}</option>`;
+  return `<div class="zeile ${it.aktiv ? '' : 'aus'}" data-e="${i}" data-s="${s}" data-i="${j}">
+    <input type="checkbox" data-f="aktiv" ${it.aktiv ? 'checked' : ''} title="steht auf der Karte">
+    <input class="name" data-f="name" value="${esc(it.name)}" placeholder="Name">
+    <input class="besch" data-f="beschreibung" value="${esc(it.beschreibung)}" placeholder="Beschreibung">
+    <input class="all" data-f="allergene" value="${esc(it.allergene)}" placeholder="Allergene" title="Buchstaben laut Legende, z. B. C, M">
+    <select data-f="ernaehrung" title="vegetarisch (V) / vegan (VG)">${sel('')}${sel('V')}${sel('VG')}</select>
+    ${knoepfe}${haken('merken', it.merken, 'merken')}${badge(it.quelle)}</div>`;
+}
+
+function editor(e, i) {
+  if (e.karte === 'essen') {
+    return e.abschnitte.map((a, s) => `<h4>${esc(a.titel)}</h4>` + a.items.map((it, j) => zeileSpeise(it, i, s, j)).join('') +
+      `<div class="plus"><button class="klein" data-a="plus" data-e="${i}" data-s="${s}">+ Eintrag</button></div>`).join('');
+  }
+  if (e.karte === 'kaffee') {
+    return `<h4>Beschriftung <input data-f="label" data-e="${i}" value="${esc(e.label)}"></h4>` +
+      e.items.map((it, j) => zeileKaffee(it, i, j)).join('') +
+      `<div class="plus"><button class="klein" data-a="plus" data-e="${i}">+ Eintrag</button></div>`;
+  }
+  const teil = frei => e.items.map((it, j) => !!it.alkoholfrei === frei ? zeileGetraenk(it, i, j) : '').join('');
+  return `<h4>Beschriftung <input data-f="label" data-e="${i}" value="${esc(e.label)}"></h4>${teil(false)}
+    <div class="plus"><button class="klein" data-a="plus" data-e="${i}" data-frei="0">+ Eintrag</button></div>
+    <h4>Zweite Abteilung <input data-f="label2" data-e="${i}" value="${esc(e.label2)}"> <span class="mini">(alkoholfreie Drinks)</span></h4>${teil(true)}
+    <div class="plus"><button class="klein" data-a="plus" data-e="${i}" data-frei="1">+ Eintrag</button></div>`;
+}
+
+/* ---------- Darstellung ---------- */
+function warnHtml(e) {
+  const alle = [...new Set([...(e.warnungen || []), ...e._v.warn])];
+  return alle.length ? `<div class="warn"><b>Bitte prüfen</b><ul>${alle.map(w => `<li>${esc(w)}</li>`).join('')}</ul></div>` : '';
+}
+function ergHtml(e) {
+  const g = e._erg; if (!g) return '';
+  if (g.text) return `<div class="ok">${g.text}</div>` + (g.fehler ? `<p class="fehler">${esc(g.fehler)}</p>` : '');
+  return `<div class="ok"><b>Gespeichert:</b> ${esc(g.pfad)}${g.umbenannt ? '<br>Der Dateiname war im Ordner schon vergeben, deshalb wurde die Nummer angehängt.' : ''}${g.gemerkt ? `<br>${g.gemerkt} Eintrag/Einträge in die Stammliste gemerkt.` : ''}</div>
+    <div class="aktion"><button class="zweit" data-a="zeigen" data-pfad="${esc(g.pfad)}">Im Ordner zeigen</button></div>` + (g.fehler ? `<p class="fehler">${esc(g.fehler)}</p>` : '');
+}
+function aktionen(e, i) {
+  return `<div class="aktion">
+    ${EINST.web ? '' : `<button id="sp${i}" data-a="speichern" data-e="${i}">PDF speichern</button>`}
+    <a class="btn${EINST.web ? '' : ' zweit'}" id="dl${i}" href="#" download="${esc(e.datei)}" data-a="dl" data-e="${i}" aria-disabled="true">PDF downloaden</a>
+    ${e._edit || !EINST.bearbeiten ? '' : `<button class="zweit" data-a="bearbeiten" data-e="${i}">Bearbeiten</button>`}</div>`;
+}
+
+function panel(e, i) {
+  const knopfBlock = `${aktionen(e, i)}<div id="erg${i}">${ergHtml(e)}</div>`;      // Ansicht: rechts, Bearbeiten: unter der Vorschau
+  const vorschau = `<div class="vorschau"><img id="img${i}" alt="Vorschau ${esc(e.titel)}"><div class="vs" id="vs${i}"></div>${e._edit ? knopfBlock : ''}</div>`;
+  const mitte = e._edit
+    ? `<div class="editor"><div class="leiste"><button class="zweit" data-a="fertig" data-e="${i}">Bearbeiten beenden</button></div>
+        <div id="warn${i}">${warnHtml(e)}</div>${editor(e, i)}</div>`
+    : `<div class="info"><div id="warn${i}">${warnHtml(e)}</div>
+        <p class="hinweis">Die Karte wurde aus Rentman erstellt und noch <b>nicht gespeichert</b>.${EINST.bearbeiten ? ' Mit <i>Bearbeiten</i> kannst du Einträge, Texte und Reihenfolge ändern.' : ''}</p>${knopfBlock}</div>`;
+  return `<section class="karte" data-e="${i}">
+    <div class="kopf"><h3>${esc(e.titel)}</h3><span class="anz" id="anz${i}">${esc(e._v.anzahl)}</span></div>
+    <div class="spalten ${e._edit ? 'edit' : 'ansicht'}">${vorschau}${mitte}</div></section>`;
+}
+
+function zeige() {
+  const p = Z.projekt; if (!p) return;
+  const kopf = `${esc(p.name)} <span class="leer">&middot; Nr. ${p.nummer} &middot; ${datum(p.datum)}</span>`;
+  let h = `<h2>${kopf}</h2>`;
+  if (!Z.e.length) h += '<p class="leer">In diesem Projekt ist weder Getränke-, Kaffee- noch Catering-Material gebucht, daher wurde keine Karte erzeugt.</p>';
+  else h += Z.e.map(panel).join('');
+  $('ergebnis').innerHTML = h;
+  Z.e.forEach((e, i) => zeigeVs(i));
+}
+
+function zeigeVs(i) {
+  const e = Z.e[i]; if (!e || !$('img' + i)) return;
+  if (e._v.png) $('img' + i).src = 'data:image/png;base64,' + e._v.png;
+  $('vs' + i).textContent = e._v.text || ''; $('vs' + i).className = 'vs' + (e._v.err ? ' err' : '');
+  $('anz' + i).textContent = e._v.anzahl || ''; $('warn' + i).innerHTML = warnHtml(e);
+  const bereit = !e._v.laedt && !!e._v.token;               // PDF erst anbieten, wenn die Vorschau aktuell ist
+  const dl = $('dl' + i); dl.setAttribute('aria-disabled', bereit ? 'false' : 'true');
+  dl.href = bereit ? 'api/pdf?t=' + e._v.token : '#'; dl.setAttribute('download', e.datei);
+  if ($('sp' + i)) $('sp' + i).disabled = e._v.laedt;
+}
+
+/* ---------- Vorschau ---------- */
+function plane(i) {
+  const e = Z.e[i]; e._v.laedt = true; e._v.text = 'Vorschau wird aktualisiert …'; e._v.err = false; zeigeVs(i);
+  clearTimeout(timers[i]); timers[i] = setTimeout(() => vorschau(i), 600);
+}
+async function vorschau(i) {
+  const e = Z.e[i]; if (!e) return;
+  const t = tokens[i] = (tokens[i] || 0) + 1;
+  try {
+    const r = await post('api/vorschau', { entwurf: sauber(e) });
+    if (t !== tokens[i]) return;
+    e._v = { png: r.png, anzahl: r.anzahl, warn: r.warnungen, text: '', err: false, laedt: false, token: r.token };
+    e.datei = r.datei;
+  } catch (err) { if (t !== tokens[i]) return; e._v.text = err.message; e._v.err = true; e._v.laedt = false; e._v.token = null; }
+  zeigeVs(i);
+}
+
+/* ---------- Speichern (Ordner waehlen) und Downloaden ---------- */
+function gemerktVerbuchen(e) { eintraege(e).forEach(it => { if (it.merken) { it.merken = false; it.quelle = it.quelle === 'standard' ? 'standard' : 'stamm'; } }); }
+
+async function speichern(indizes) {
+  const meldung = '<div class="ok">Bitte im geöffneten Dialog den Ordner auswählen (der Dialog kann hinter dem Browserfenster liegen) …</div>';
+  indizes.forEach(i => { const el = $('erg' + i); if (el) el.innerHTML = meldung; });
+  let r;
+  try { r = await post('api/speichern', { entwuerfe: indizes.map(i => sauber(Z.e[i])) }); }
+  catch (err) { indizes.forEach(i => { Z.e[i]._erg = { text: '', fehler: err.message }; }); zeige(); return; }
+  if (r.abgebrochen) { indizes.forEach(i => { const el = $('erg' + i); if (el) el.innerHTML = '<p class="leer">Speichern abgebrochen.</p>'; }); return; }
+  indizes.forEach((i, k) => {
+    const e = Z.e[i], d = r.dateien[k];
+    e._erg = { pfad: d.pfad, umbenannt: d.umbenannt, gemerkt: k === 0 ? r.gemerkt : 0, fehler: r.speicherfehler };
+    gemerktVerbuchen(e);
+  });
+  const y = window.scrollY; zeige(); window.scrollTo(0, y);
+}
+
+function downloadStarten(ev, i) {
+  const e = Z.e[i];
+  if (e._v.laedt || !e._v.token) { ev.preventDefault(); return; }      // Vorschau noch nicht fertig
+  const merken = eintraege(e).some(it => it.merken);
+  if (merken) {                                                          // Stammliste bedienen, ohne den Download zu stoeren
+    navigator.sendBeacon('api/merken', new Blob([JSON.stringify({ entwurf: sauber(e) })], { type: 'application/json' }));
+    gemerktVerbuchen(e);
+  }
+  e._erg = { text: `<b>Heruntergeladen:</b> ${esc(e.datei)} (in den Download-Ordner deines Browsers).${merken ? '<br>Markierte Einträge wurden in die Stammliste gemerkt.' : ''}` };
+  $('erg' + i).innerHTML = ergHtml(e);
+}
+
+/* ---------- Bearbeiten (Ereignisse) ---------- */
+function zeileInfo(el) {
+  const z = el.closest('.zeile'); if (!z) return null;
+  const e = Z.e[+z.dataset.e];
+  const liste = e.karte === 'essen' ? e.abschnitte[+z.dataset.s].items : e.items;
+  return { e, i: +z.dataset.e, liste, j: +z.dataset.i, z };
+}
+const TEXTFELDER = ['name', 'zutaten', 'zusatz', 'beschreibung', 'allergene', 'ernaehrung'];
+
+function aenderung(ev) {
+  const f = ev.target.dataset.f; if (!f) return;
+  const info = zeileInfo(ev.target);
+  if (!info) {                                   // Beschriftung (label/label2) der Karte
+    const e = Z.e[+ev.target.dataset.e]; e[f] = ev.target.value; plane(+ev.target.dataset.e); return;
+  }
+  const it = info.liste[info.j];
+  it[f] = ev.target.type === 'checkbox' ? ev.target.checked : ev.target.value;
+  if (TEXTFELDER.includes(f) && info.e.karte !== 'kaffee' && !it.merken) {   // geaendert -> fuer die Stammliste vormerken
+    it.merken = true; const m = info.z.querySelector('[data-f=merken]'); if (m) m.checked = true;
+  }
+  if (f === 'aktiv') info.z.classList.toggle('aus', !it.aktiv);
+  if (f === 'alkoholfrei') { const y = window.scrollY; zeige(); window.scrollTo(0, y); }
+  plane(info.i);
+}
+
+function bewege(info, richtung) {
+  const { liste, j, e } = info, gleich = k => e.karte !== 'getraenke' || !!liste[k].alkoholfrei === !!liste[j].alkoholfrei;
+  for (let k = j + richtung; k >= 0 && k < liste.length; k += richtung) if (gleich(k)) { [liste[j], liste[k]] = [liste[k], liste[j]]; return true; }
+  return false;
+}
+
+async function klick(ev) {
+  const b = ev.target.closest('[data-a]'); if (!b) return;
+  const a = b.dataset.a, y = window.scrollY, neuZeichnen = () => { zeige(); window.scrollTo(0, y); };
+  if (a === 'dl') { downloadStarten(ev, +b.dataset.e); return; }
+  if (a === 'design') {
+    DESIGN = b.dataset.d; try { localStorage.setItem('design2', DESIGN); } catch (err) { }
+    zeigeDesign(); Z.e.forEach((e, i) => { e.design = DESIGN; e._erg = null; }); neuZeichnen(); Z.e.forEach((e, i) => plane(i)); return;
+  }        // normaler Link-Download, nicht abbrechen
+  if (a === 'auf' || a === 'ab' || a === 'weg') {
+    const info = zeileInfo(b); if (!info) return;
+    if (a === 'weg') info.liste.splice(info.j, 1); else if (!bewege(info, a === 'auf' ? -1 : 1)) return;
+    neuZeichnen(); plane(info.i);
+  } else if (a === 'plus') {
+    const i = +b.dataset.e, e = Z.e[i], neu = { key: '', name: '', aktiv: true, quelle: 'manuell', merken: true };
+    if (e.karte === 'essen') e.abschnitte[+b.dataset.s].items.push({ ...neu, beschreibung: '', allergene: '', ernaehrung: '' });
+    else if (e.karte === 'kaffee') e.items.push({ ...neu, zusatz: '', merken: false });
+    else e.items.push({ ...neu, zutaten: '', alkoholfrei: b.dataset.frei === '1' });
+    neuZeichnen();
+  } else if (a === 'bearbeiten') { Z.e[+b.dataset.e]._edit = true; neuZeichnen(); }
+  else if (a === 'fertig') { Z.e[+b.dataset.e]._edit = false; neuZeichnen(); }
+  else if (a === 'speichern') { await speichern([+b.dataset.e]); }
+  else if (a === 'zusatz') { laden(Z.projekt, b.dataset.art); }
+  else if (a === 'zeigen') {
+    try { await post('api/zeigen', { pfad: b.dataset.pfad }); } catch (err) { status(err.message, 'fehler'); }
+  }
+}
+
+$('form').addEventListener('submit', suchen);
+$('ergebnis').addEventListener('input', aenderung);
+$('ergebnis').addEventListener('click', klick);
+$('designwahl').addEventListener('click', klick);
+api('api/einstellungen').then(e => {
+  EINST = e; DESIGN = e.design || 'neu';
+  try { const d = localStorage.getItem('design2'); if (d === 'alt' || d === 'neu') DESIGN = d; } catch (err) { }
+  zeigeDesign();
+  if (e.web && e.schriften) zeigeSchriften(e.schriften);
+}).catch(() => { zeigeDesign(); });
+if (!matchMedia('(pointer:coarse)').matches) $('q').focus();      // am Handy nicht sofort die Tastatur aufklappen
+bald(); stand();
+
+// Webbetrieb: lizenzpflichtige Schriften werden hier einmalig auf den Server hochgeladen (nie ins Repository)
+function zeigeSchriften(liste) {
+  const el = $('schriften'); el.hidden = false;
+  el.innerHTML = '<summary>Schriften für die Karten</summary><p>Die vollständigen Schriften sind lizenzpflichtig und liegen nicht im Programm. Ohne sie fehlen einzelne Zeichen in Überschriften (Ersatzschrift Montserrat).</p>' +
+    liste.map(f => `<label>${esc(f.titel)}: <b>${f.da ? 'vorhanden' : 'fehlt'}</b> <input type="file" accept=".otf,.ttf" data-schrift="${esc(f.name)}"></label>`).join('');
+}
+$('schriften').addEventListener('change', async ev => {
+  const inp = ev.target.closest('input[data-schrift]'); if (!inp || !inp.files[0]) return;
+  try {
+    const r = await fetch('api/schrift?name=' + encodeURIComponent(inp.dataset.schrift), { method: 'POST', body: inp.files[0] });
+    const j = await r.json(); if (!r.ok) throw new Error(j.fehler || 'Fehler');
+    const e = await api('api/einstellungen'); zeigeSchriften(e.schriften); status('Schrift gespeichert. Neu geladene Karten nutzen sie sofort.');
+  } catch (err) { status(err.message, 'fehler'); }
+});
+</script>
+</body>
+</html>
