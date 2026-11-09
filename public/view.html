@@ -29,24 +29,29 @@
       font-size: 15px; font-weight: 600; color: var(--text);
       overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; min-width: 0;
     }
-    .view-main { flex: 1; min-height: 0; }
-    .view-frame { width: 100%; height: 100%; border: none; background: var(--surface); }
-    .view-media { display: flex; align-items: center; justify-content: center; height: 100%; padding: 16px; box-sizing: border-box; }
+    .view-main {
+      flex: 1; min-height: 0; overflow-y: auto; -webkit-overflow-scrolling: touch;
+      margin: 0; padding: 0; max-width: none; width: 100%;
+    }
+    .view-media { display: flex; align-items: center; justify-content: center; min-height: 100%; padding: 16px; box-sizing: border-box; }
     .view-media img, .view-media video { max-width: 100%; max-height: 100%; border-radius: var(--radius-sm); }
     .view-media audio { width: 100%; max-width: 420px; }
     .view-fallback {
       display: flex; flex-direction: column; align-items: center; justify-content: center;
-      height: 100%; gap: 16px; color: var(--text-secondary); text-align: center; padding: 24px; box-sizing: border-box;
+      min-height: 100%; gap: 16px; color: var(--text-secondary); text-align: center; padding: 24px; box-sizing: border-box;
     }
+    .view-loading { display: flex; align-items: center; justify-content: center; min-height: 100%; }
+    .pdf-pages { display: flex; flex-direction: column; align-items: center; gap: 12px; padding: 12px; box-sizing: border-box; }
+    .pdf-page-canvas { max-width: 100%; height: auto; border-radius: var(--radius-sm); background: #fff; box-shadow: 0 2px 14px rgba(0,0,0,0.4); }
   </style>
 </head>
 <body>
   <header class="view-header">
-    <button class="view-back" onclick="goBack()">← Zurück</button>
+    <button class="view-back" id="backBtn">← Zurück</button>
     <div class="view-title" id="viewTitle">Dokument</div>
   </header>
   <main class="view-main" id="viewMain"></main>
 
-  <script src="/js/view.js"></script>
+  <script type="module" src="/js/view.js"></script>
 </body>
 </html>
