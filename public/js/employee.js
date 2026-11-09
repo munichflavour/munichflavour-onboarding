@@ -94,6 +94,7 @@ function renderBrowser() {
   const folder = currentFolderId ? allFolders.find(f => f.id === currentFolderId) : null;
   const breadcrumbRow = document.getElementById('breadcrumbRow');
   const folderTitle = document.getElementById('folderTitle');
+  updateAnnouncementsVisibility();
 
   if (currentFolderId) {
     breadcrumbRow.classList.remove('hidden');
@@ -227,12 +228,16 @@ async function loadAnnouncements() {
   renderAnnouncements();
 }
 
+// Ankündigungen nur auf der Startseite zeigen – stören sonst beim Stöbern in Ordnern.
+function updateAnnouncementsVisibility() {
+  document.getElementById('announcementsSection').classList.toggle('hidden', !allAnnouncements.length || !!currentFolderId);
+}
+
 function renderAnnouncements() {
-  const section = document.getElementById('announcementsSection');
   const list = document.getElementById('announcementsList');
   const moreBtn = document.getElementById('announcementsMore');
-  if (!allAnnouncements.length) { section.classList.add('hidden'); return; }
-  section.classList.remove('hidden');
+  updateAnnouncementsVisibility();
+  if (!allAnnouncements.length) return;
   const visible = announcementsExpanded ? allAnnouncements : allAnnouncements.slice(0, 3);
   list.innerHTML = visible.map(a => announcementHtml(a)).join('');
   if (allAnnouncements.length > 3) {
