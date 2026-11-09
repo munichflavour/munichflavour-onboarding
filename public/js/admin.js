@@ -236,7 +236,7 @@ function renderFolder(folder) {
 function renderDocItem(doc) {
   const row=document.createElement('div'); row.className='doc-row';
   const ext = doc.original_name.split('.').pop().toLowerCase();
-  const icon = ['pdf'].includes(ext)?'📕':['doc','docx'].includes(ext)?'📘':['xls','xlsx'].includes(ext)?'📗':['jpg','jpeg','png','gif','webp'].includes(ext)?'🖼️':'📄';
+  const icon = ['pdf'].includes(ext)?'📄':['doc','docx'].includes(ext)?'📘':['xls','xlsx'].includes(ext)?'📗':['jpg','jpeg','png','gif','webp'].includes(ext)?'🖼️':'📄';
   const badge = isNew(doc.uploaded_at) ? '<span class="badge-new">Neu</span>' : '';
   const date = new Date(doc.uploaded_at+'Z').toLocaleDateString('de-DE');
   row.innerHTML=`<a href="/api/documents/${doc.id}/view" target="_blank" class="doc-item" title="Ansehen">
