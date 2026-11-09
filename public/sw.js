@@ -72,6 +72,12 @@ self.addEventListener('fetch', event => {
     return;
   }
 
+  // pdf.js (für die Dokumenten-Vorschau): ändert sich nie, nach erstem Laden aus dem Cache
+  if (url.pathname.startsWith('/vendor/pdfjs/')) {
+    event.respondWith(cacheFirst(request, STATIC_CACHE));
+    return;
+  }
+
   // Dokumentenliste & Ankündigungen: frisch wenn online, sonst letzter bekannter Stand
   if (url.pathname === '/api/documents' || url.pathname === '/api/announcements') {
     event.respondWith(networkFirst(request, RUNTIME_CACHE));
