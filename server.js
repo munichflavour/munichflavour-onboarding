@@ -73,7 +73,34 @@ db.exec(`
     updated_at TEXT DEFAULT (datetime('now')),
     FOREIGN KEY (user_id) REFERENCES users(id)
   );
+
+  CREATE TABLE IF NOT EXISTS overtime_history (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    hours REAL NOT NULL,
+    note TEXT,
+    created_at TEXT DEFAULT (datetime('now')),
+    FOREIGN KEY (user_id) REFERENCES users(id)
+  );
+
+  CREATE TABLE IF NOT EXISTS announcement_reads (
+    announcement_id INTEGER NOT NULL,
+    user_id INTEGER NOT NULL,
+    seen_at TEXT DEFAULT (datetime('now')),
+    confirmed_at TEXT,
+    PRIMARY KEY (announcement_id, user_id),
+    FOREIGN KEY (announcement_id) REFERENCES announcements(id),
+    FOREIGN KEY (user_id) REFERENCES users(id)
+  );
 `);
+
+// Schema-Ergänzungen an bestehenden Tabellen (idempotent, sicher für vorhandene Daten).
+function ensureColumn(table, column, ddl) {
+  const cols = db.prepare(`PRAGMA table_info(${table})`).all().map(c => c.name);
+  if (!cols.includes(column)) db.exec(`ALTER TABLE ${table} ADD COLUMN ${ddl}`);
+}
+ensureColumn('announcements', 'requires_confirmation', 'requires_confirmation INTEGER NOT NULL DEFAULT 0');
+ensureColumn('users', 'last_login_at', 'last_login_at TEXT');
 
 // ===== VAPID =====
 let vapidPublicKey, vapidPrivateKey;
@@ -279,11 +306,16 @@ app.post('/api/login', loginRateLimit, (req, res) => {
   clearLoginFailures(req);
   req.session.userId = user.id;
   req.session.role = user.role;
+  // Vorherigen Besuchszeitpunkt in der Session merken (für den "seit deinem letzten
+  // Besuch"-Hinweis), bevor er auf jetzt überschrieben wird.
+  req.session.previousLoginAt = user.last_login_at || null;
+  db.prepare('UPDATE users SET last_login_at = datetime(\'now\') WHERE id = ?').run(user.id);
   res.json({ role: user.role, fullName: user.full_name });
 });
 app.post('/api/logout', (req, res) => { req.session.destroy(() => res.json({ ok: true })); });
 app.get('/api/me', requireAuth, (req, res) => {
-  res.json(db.prepare('SELECT id, username, full_name, role FROM users WHERE id = ?').get(req.session.userId));
+  const me = db.prepare('SELECT id, username, full_name, role FROM users WHERE id = ?').get(req.session.userId);
+  res.json({ ...me, previousLoginAt: req.session.previousLoginAt || null });
 });
 
 // ===== ADMIN: EMPLOYEES =====
@@ -312,26 +344,33 @@ app.delete('/api/admin/employees/:id', requireAdmin, (req, res) => {
   if (!user) return res.status(404).json({ error: 'Nicht gefunden' });
   db.prepare('DELETE FROM push_subscriptions WHERE user_id = ?').run(req.params.id);
   db.prepare('DELETE FROM overtime_balances WHERE user_id = ?').run(req.params.id);
+  db.prepare('DELETE FROM overtime_history WHERE user_id = ?').run(req.params.id);
+  db.prepare('DELETE FROM announcement_reads WHERE user_id = ?').run(req.params.id);
   db.prepare('DELETE FROM users WHERE id = ?').run(req.params.id);
   res.json({ ok: true });
 });
 
 // ===== ÜBERSTUNDENKONTO =====
-// Einfacher Saldo pro Mitarbeiter (kein Buchungsverlauf) – der Admin pflegt den
-// aktuellen Stand analog zur bisherigen Excel-Liste.
+// Aktueller Stand bleibt ein einfacher Saldo (wie bisher per Excel gepflegt); zusätzlich
+// wird seit Einführung des Verlaufs jede Änderung in overtime_history protokolliert, damit
+// Mitarbeiter nachvollziehen können, wie der Stand zustande kam.
 app.get('/api/overtime', requireAuth, (req, res) => {
   const row = db.prepare('SELECT hours, updated_at FROM overtime_balances WHERE user_id = ?').get(req.session.userId);
-  res.json(row || null);
+  if (!row) return res.json(null);
+  const history = db.prepare('SELECT hours, note, created_at FROM overtime_history WHERE user_id = ? ORDER BY created_at DESC LIMIT 10').all(req.session.userId);
+  res.json({ ...row, history });
 });
 app.put('/api/admin/employees/:id/overtime', requireAdmin, async (req, res) => {
   const user = db.prepare(`SELECT id, full_name FROM users WHERE id = ? AND role = 'employee'`).get(req.params.id);
   if (!user) return res.status(404).json({ error: 'Nicht gefunden' });
   const hours = Number(req.body.hours);
   if (!Number.isFinite(hours)) return res.status(400).json({ error: 'Ungültiger Stundenwert' });
+  const note = (req.body.note || '').trim() || null;
   db.prepare(`
     INSERT INTO overtime_balances (user_id, hours, updated_at) VALUES (?, ?, datetime('now'))
     ON CONFLICT(user_id) DO UPDATE SET hours = excluded.hours, updated_at = excluded.updated_at
   `).run(user.id, hours);
+  db.prepare('INSERT INTO overtime_history (user_id, hours, note) VALUES (?, ?, ?)').run(user.id, hours, note);
   const formatted = hours.toLocaleString('de-DE', { minimumFractionDigits: 0, maximumFractionDigits: 2 });
   sendPushToUser(user.id, '⏱ Überstunden aktualisiert', `Dein Überstunden-Stand wurde auf ${formatted} Std. aktualisiert.`);
   res.json({ ok: true, hours });
@@ -422,16 +461,41 @@ app.delete('/api/admin/documents/:id', requireAdmin, (req, res) => {
 
 // ===== ANNOUNCEMENTS =====
 app.get('/api/announcements', requireAuth, (req, res) => {
-  res.json(db.prepare('SELECT * FROM announcements ORDER BY created_at DESC LIMIT 20').all());
+  const rows = db.prepare('SELECT * FROM announcements ORDER BY created_at DESC LIMIT 20').all();
+  // Implizites "gesehen": wer eine Ankündigung abruft, hat sie gesehen. Legt pro
+  // Mitarbeiter+Ankündigung höchstens einmal eine Zeile an (erster Abruf zählt).
+  const markSeen = db.prepare('INSERT OR IGNORE INTO announcement_reads (announcement_id, user_id) VALUES (?, ?)');
+  rows.forEach(a => markSeen.run(a.id, req.session.userId));
+  const myReads = db.prepare('SELECT announcement_id, confirmed_at FROM announcement_reads WHERE user_id = ?').all(req.session.userId);
+  const confirmedById = new Map(myReads.map(r => [r.announcement_id, r.confirmed_at]));
+  res.json(rows.map(a => ({ ...a, confirmed: !!confirmedById.get(a.id) })));
+});
+app.post('/api/announcements/:id/confirm', requireAuth, (req, res) => {
+  const ann = db.prepare('SELECT id FROM announcements WHERE id = ?').get(req.params.id);
+  if (!ann) return res.status(404).json({ error: 'Nicht gefunden' });
+  db.prepare('INSERT OR IGNORE INTO announcement_reads (announcement_id, user_id) VALUES (?, ?)').run(ann.id, req.session.userId);
+  db.prepare('UPDATE announcement_reads SET confirmed_at = datetime(\'now\') WHERE announcement_id = ? AND user_id = ?').run(ann.id, req.session.userId);
+  res.json({ ok: true });
+});
+// Admin-Ansicht mit Gelesen-/Bestätigt-Zahlen je Ankündigung.
+app.get('/api/admin/announcements', requireAdmin, (req, res) => {
+  const totalEmployees = db.prepare(`SELECT COUNT(*) AS n FROM users WHERE role = 'employee'`).get().n;
+  const rows = db.prepare('SELECT * FROM announcements ORDER BY created_at DESC LIMIT 20').all();
+  const countStmt = db.prepare(`
+    SELECT COUNT(*) AS seen, COUNT(confirmed_at) AS confirmed
+    FROM announcement_reads WHERE announcement_id = ?
+  `);
+  res.json(rows.map(a => ({ ...a, totalEmployees, ...countStmt.get(a.id) })));
 });
 app.post('/api/admin/announcements', requireAdmin, (req, res) => {
-  const { title, body } = req.body;
+  const { title, body, requires_confirmation } = req.body;
   if (!title || !title.trim()) return res.status(400).json({ error: 'Titel erforderlich' });
-  const result = db.prepare('INSERT INTO announcements (title, body) VALUES (?, ?)').run(title.trim(), (body||'').trim());
+  const result = db.prepare('INSERT INTO announcements (title, body, requires_confirmation) VALUES (?, ?, ?)').run(title.trim(), (body||'').trim(), requires_confirmation ? 1 : 0);
   sendPushToAllEmployees('📢 ' + title.trim(), (body||'').trim() || 'Neue Ankündigung im Portal.');
   res.json({ id: result.lastInsertRowid });
 });
 app.delete('/api/admin/announcements/:id', requireAdmin, (req, res) => {
+  db.prepare('DELETE FROM announcement_reads WHERE announcement_id = ?').run(req.params.id);
   db.prepare('DELETE FROM announcements WHERE id = ?').run(req.params.id);
   res.json({ ok: true });
 });

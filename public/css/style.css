@@ -631,7 +631,8 @@ canvas.sig-pad {
   border-radius: var(--radius);
   margin-bottom: 16px;
 }
-.push-reminder-banner span.push-reminder-text { flex: 1; }
+.push-reminder-banner .push-reminder-text { flex: 1; }
+.push-reminder-banner .push-reminder-list { font-weight: 400; opacity: 0.8; margin-top: 2px; font-size: 12px; }
 .push-reminder-banner button.push-reminder-enable {
   background: var(--white);
   color: var(--black);
@@ -653,6 +654,37 @@ canvas.sig-pad {
   flex-shrink: 0;
   padding: 4px;
 }
+
+/* ===== "Seit deinem letzten Besuch" ===== */
+.visit-summary {
+  background: var(--gray-light);
+  border-radius: var(--radius);
+  padding: 10px 14px;
+  font-size: 13px;
+  color: var(--gray-dark);
+  margin-bottom: 16px;
+}
+
+/* ===== Überstunden-Verlauf ===== */
+.overtime-history-toggle {
+  background: none;
+  border: none;
+  color: var(--black);
+  font-size: 12px;
+  font-weight: 600;
+  text-decoration: underline;
+  cursor: pointer;
+  padding: 8px 0 0;
+}
+.overtime-history-list { margin-top: 8px; border-top: 1px solid var(--gray-mid); padding-top: 8px; }
+.overtime-history-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 13px;
+  padding: 4px 0;
+}
+.overtime-history-row span:last-child { font-weight: 600; flex-shrink: 0; }
 
 /* ===== "Neu"-Kennzeichnung ===== */
 .badge-new {
@@ -697,6 +729,13 @@ canvas.sig-pad {
   margin-top: 6px;
 }
 
+.announcement-confirmed {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--green, #2d7a4f);
+  margin-top: 8px;
+}
+
 .announcement-more {
   display: block;
   text-align: center;
@@ -719,6 +758,7 @@ canvas.sig-pad {
 }
 .announcement-admin-row:last-child { border-bottom: none; }
 .announcement-admin-content { flex: 1; min-width: 0; }
+.announcement-admin-stats { font-size: 12px; color: var(--gray-dark); margin-top: 6px; }
 
 /* ===== Responsive ===== */
 @media (max-width: 480px) {

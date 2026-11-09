@@ -6,25 +6,64 @@ let searchTimeout = null;
 
 const NEW_THRESHOLD_MS = 7 * 24 * 60 * 60 * 1000; // 7 Tage
 
+let previousLoginAt = null;
+
 async function init() {
   const me = await apiFetch('/api/me');
-  if (me) document.getElementById('headerSub').textContent = me.full_name;
+  if (me) {
+    document.getElementById('headerSub').textContent = me.full_name;
+    previousLoginAt = me.previousLoginAt;
+  }
   await loadDocuments();
   await loadAnnouncements();
   await loadOvertime();
+  renderVisitSummary();
   initPushButton();
   initOfflineBanner();
 }
 
+// ===== "SEIT DEINEM LETZTEN BESUCH" =====
+function renderVisitSummary() {
+  const el = document.getElementById('visitSummary');
+  if (!el || !previousLoginAt) { if (el) el.classList.add('hidden'); return; }
+  const since = Date.parse(previousLoginAt + 'Z');
+  const newDocs = allDocuments.filter(d => Date.parse(d.uploaded_at + 'Z') > since).length;
+  const newAnns = allAnnouncements.filter(a => Date.parse(a.created_at + 'Z') > since).length;
+  if (!newDocs && !newAnns) { el.classList.add('hidden'); return; }
+  const parts = [];
+  if (newDocs) parts.push(`${newDocs} ${newDocs === 1 ? 'neues Dokument' : 'neue Dokumente'}`);
+  if (newAnns) parts.push(`${newAnns} ${newAnns === 1 ? 'neue Ankündigung' : 'neue Ankündigungen'}`);
+  el.textContent = `${parts.join(', ')} seit deinem letzten Besuch`;
+  el.classList.remove('hidden');
+}
+
 // ===== ÜBERSTUNDENKONTO =====
+function formatHours(hours) {
+  const sign = hours > 0 ? '+' : '';
+  return `${sign}${Number(hours).toLocaleString('de-DE', { minimumFractionDigits: 0, maximumFractionDigits: 2 })} Std.`;
+}
 async function loadOvertime() {
   const data = await apiFetch('/api/overtime');
   const card = document.getElementById('overtimeCard');
   if (!data) { card.classList.add('hidden'); return; }
-  const sign = data.hours > 0 ? '+' : '';
-  document.getElementById('overtimeValue').textContent = `${sign}${Number(data.hours).toLocaleString('de-DE', { minimumFractionDigits: 0, maximumFractionDigits: 2 })} Std.`;
+  document.getElementById('overtimeValue').textContent = formatHours(data.hours);
   document.getElementById('overtimeDate').textContent = `Stand: ${new Date(data.updated_at + 'Z').toLocaleDateString('de-DE')}`;
+  const historyToggle = document.getElementById('overtimeHistoryToggle');
+  const historyList = document.getElementById('overtimeHistoryList');
+  if (data.history && data.history.length) {
+    historyToggle.classList.remove('hidden');
+    historyList.innerHTML = data.history.map(h => `<div class="overtime-history-row">
+      <span>${new Date(h.created_at + 'Z').toLocaleDateString('de-DE')}${h.note ? ' · ' + escHtml(h.note) : ''}</span>
+      <span>${formatHours(h.hours)}</span>
+    </div>`).join('');
+  } else {
+    historyToggle.classList.add('hidden');
+    historyList.classList.add('hidden');
+  }
   card.classList.remove('hidden');
+}
+function toggleOvertimeHistory() {
+  document.getElementById('overtimeHistoryList').classList.toggle('hidden');
 }
 
 async function loadDocuments() {
@@ -211,11 +250,24 @@ function toggleAnnouncements() {
 
 function announcementHtml(a) {
   const date = new Date(a.created_at + 'Z').toLocaleDateString('de-DE');
+  const confirmArea = a.requires_confirmation
+    ? (a.confirmed
+        ? `<div class="announcement-confirmed">✓ Bestätigt</div>`
+        : `<button class="btn btn-primary btn-sm" style="margin-top:8px;" onclick="confirmAnnouncement(${a.id})">Bestätigen</button>`)
+    : '';
   return `<div class="announcement-card">
     <div class="announcement-title">📢 ${escHtml(a.title)}</div>
     ${a.body ? `<div class="announcement-body">${escHtml(a.body)}</div>` : ''}
     <div class="announcement-date">${date}</div>
+    ${confirmArea}
   </div>`;
+}
+async function confirmAnnouncement(id) {
+  const r = await apiFetch(`/api/announcements/${id}/confirm`, { method: 'POST' });
+  if (!r?.ok) { alert('Fehler beim Bestätigen'); return; }
+  const a = allAnnouncements.find(x => x.id === id);
+  if (a) a.confirmed = true;
+  renderAnnouncements();
 }
 
 // ===== OFFLINE-HINWEIS =====
@@ -302,11 +354,14 @@ async function togglePush() {
 
 async function logout() { await fetch('/api/logout', { method:'POST' }); window.location.href = '/login.html'; }
 
-async function apiFetch(url) {
+async function apiFetch(url, opts) {
   try {
-    const res = await fetch(url);
+    const res = await fetch(url, opts);
     if (res.status === 401) { window.location.href = '/login.html'; return null; }
-    return await res.json();
+    if (!opts) return await res.json();
+    const ct = res.headers.get('content-type') || '';
+    const data = ct.includes('application/json') ? await res.json() : {};
+    return { ok: res.ok, status: res.status, data };
   } catch (err) {
     return null; // offline / Netzwerkfehler – Aufrufer zeigt ggf. zwischengespeicherte Inhalte
   }
