@@ -88,7 +88,7 @@ async function loadEmployees() {
   document.getElementById('empLoading').classList.add('hidden');
   const list = document.getElementById('employeeList');
   if (!r.data.length) {
-    list.innerHTML = '<div style="padding:24px;text-align:center;color:#888;font-size:14px;">Noch keine Mitarbeiter angelegt.</div>';
+    list.innerHTML = '<div style="padding:24px;text-align:center;color:var(--text-tertiary);font-size:14px;">Noch keine Mitarbeiter angelegt.</div>';
     return;
   }
   list.innerHTML = r.data.map(emp => {
@@ -201,7 +201,7 @@ function renderDocTree() {
   const rootFolders = docData.folders.filter(f=>!f.parent_id);
   const rootDocs = docData.documents.filter(d=>!d.folder_id);
   if (!rootFolders.length && !rootDocs.length) {
-    container.innerHTML = '<div style="text-align:center;padding:32px;color:#888;font-size:14px;">Noch keine Dokumente. Ordner oder Datei hinzufügen.</div>';
+    container.innerHTML = '<div style="text-align:center;padding:32px;color:var(--text-tertiary);font-size:14px;">Noch keine Dokumente. Ordner oder Datei hinzufügen.</div>';
     return;
   }
   rootFolders.forEach(f => container.appendChild(renderFolder(f)));
@@ -265,7 +265,7 @@ function onAdminSearch(val) {
   resEl.classList.remove('hidden');
   resEl.innerHTML = '';
   if (!results.length) {
-    resEl.innerHTML = '<div style="text-align:center;padding:32px;color:#888;font-size:14px;">Keine Dokumente gefunden.</div>';
+    resEl.innerHTML = '<div style="text-align:center;padding:32px;color:var(--text-tertiary);font-size:14px;">Keine Dokumente gefunden.</div>';
   } else {
     results.forEach(d => resEl.appendChild(renderDocItem(d)));
   }
@@ -336,7 +336,7 @@ function onFileSelected(input) { setSelectedFiles(input.files); }
 async function uploadDocument() {
   const errEl=document.getElementById('uploadError'); errEl.classList.add('hidden');
   if (!selectedFiles.length) { errEl.textContent='Bitte mindestens eine Datei auswählen.'; errEl.classList.remove('hidden'); return; }
-  const btn=document.getElementById('uploadConfirmBtn'); btn.disabled=true; btn.innerHTML='<span class="spinner"></span>';
+  const btn=document.getElementById('uploadConfirmBtn'); btn.disabled=true; btn.innerHTML='<span class="spinner spinner-dark"></span>';
   const formData=new FormData();
   selectedFiles.forEach(f=>formData.append('files',f));
   const folderId=document.getElementById('uploadFolderSelect').value;
@@ -379,7 +379,7 @@ async function loadAnnouncementsAdmin() {
 function renderAnnouncementAdminList(list) {
   const container = document.getElementById('announcementAdminList');
   if (!list.length) {
-    container.innerHTML = '<div class="card" style="text-align:center;padding:24px;color:#888;font-size:14px;">Noch keine Ankündigungen.</div>';
+    container.innerHTML = '<div class="card" style="text-align:center;padding:24px;color:var(--text-tertiary);font-size:14px;">Noch keine Ankündigungen.</div>';
     return;
   }
   container.innerHTML = `<div class="card" style="padding:0;overflow:hidden;">${list.map(a => {
@@ -391,7 +391,7 @@ function renderAnnouncementAdminList(list) {
       <div class="announcement-admin-content">
         <div style="font-weight:700;font-size:15px;">${escHtml(a.title)}</div>
         ${a.body ? `<div style="font-size:13px;color:var(--gray-dark);margin-top:2px;">${escHtml(a.body)}</div>` : ''}
-        <div style="font-size:12px;color:#aaa;margin-top:4px;">${date}</div>
+        <div style="font-size:12px;color:var(--text-tertiary);margin-top:4px;">${date}</div>
         ${confirmLine}
       </div>
       <button class="btn btn-danger btn-sm" onclick="deleteAnnouncement(${a.id})">🗑</button>

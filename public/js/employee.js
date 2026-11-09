@@ -107,16 +107,19 @@ function renderBrowser() {
   const subFolders = allFolders.filter(f => f.parent_id === currentFolderId);
   const subFoldersEl = document.getElementById('subFolders');
   if (subFolders.length) {
-    subFoldersEl.innerHTML = `<div class="folder-grid">${subFolders.map(f => {
+    subFoldersEl.innerHTML = `<div class="folder-list">${subFolders.map(f => {
       const count = allDocuments.filter(d => d.folder_id === f.id).length;
       const childCount = allFolders.filter(c => c.parent_id === f.id).length;
       const total = count + childCount;
-      const newDot = folderHasNew(f.id) ? '<span class="new-dot" title="Neue Inhalte"></span>' : '';
-      return `<div class="folder-card" onclick="openFolder(${f.id})">
+      const newDot = folderHasNew(f.id) ? '<span class="list-row-dot" title="Neue Inhalte"></span>' : '';
+      return `<div class="list-row" onclick="openFolder(${f.id})">
+        <div class="icon-badge">📁</div>
+        <div class="list-row-info">
+          <div class="list-row-title">${escHtml(f.name)}</div>
+          <div class="list-row-sub">${total === 0 ? 'Leer' : total === 1 ? '1 Eintrag' : total + ' Einträge'}</div>
+        </div>
         ${newDot}
-        <div class="folder-emoji">📁</div>
-        <div class="folder-name">${escHtml(f.name)}</div>
-        <div class="folder-count">${total === 0 ? 'Leer' : total === 1 ? '1 Eintrag' : total + ' Einträge'}</div>
+        <span class="list-row-chevron">›</span>
       </div>`;
     }).join('')}</div>`;
   } else {
@@ -166,7 +169,7 @@ async function doSearch(q) {
   document.getElementById('searchView').classList.remove('hidden');
   document.getElementById('searchLabel').textContent = `Ergebnisse für „${q}"`;
   const resultsEl = document.getElementById('searchResults');
-  resultsEl.innerHTML = '<div style="padding:20px;text-align:center;"><span class="spinner" style="border-color:rgba(0,0,0,0.2);border-top-color:#000;"></span></div>';
+  resultsEl.innerHTML = '<div style="padding:20px;text-align:center;"><span class="spinner"></span></div>';
   try {
     const res = await fetch(`/api/documents/search?q=${encodeURIComponent(q)}`);
     const docs = await res.json();
