@@ -121,6 +121,7 @@ function openOvertimeModal(id, name, currentHours) {
   editingOvertimeId = id;
   document.getElementById('overtimeEmpName').textContent = name;
   document.getElementById('overtimeHours').value = currentHours || 0;
+  document.getElementById('overtimeNote').value = '';
   document.getElementById('overtimeError').classList.add('hidden');
   document.getElementById('overtimeModal').classList.remove('hidden');
   document.body.style.overflow = 'hidden';
@@ -130,8 +131,9 @@ function closeOvertimeModal() { document.getElementById('overtimeModal').classLi
 async function saveOvertime() {
   const errEl = document.getElementById('overtimeError'); errEl.classList.add('hidden');
   const hours = parseFloat(document.getElementById('overtimeHours').value);
+  const note = document.getElementById('overtimeNote').value.trim();
   if (!Number.isFinite(hours)) { errEl.textContent = 'Bitte eine gültige Zahl eingeben.'; errEl.classList.remove('hidden'); return; }
-  const r = await apiFetch(`/api/admin/employees/${editingOvertimeId}/overtime`, { method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ hours }) });
+  const r = await apiFetch(`/api/admin/employees/${editingOvertimeId}/overtime`, { method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ hours, note }) });
   if (!r?.ok) { errEl.textContent = r?.data?.error || 'Fehler beim Speichern'; errEl.classList.remove('hidden'); return; }
   closeOvertimeModal(); loadEmployees();
 }
@@ -370,7 +372,7 @@ if (uploadZone) {
 
 // ===== ANKÜNDIGUNGEN =====
 async function loadAnnouncementsAdmin() {
-  const r = await apiFetch('/api/announcements');
+  const r = await apiFetch('/api/admin/announcements');
   if (!r) return;
   renderAnnouncementAdminList(r.data);
 }
@@ -382,11 +384,15 @@ function renderAnnouncementAdminList(list) {
   }
   container.innerHTML = `<div class="card" style="padding:0;overflow:hidden;">${list.map(a => {
     const date = new Date(a.created_at+'Z').toLocaleDateString('de-DE');
+    const confirmLine = a.requires_confirmation
+      ? `<div class="announcement-admin-stats">👁 ${a.seen}/${a.totalEmployees} gesehen · ✓ ${a.confirmed}/${a.totalEmployees} bestätigt</div>`
+      : `<div class="announcement-admin-stats">👁 ${a.seen}/${a.totalEmployees} gesehen</div>`;
     return `<div class="announcement-admin-row">
       <div class="announcement-admin-content">
         <div style="font-weight:700;font-size:15px;">${escHtml(a.title)}</div>
         ${a.body ? `<div style="font-size:13px;color:var(--gray-dark);margin-top:2px;">${escHtml(a.body)}</div>` : ''}
         <div style="font-size:12px;color:#aaa;margin-top:4px;">${date}</div>
+        ${confirmLine}
       </div>
       <button class="btn btn-danger btn-sm" onclick="deleteAnnouncement(${a.id})">🗑</button>
     </div>`;
@@ -396,11 +402,13 @@ async function createAnnouncement() {
   const errEl = document.getElementById('annError'); errEl.classList.add('hidden');
   const title = document.getElementById('annTitle').value.trim();
   const body = document.getElementById('annBody').value.trim();
+  const requires_confirmation = document.getElementById('annRequiresConfirmation').checked;
   if (!title) { errEl.textContent = 'Titel erforderlich.'; errEl.classList.remove('hidden'); return; }
-  const r = await apiFetch('/api/admin/announcements', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ title, body }) });
+  const r = await apiFetch('/api/admin/announcements', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ title, body, requires_confirmation }) });
   if (!r?.ok) { errEl.textContent = r?.data?.error || 'Fehler'; errEl.classList.remove('hidden'); return; }
   document.getElementById('annTitle').value = '';
   document.getElementById('annBody').value = '';
+  document.getElementById('annRequiresConfirmation').checked = false;
   loadAnnouncementsAdmin();
 }
 async function deleteAnnouncement(id) {
