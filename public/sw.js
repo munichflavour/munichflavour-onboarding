@@ -10,11 +10,13 @@ const APP_SHELL = [
   '/login.html',
   '/employee.html',
   '/admin.html',
+  '/view.html',
   '/manifest.json',
   '/css/style.css',
   '/js/login.js',
   '/js/employee.js',
   '/js/admin.js',
+  '/js/view.js',
   '/assets/logo.jpg'
 ];
 

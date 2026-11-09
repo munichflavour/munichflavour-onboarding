@@ -207,7 +207,7 @@ function fileIcon(name) {
 function fileItemHtml(doc) {
   const date = new Date(doc.uploaded_at + 'Z').toLocaleDateString('de-DE');
   const badge = isNew(doc.uploaded_at) ? '<span class="badge-new">Neu</span>' : '';
-  return `<a href="/api/documents/${doc.id}/view" target="_blank" class="file-item" title="Ansehen">
+  return `<a href="/view.html?id=${doc.id}&name=${encodeURIComponent(doc.original_name)}" class="file-item" title="Ansehen">
     <div class="file-type-icon">${fileIcon(doc.original_name)}</div>
     <div class="file-info">
       <div class="file-name" title="${escHtml(doc.original_name)}">${escHtml(doc.original_name)}${badge}</div>
