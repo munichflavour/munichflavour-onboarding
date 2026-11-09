@@ -112,7 +112,7 @@ function renderBrowser() {
       const childCount = allFolders.filter(c => c.parent_id === f.id).length;
       const total = count + childCount;
       const newDot = folderHasNew(f.id) ? '<span class="new-dot" title="Neue Inhalte"></span>' : '';
-      return `<div class="folder-card" onclick="openFolder(${f.id})">
+      return `<div class="folder-card" onclick="openFolder(${f.id})" style="border-left:3px solid ${folderColor(f.name)};">
         ${newDot}
         <div class="folder-emoji">📁</div>
         <div class="folder-name">${escHtml(f.name)}</div>
@@ -201,10 +201,31 @@ function fileIcon(name) {
   return '📄';
 }
 
+// ===== FARB-AKZENTE =====
+// Kleiner farbiger Rand als Status-Akzent (wie Linear): pro Dateityp eine feste Farbe,
+// pro Ordner eine aus dem Namen abgeleitete Farbe – konsistent zwischen Admin- und
+// Mitarbeiteransicht, ohne dass dafür etwas in der Datenbank gepflegt werden muss.
+const FILE_TYPE_COLORS = {
+  pdf: '#dc2626', doc: '#2563eb', docx: '#2563eb', xls: '#16a34a', xlsx: '#16a34a', csv: '#16a34a',
+  ppt: '#ea580c', pptx: '#ea580c', jpg: '#db2777', jpeg: '#db2777', png: '#db2777', gif: '#db2777',
+  webp: '#db2777', svg: '#db2777', mp4: '#7c3aed', mov: '#7c3aed', avi: '#7c3aed', mkv: '#7c3aed',
+  mp3: '#0d9488', wav: '#0d9488', m4a: '#0d9488', zip: '#64748b', rar: '#64748b', '7z': '#64748b'
+};
+function fileColor(name) {
+  const ext = name.split('.').pop().toLowerCase();
+  return FILE_TYPE_COLORS[ext] || '#94a3b8';
+}
+const FOLDER_COLORS = ['#2563eb', '#16a34a', '#ea580c', '#7c3aed', '#0d9488', '#db2777', '#ca8a04', '#475569'];
+function folderColor(name) {
+  let hash = 0;
+  for (let i = 0; i < name.length; i++) hash = (hash * 31 + name.charCodeAt(i)) >>> 0;
+  return FOLDER_COLORS[hash % FOLDER_COLORS.length];
+}
+
 function fileItemHtml(doc) {
   const date = new Date(doc.uploaded_at + 'Z').toLocaleDateString('de-DE');
   const badge = isNew(doc.uploaded_at) ? '<span class="badge-new">Neu</span>' : '';
-  return `<a href="/api/documents/${doc.id}/view" target="_blank" class="file-item" title="Ansehen">
+  return `<a href="/api/documents/${doc.id}/view" target="_blank" class="file-item" title="Ansehen" style="border-left:3px solid ${fileColor(doc.original_name)};">
     <div class="file-type-icon">${fileIcon(doc.original_name)}</div>
     <div class="file-info">
       <div class="file-name" title="${escHtml(doc.original_name)}">${escHtml(doc.original_name)}${badge}</div>
