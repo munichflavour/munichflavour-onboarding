@@ -77,7 +77,7 @@ class Beleg:
     def __init__(self, name, text="", quelle="Eingang", total=None, datum=None, haendler=""):
         self.name, self.text, self.quelle = name, text, quelle
         self.nname, self.ntext = norm(name), norm(text)
-        self.betr = betraege(text) | ({total} if total else set())
+        self.betr = {b for b in betraege(text) if b < 100000} | ({total} if total else set())
         self.summen = set()
         for m in re.finditer(r"(summe|gesamt|total|betrag|brutto|zu zahlen|endsumme|rechnungsbetrag|zahlung)(.{0,60})", text, re.I | re.S):
             self.summen |= betraege(m.group(2))
@@ -176,6 +176,11 @@ def pruefe(b, belege):
             wort += alias
     paypal = "paypal" in (b["partner"] + b["verwendungszweck"]).lower()
     spez = [w for w in wort if w not in STOPP and w not in ("europe", "paypal", "s.a")]
+    m_h = re.search(r"einkauf bei (.+?)(?:\.\.\.|,| \d{6,}|$)", (b["partner"] + " " + b["verwendungszweck"]).lower())
+    if m_h:
+        name_h = re.sub(r"(gmbh|haftungsbeschrankt|haftungsbeschränkt|limited|pty|ltd|sca|ug|\bs\b)", "", norm(m_h.group(1)))
+        if len(name_h) >= 4:
+            spez.append(name_h[:8])
     kand = []
     for x in belege:
         if x.benutzt or (betrag not in x.betr and x.total != betrag):
@@ -187,9 +192,10 @@ def pruefe(b, belege):
         score = 40
         if betrag in x.summen or x.total == betrag:
             score += 25
-        if x.datums and any(bd - timedelta(days=45) <= dd <= bd + timedelta(days=7) for dd in x.datums):
+        relevant = [dd for dd in x.datums if dd <= bd + timedelta(days=14)]  # spaetere Daten sind Scan-/Druckdaten
+        if relevant and any(bd - timedelta(days=45) <= dd <= bd + timedelta(days=7) for dd in relevant):
             score += 20
-        elif x.datums:
+        elif relevant:
             score -= 25
         if any(w in x.ntext or w in x.nname or w in x.haendler for w in wort):
             score += 20
@@ -328,6 +334,10 @@ def main():
             add(b["datum"], "Bank", label, b["betrag"], "LOHN (Abrechnung pruefen)", "Lohnzahlung: Lohnabrechnung kommt vom Lohnbuero/Steuerberater, kein Eingangsbeleg"); continue
         if re.search(r"trinkgeld", t):
             add(b["datum"], "Bank", label, b["betrag"], "KLAEREN", "Trinkgeld-Weitergabe: Nachweis (Trinkgeldliste) ablegen"); continue
+        if re.search(r"vattenfall", t):
+            add(b["datum"], "Bank", label, b["betrag"], "KEIN BELEG NOETIG", "Energiekosten (Abschlag), Einzelbeleg nicht noetig (Entscheidung Nutzer 10.11.)"); continue
+        if re.search(r"google payment ireland", t):
+            add(b["datum"], "Bank", label, b["betrag"], "KEIN BELEG NOETIG", "Google (Kleinbetrag), Beleg nicht noetig (Entscheidung Nutzer 10.11.)"); continue
         if re.search(r"gewerbesteuer|gemeindekasse", t):
             add(b["datum"], "Bank", label, b["betrag"], "KEIN BELEG NOETIG", "Gewerbesteuer: Bescheid/Vorauszahlung fuer den Steuerberater, nicht abziehbar"); continue
         if re.search(r"privatentnahme|einkommensteuer", t):
@@ -387,6 +397,28 @@ def main():
                     for x in k:
                         x.benutzt += 1
                     zeilen[b["_zeile"]][5] += "; zusaetzlich: " + "; ".join(x.name for x in k)
+
+    # Eine Zahlung fuer mehrere Rechnungen desselben Haendlers (z. B. 3 Rechnungen, 1 PayPal-Abbuchung)
+    for b in bank:
+        if "_zeile" not in b or zeilen[b["_zeile"]][4] != "FEHLT" or b["betrag"] >= 0:
+            continue
+        t = (b["partner"] + " " + b["verwendungszweck"]).lower()
+        spez = [w for w in re.findall(r"[a-zäöüß]{5,}", t) if w not in STOPP and w not in ("paypal", "europe", "einkauf")]
+        pool = [x for x in belege if x.benutzt == 0 and x.quelle == "Eingang" and x.betr and any(w in x.ntext or w in x.nname for w in spez)]
+        betrag = round(abs(b["betrag"]), 2)
+        for n in (2, 3, 4):
+            kombi = None
+            for k in itertools.combinations(pool, n):
+                opts = [sorted(x.summen or x.betr)[-8:] for x in k]
+                if any(abs(sum(c) - betrag) < 0.015 for c in itertools.product(*opts)):
+                    kombi = k
+                    break
+            if kombi:
+                for x in kombi:
+                    x.benutzt += 1
+                z = zeilen[b["_zeile"]]
+                z[4], z[5] = "OK", "Sammelzahlung fuer mehrere Rechnungen: " + "; ".join(x.name for x in kombi)
+                break
 
     # Portal-Lieferanten ohne Beleg
     for z, b in ((zeilen[b["_zeile"]], b) for b in bank if "_zeile" in b):
