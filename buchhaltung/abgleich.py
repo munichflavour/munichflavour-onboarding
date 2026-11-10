@@ -23,6 +23,7 @@ PORTALE = ["amazon", "google", "telekom", "vattenfall", "microsoft", "canva", "m
 # Name in der Buchung -> Namensbestandteile auf den Belegen (normalisiert: nur a-z0-9)
 # eigene Fahrzeuge (normalisiert), tauchen auf Werkstatt-/Bussgeldbelegen auf und sind keine Rechnungsnummern
 KENNZEICHEN = {"xe3663", "mxe3663", "qb1388", "mqb1388", "uh1028", "muh1028"}
+VM_OFFEN = set()  # Vormonats-Belege ohne Zahlung im Vormonat (duerfen per Betrag+Datum zugeordnet werden)
 ALIASE = [(r"party\s?rent", ["rentgroup", "prmuc", "feldkirchen"])]
 KEIN_BELEG = r"miete|versicherung|barmer|knappschaft|berufsgenossenschaft|abschlussposten|beitrag|zinsen|krankenkasse|dak-gesundheit"
 
@@ -191,6 +192,8 @@ def pruefe(b, belege):
     kand.sort(key=lambda t: -t[0])
     if kand and kand[0][0] >= 70:
         mehr = len(kand) > 1 and kand[1][0] == kand[0][0]
+        if kand[0][1].quelle == "Vormonat" and kand[0][1].name not in VM_OFFEN:
+            return [kand[0][1]], "VORSCHLAG Vormonats-Beleg Betrag+Datum, im Vormonat schon bezahlt?"
         return [kand[0][1]], "Betrag+Datum" + (" (mehrdeutig)" if mehr else "")
     return lieferantenwort(b, belege)
 
@@ -245,11 +248,15 @@ def main():
     ap.add_argument("--namen", required=True)
     ap.add_argument("--manuell")
     ap.add_argument("--mails")
+    ap.add_argument("--vm-offen", help="Datei: Vormonats-Belege, die im Vormonat noch ohne Zahlung waren (eine pro Zeile)")
     ap.add_argument("--alt")
     ap.add_argument("--out", required=True)
     args = ap.parse_args()
 
     belege, ausgang_namen, idx = lade_belege(args)
+    global VM_OFFEN
+    if args.vm_offen and os.path.exists(args.vm_offen):
+        VM_OFFEN = {z.strip() for z in open(args.vm_offen, encoding="utf-8") if z.strip()}
     rm = json.load(open(args.rentman, encoding="utf-8"))
     rm = rm["data"] if isinstance(rm, dict) else rm
     rm_f = {r["number"]: r for r in rm if r["invoicetype"] != "C"}
