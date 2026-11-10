@@ -233,7 +233,8 @@ def lade_belege(args):
         if z.startswith("RA|"):
             ausgang.append(z[3:])
             continue
-        quelle = "Vormonat" if z.startswith("VM|") else "Nachgereicht" if z.startswith("NG|") else "Eingang"
+        quelle = ("Vormonat" if z.startswith("VM|") else "Nachgereicht" if z.startswith("NG|")
+                  else "Kasse" if z.startswith("KS|") else "Eingang")
         name = z.split("|", 1)[1] if "|" in z[:4] else z
         text = idx.get(name, {}).get("text", "")
         if name in manuell:
@@ -423,6 +424,8 @@ def main():
 
     # Belege ohne Zahlung
     for x in belege:
+        if x.benutzt == 0 and x.quelle == "Kasse":
+            add("", "Beleg", x.name, x.total, "KASSE (Barbeleg)", "liegt im Ordner Kasse; keine Kontobuchung noetig, Barzahlung in der Kasse erfasst?")
         if x.benutzt == 0 and x.quelle == "Eingang":
             if re.search(r"mahnung|zahlungserinnerung", x.name.lower()):
                 add("", "Beleg", x.name, x.total, "KEIN BELEG NOETIG", "Mahnung, keine Rechnung")
