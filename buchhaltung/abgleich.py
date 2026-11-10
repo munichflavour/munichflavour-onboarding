@@ -23,6 +23,7 @@ PORTALE = ["amazon", "google", "telekom", "vattenfall", "microsoft", "canva", "m
 # Name in der Buchung -> Namensbestandteile auf den Belegen (normalisiert: nur a-z0-9)
 # eigene Fahrzeuge (normalisiert), tauchen auf Werkstatt-/Bussgeldbelegen auf und sind keine Rechnungsnummern
 KENNZEICHEN = {"xe3663", "mxe3663", "qb1388", "mqb1388", "uh1028", "muh1028"}
+VM_BEZAHLT = set()  # Vormonats-Belege, die im Vormonat schon einer Zahlung zugeordnet waren
 VM_OFFEN = set()  # Vormonats-Belege ohne Zahlung im Vormonat (duerfen per Betrag+Datum zugeordnet werden)
 ALIASE = [(r"party\s?rent", ["rentgroup", "prmuc", "feldkirchen"])]
 KEIN_BELEG = r"miete|versicherung|barmer|knappschaft|berufsgenossenschaft|abschlussposten|beitrag|zinsen|krankenkasse|dak-gesundheit"
@@ -114,6 +115,8 @@ def schluessel(b):
             continue
         if n in KENNZEICHEN:
             continue
+        if re.fullmatch(r"(0[1-9]|[12]\d|3[01])(0[1-9]|1[0-2])\d\d", n):
+            continue  # Datum ddmmyy, keine Rechnungsnummer
         out.add(n)
     return out
 
@@ -154,7 +157,7 @@ def pruefe(b, belege):
         treffer = name_treffer(b, belege)
         tk = tokens(b)
         for x in belege:
-            if x not in treffer and any(t in x.ntext for t in tk):
+            if x not in treffer and x.quelle != "Vormonat" and any(t in x.ntext for t in tk):
                 treffer.append(x)
         if treffer:
             return treffer, "Rechnungsnummer"
@@ -176,6 +179,8 @@ def pruefe(b, belege):
     kand = []
     for x in belege:
         if x.benutzt or (betrag not in x.betr and x.total != betrag):
+            continue
+        if x.quelle == "Vormonat" and x.name in VM_BEZAHLT:
             continue
         if paypal and not any(w in x.ntext or w in x.nname or w in x.haendler for w in spez):
             continue
@@ -249,12 +254,15 @@ def main():
     ap.add_argument("--manuell")
     ap.add_argument("--mails")
     ap.add_argument("--vm-offen", help="Datei: Vormonats-Belege, die im Vormonat noch ohne Zahlung waren (eine pro Zeile)")
+    ap.add_argument("--vm-bezahlt", help="Datei: Vormonats-Belege, die im Vormonat bezahlt waren (eine pro Zeile)")
     ap.add_argument("--alt")
     ap.add_argument("--out", required=True)
     args = ap.parse_args()
 
     belege, ausgang_namen, idx = lade_belege(args)
-    global VM_OFFEN
+    global VM_OFFEN, VM_BEZAHLT
+    if args.vm_bezahlt and os.path.exists(args.vm_bezahlt):
+        VM_BEZAHLT = {z.strip() for z in open(args.vm_bezahlt, encoding="utf-8") if z.strip()}
     if args.vm_offen and os.path.exists(args.vm_offen):
         VM_OFFEN = {z.strip() for z in open(args.vm_offen, encoding="utf-8") if z.strip()}
     rm = json.load(open(args.rentman, encoding="utf-8"))
