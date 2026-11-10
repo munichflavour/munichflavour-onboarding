@@ -15,6 +15,7 @@ from datetime import date
 
 KEYWORDS = r"(?:rechnungs?datum|rechnungsdat\.|belegdatum|datum|date|invoice date|vom|ausstellungsdatum|leistungsdatum)"
 MAHNUNG = r"mahnung|zahlungserinnerung|zahlungsaufforderung|inkasso|letzte erinnerung|1\. erinnerung"
+KEIN_BELEG = r"tagesabschluss|umsatz(?:ue|ü)bersicht|nicht als umsatzsteuererstattungsbeleg|berechtigt nicht zum vorsteuerabzug"
 RECHNUNG = r"rechnung|invoice|beleg|quittung|kassenbon|gutschrift|rg\.?[- ]?nr|re[-_ ]?\d|bestellung|order"
 MONATE = {"januar": 1, "februar": 2, "maerz": 3, "märz": 3, "april": 4, "mai": 5, "juni": 6, "juli": 7,
           "august": 8, "september": 9, "oktober": 10, "november": 11, "dezember": 12}
@@ -31,6 +32,9 @@ def mk(j, m, t):
 def alle_daten(text):
     out = []
     for m in re.finditer(r"(?<!\d)(\d{1,2})\.\s?(\d{1,2})\.\s?(20\d\d|\d\d)(?!\d)", text):
+        x = mk(int(m.group(3)), int(m.group(2)), int(m.group(1)))
+        if x: out.append((m.start(), x))
+    for m in re.finditer(r"(?<!\d)(\d{2})-(\d{2})-(20\d\d)(?!\d)", text):
         x = mk(int(m.group(3)), int(m.group(2)), int(m.group(1)))
         if x: out.append((m.start(), x))
     for m in re.finditer(r"(?<!\d)(20\d\d)-(\d\d)-(\d\d)(?!\d)", text):
@@ -95,6 +99,7 @@ def main():
         elif titel in vm: akt, grund = "VORMONAT", "gleicher Dateiname im Vormonat abgelegt"
         elif len(text.strip()) > 80 and norm_text(text) in gleich: akt, grund = "SCHON DA", "gleicher Inhalt unter anderem Namen"
         elif len(text.strip()) < 40: akt, grund = "UNKLAR", "kein Text lesbar: Datei von Hand ansehen"
+        elif re.search(KEIN_BELEG, titel + " " + text[:3000], re.I): akt, grund = "KEINE RECHNUNG", "Auswertung/Zusammenstellung, kein Vorsteuerbeleg"
         elif re.search(MAHNUNG, text, re.I) and not re.search(r"\brechnung\b", titel, re.I): akt, grund = "MAHNUNG", "Mahnung/Zahlungserinnerung, nicht kopieren"
         elif not re.search(RECHNUNG, titel + " " + text[:3000], re.I): akt, grund = "KEINE RECHNUNG", "weder Name noch Text deuten auf Rechnung/Beleg"
         elif dat is None: akt, grund = "UNKLAR", "kein Rechnungsdatum gefunden"

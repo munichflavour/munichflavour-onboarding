@@ -16,7 +16,7 @@ Die Struktur bleibt unveraendert. Der Monatsordner ist das fertige DATEV-Paket.
    - Stornopaare (Rechnung + Gutschrift im selben Monat) werden **nicht** exportiert.
    - Liegt die stornierte Rechnung im Vormonat, bleibt die Gutschrift im Gutschriftmonat.
 3. **Rechnungseingang**: Lieferantenrechnungen mit Originaldateinamen (nie umbenennen). Mahnungen und Duplikate sind keine Belege.
-4. **Kasse**: Barbelege. **Sonstiges**: Kontoauszuege (beide Konten), PayPal-Monatsbericht, Abrechnung des Kartenzahlungsanbieters, Abgleichbericht.
+4. **Kasse**: Barbelege. **Sonstiges**: Kontoauszuege (beide Konten), PayPal-Monatskontoauszug (`LJZFR...-MSR-...PDF`), Abgleichbericht.
 5. **Manuell abgelegt wird**: Belege aus Portalen (Metro, Amazon, Google, Telekom, Vattenfall u. a.), Kontoauszuege, PayPal-Bericht, Scans von Kartenbons.
 6. **Nur hinzufuegen**: Das Werkzeug loescht, ueberschreibt und benennt nie etwas um. Manuell abgelegte Dateien werden erkannt (ueber den Inhalt) und zaehlen als vorhanden.
 7. **Abgleichbericht** (Excel, Ordner `Sonstiges`, mit Spalte "Manuelle Notiz"): jede Kontobuchung gegen einen Beleg, jeder Beleg gegen eine Buchung.
@@ -29,6 +29,13 @@ Ein Power-Automate-Flow legt jeden Anhang aus dem Mailordner `Eingang` mit Origi
 1. Claude liest alle Dateien und erstellt mit `mail_eingang.py` eine Liste (KOPIEREN, SCHON DA, VORMONAT, ANDERER MONAT, MAHNUNG, KEINE RECHNUNG, UNKLAR).
 2. Der Nutzer gibt die Liste frei (Trockenlauf), dann werden die Rechnungen mit Rechnungsdatum im Monat **kopiert** (Originalname) in den Rechnungseingang.
 3. Nach dem Abschluss und nur mit Okay werden verarbeitete Dateien nach `Mail-Eingang/Verarbeitet/{JJJJ-MM}` verschoben. Geloescht wird nie (Aufbewahrung 8 Jahre).
+
+## Bekannte Luecken im Mail-Flow (Stand Oktoberlauf)
+
+- Anhaenge `smime.p7m` (signierte Rechnungen, z. B. Kanzlei Langeder, Pachmayr) werden nicht abgelegt.
+- Gleicher Dateiname fuer verschiedene Dokumente (Party Rent `PR-MUC...pdf`): das zweite geht verloren.
+- Bei Mails mit mehreren Anhaengen kann ein Anhang fehlen.
+- Der Abgleich prueft deshalb zusaetzlich die Mails des Ordners Eingang (Schritt 6 im Skill).
 
 ## Technische Erkenntnisse
 
@@ -44,6 +51,7 @@ Ein Power-Automate-Flow legt jeden Anhang aus dem Mailordner `Eingang` mit Origi
 | `indexiere.py` | macht aus heruntergeladenen Belegen einen Textindex (auch Scans, lokale Texterkennung) |
 | `rentman_soll_liste.py` | Soll-Liste der Rentman-Rechnungen, Stornopaare, JSON-Export |
 | `mail_eingang.py` | plant, welche Anhaenge aus dem Sammelordner Mail-Eingang in den Rechnungseingang des Monats kopiert werden (Trockenlauf-Liste, kopiert selbst nichts) |
+| `paypal_pruefen.py` | prueft den PayPal-Monatskontoauszug (`LJZFR...-MSR-...PDF`, nur Summen) gegen die PayPal-Abbuchungen im Bankkonto |
 | `abgleich.py` | gleicht Buchungen, Belege, Rentman und Mails ab und schreibt den Abgleichbericht (CSV) |
 
 Der Ablauf fuer Claude steht in `.claude/skills/monatsabschluss/SKILL.md` (Aufruf: `/monatsabschluss 2026-10`).

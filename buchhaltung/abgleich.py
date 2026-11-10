@@ -20,7 +20,11 @@ from datetime import date, datetime, timedelta
 
 PORTALE = ["amazon", "google", "telekom", "vattenfall", "microsoft", "canva", "metro", "vodafone", "dkv",
            "sumup", "haufe", "lexware", "anthropic"]
-KEIN_BELEG = r"miete|versicherung|barmer|knappschaft|berufsgenossenschaft|abschlussposten|beitrag|zinsen|krankenkasse"
+# Name in der Buchung -> Namensbestandteile auf den Belegen (normalisiert: nur a-z0-9)
+# eigene Fahrzeuge (normalisiert), tauchen auf Werkstatt-/Bussgeldbelegen auf und sind keine Rechnungsnummern
+KENNZEICHEN = {"xe3663", "mxe3663", "qb1388", "mqb1388", "uh1028", "muh1028"}
+ALIASE = [(r"party\s?rent", ["rentgroup", "prmuc", "feldkirchen"])]
+KEIN_BELEG = r"miete|versicherung|barmer|knappschaft|berufsgenossenschaft|abschlussposten|beitrag|zinsen|krankenkasse|dak-gesundheit"
 
 
 def norm(s):
@@ -35,6 +39,8 @@ def betraege(text):
     out = set()
     for m in re.finditer(r"(?<![\d,.])(\d{1,3}(?:\.\d{3})+|\d+)(?:,\s?|\.)(\d{2})(?!\d)", text):
         out.add(round(float(m.group(1).replace(".", "") + "." + m.group(2)), 2))
+    for m in re.finditer(r"(?<![\d,.])(\d{1,3}(?:\.\d{3})+|\d+)\s?(?:€|EUR)(?![\w,])", text):
+        out.add(round(float(m.group(1).replace(".", "")), 2))
     return out
 
 
@@ -105,6 +111,8 @@ def schluessel(b):
             continue
         if re.fullmatch(r"\d{2}\d{2}20\d\d", n) or re.fullmatch(r"\d{4}", n):
             continue
+        if n in KENNZEICHEN:
+            continue
         out.add(n)
     return out
 
@@ -122,7 +130,7 @@ def lieferantenwort(b, belege):
     """Eindeutiger Lieferantenname im Dateinamen (nur als Vorschlag)."""
     woerter = {w for w in re.findall(r"[a-zäöüß]{5,}", (b["partner"] + " " + b["verwendungszweck"]).lower()) if w not in STOPP}
     for w in woerter:
-        kand = [x for x in belege if x.benutzt == 0 and not x.mahnung and w in x.nname]
+        kand = [x for x in belege if x.benutzt == 0 and not x.mahnung and x.quelle == "Eingang" and w in x.nname]
         if len(kand) == 1:
             return kand, "VORSCHLAG Lieferantenname " + w
     return [], ""
@@ -150,16 +158,25 @@ def pruefe(b, belege):
         if treffer:
             return treffer, "Rechnungsnummer"
         # kurze Rechnungsnummer (z. B. "Rechnung Nr. 2624"): nur als Vorschlag
-        kurz = re.findall(r"(?:rechnung|rg|re|rnr|nr)\.?\s*(?:nr\.?|nummer)?\s*:?\s*(\d{2,5})(?!\d)", b["verwendungszweck"].lower())
+        kurz = re.findall(r"(?:rechnung|rg|re|rnr|nr)s?\.?\s*(?:nr\.?|nummer)?\s*:?\s*(\d{2,5})(?!\d)", b["verwendungszweck"].lower())
         for nr in kurz:
             kand = [x for x in belege if re.search(r"(?<!\d)" + nr + r"(?!\d)", x.name) and not re.search(r"\d{2}\.\d{2}\.20", nr)]
-            if len(kand) == 1:
+            if len({re.sub(r"\[\d\]|\(\d\)|\s", "", x.name) for x in kand}) == 1:
+                if betrag in kand[0].betr:
+                    return kand, "Rechnungsnummer " + nr + " + Betrag"
                 return kand, "VORSCHLAG kurze Rechnungsnummer " + nr
     # 3. Betrag + Datum (+ Haendlerwort); bereits zugeordnete Belege nicht noch einmal
     wort = re.findall(r"[a-zäöüß]{4,}", (b["partner"] + " " + b["verwendungszweck"]).lower())
+    for muster, alias in ALIASE:
+        if re.search(muster, (b["partner"] + " " + b["verwendungszweck"]).lower()):
+            wort += alias
+    paypal = "paypal" in (b["partner"] + b["verwendungszweck"]).lower()
+    spez = [w for w in wort if w not in STOPP and w not in ("europe", "paypal", "s.a")]
     kand = []
     for x in belege:
         if x.benutzt or (betrag not in x.betr and x.total != betrag):
+            continue
+        if paypal and not any(w in x.ntext or w in x.nname or w in x.haendler for w in spez):
             continue
         score = 40
         if betrag in x.summen or x.total == betrag:
@@ -208,7 +225,7 @@ def lade_belege(args):
         if z.startswith("RA|"):
             ausgang.append(z[3:])
             continue
-        quelle = "Vormonat" if z.startswith("VM|") else "Eingang"
+        quelle = "Vormonat" if z.startswith("VM|") else "Nachgereicht" if z.startswith("NG|") else "Eingang"
         name = z.split("|", 1)[1] if "|" in z[:4] else z
         text = idx.get(name, {}).get("text", "")
         if name in manuell:
@@ -264,6 +281,8 @@ def main():
         if b["betrag"] > 0:
             if "übertrag" in t:
                 add(b["datum"], "Bank", label, b["betrag"], "INTERN (Umbuchung)")
+            elif "sumup" in t and "payout" in t:
+                add(b["datum"], "Bank", label, b["betrag"], "EINNAHME (Kartenumsatz)", "SumUp-Auszahlung (Kartenumsatz): gegen SumUp-Umsatzbericht bzw. Tagesabschlussberichte pruefen")
             elif re.search(r"krankenkasse|knappschaft|zinsen|abschlussposten", t) or "zinsen" in b["verwendungszweck"].lower():
                 add(b["datum"], "Bank", label, b["betrag"], "KEIN BELEG NOETIG", "Erstattung/Zinsen")
             else:
@@ -287,6 +306,14 @@ def main():
         # --- Ausgaben ohne Beleg
         if "übertrag" in t:
             add(b["datum"], "Bank", label, b["betrag"], "INTERN (Umbuchung)"); continue
+        if re.search(r"bussgeld|bußgeld", t):
+            add(b["datum"], "Bank", label, b["betrag"], "PRIVAT / nicht Betriebsausgabe", "Bussgeld, nicht abziehbar; Bescheid als Nachweis ablegen"); continue
+        if re.search(r"lohn \+ gehalt|lohn und gehalt", t) and "lexware" not in t and "haufe" not in t:
+            add(b["datum"], "Bank", label, b["betrag"], "LOHN (Abrechnung pruefen)", "Lohnzahlung: Lohnabrechnung kommt vom Lohnbuero/Steuerberater, kein Eingangsbeleg"); continue
+        if re.search(r"trinkgeld", t):
+            add(b["datum"], "Bank", label, b["betrag"], "KLAEREN", "Trinkgeld-Weitergabe: Nachweis (Trinkgeldliste) ablegen"); continue
+        if re.search(r"gewerbesteuer|gemeindekasse", t):
+            add(b["datum"], "Bank", label, b["betrag"], "KEIN BELEG NOETIG", "Gewerbesteuer: Bescheid/Vorauszahlung fuer den Steuerberater, nicht abziehbar"); continue
         if re.search(r"privatentnahme|einkommensteuer", t):
             add(b["datum"], "Bank", label, b["betrag"], "PRIVAT / nicht Betriebsausgabe"); continue
         if re.search(r"finanzamt|stok bay|kfz-steuer|zentrales finanzwesen", t):
@@ -312,7 +339,12 @@ def main():
             if re.search(r"auslage", t):
                 b["_treffer"] = treffer
                 b["_zeile"] = len(zeilen)
-            add(b["datum"], "Bank", label, b["betrag"], "PRUEFEN (Vorschlag)" if wie.startswith("VORSCHLAG") else "OK", f"{namen} [{wie}]")
+            hinweis = ""
+            if any(x.quelle == "Nachgereicht" for x in treffer):
+                hinweis = " (Beleg gehoert in den Vormonat: dort nachreichen)"
+            elif any(x.quelle == "Vormonat" for x in treffer):
+                hinweis = " (Beleg liegt im Vormonat-Ordner)"
+            add(b["datum"], "Bank", label, b["betrag"], "PRUEFEN (Vorschlag)" if wie.startswith("VORSCHLAG") else "OK", f"{namen} [{wie}]{hinweis}")
             continue
         if re.search(r"auslage", t) or "echtzeit" in b["vorgang"].lower():
             offene_auslagen.append(b)
@@ -346,6 +378,8 @@ def main():
             t = (b["partner"] + " " + b["verwendungszweck"]).lower()
             if any(p in t for p in PORTALE):
                 z[4], z[5] = "PORTAL (manuell nachliefern)", "bekannter Portal-Lieferant"
+            elif "paypal" in t:
+                z[4], z[5] = "PORTAL (manuell nachliefern)", "PayPal: Beleg aus dem PayPal-Bericht bzw. Portal der Gegenseite"
 
     # Rentman: Ausgangsrechnungen des Monats gegen Ordner
     mon = args.monat

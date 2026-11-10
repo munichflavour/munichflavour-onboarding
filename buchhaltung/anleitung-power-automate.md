@@ -48,5 +48,12 @@ Der Flow reagiert nur auf **neue** Mails. Fuer bereits eingegangene Mails ein zw
 - **Flow faellt aus:** Verbindungen laufen mit deinem Konto. Aendert sich das Passwort oder verlaesst eine Person das Unternehmen, muss die Verbindung neu bestaetigt werden. Unter *Meine Flows > Details* kann man Benachrichtigungen bei Fehlern einschalten.
 - **Datenschutz:** Der Flow darf nur lesen und in diesen einen Drive-Ordner schreiben. Nichts weiterleiten.
 
-## 6. Danach
+## 6. Bekannte Schwaechen und Verbesserungen (Erkenntnisse aus dem Oktoberlauf)
+1. **Gleiche Dateinamen:** Manche Absender (Party Rent: `PR-MUC2607046.pdf`) nutzen denselben Namen fuer verschiedene Dokumente. Das zweite wird nicht abgelegt (Fehler im Verlauf oder stillschweigend). Besser: Dateiname im Flow als `<Empfangsdatum yyyyMMdd-HHmm>_<Originalname>` speichern, zum Beispiel mit dem Ausdruck `concat(formatDateTime(triggerOutputs()?['body/receivedDateTime'],'yyyyMMdd-HHmm'),'_',items('Auf_jedes_anwenden_2')?['name'])`. Beim Kopieren in den Monatsordner nimmt Claude das Praefix wieder ab, die Belege im Monatsordner behalten ihren Originalnamen.
+2. **Signierte Rechnungen (`smime.p7m`):** Kanzlei Langeder (DATEV) und Pachmayr senden teils nur diese Datei. Die Bedingung im Flow laesst sie durch, aber sie ist kein PDF und enthaelt die Rechnung in einer Signaturhuelle. Hier hilft nur: Rechnung beim Absender als PDF anfordern oder im Mailprogramm oeffnen und als PDF speichern.
+3. **Mehrere Anhaenge:** Pruefe im Ausfuehrungsverlauf, ob bei Mails mit zwei PDFs beide Dateien erstellt wurden. Bei Fehlern am ersten Anhang laeuft die Schleife nicht weiter. In den Einstellungen der Aktion **Datei erstellen** unter *Konfigurieren fuer* **Ausfuehren nach: hat Fehler** fuer eine zweite Aktion vorsehen oder die Schleife auf **Parallelitaet** stellen.
+4. **Fehlerbenachrichtigung:** Unter *Meine Flows > Details* Fehler per Mail melden lassen, sonst faellt ein ausgefallener Anhang nicht auf.
+5. **Nur Link statt Anhang** (z. B. Canva): der Flow kann nichts speichern, Beleg im Portal holen.
+
+## 7. Danach
 Sag Claude Bescheid, dass der Ordner `Mail-Eingang` existiert. Beim naechsten Monatsabschluss wird er als Quelle fuer Mail-Rechnungen genutzt.
