@@ -356,7 +356,7 @@ def main():
                 b["_zeile"] = len(zeilen)
             hinweis = ""
             if any(x.quelle == "Nachgereicht" for x in treffer):
-                hinweis = " (Beleg gehoert in den Vormonat: dort nachreichen)"
+                hinweis = " (Beleg mit Datum aus dem Vormonat: Monat abgeschlossen, im laufenden Monat ablegen)"
             elif any(x.quelle == "Vormonat" for x in treffer):
                 hinweis = " (Beleg liegt im Vormonat-Ordner)"
             add(b["datum"], "Bank", label, b["betrag"], "PRUEFEN (Vorschlag)" if wie.startswith("VORSCHLAG") else "OK", f"{namen} [{wie}]{hinweis}")

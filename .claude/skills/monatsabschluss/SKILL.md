@@ -42,6 +42,9 @@ Arbeitsordner: der Scratchpad der Session, Unterordner `work/m{MONAT}`. Skripte 
 9b. **Von Hand nachgeschaerfte Hinweise** (z. B. Zahlung erst im Folgemonat, Beleg gehoert in den Vormonat, Rueckfragen des Steuerberaters) als zusaetzliche Zeilen/Anmerkungen in die CSV schreiben, bevor sie abgelegt wird.
 10. **Antwort an den Nutzer:** kurz und konkret: (a) was er noch ablegen muss (Rechnungsausgang-PDFs aus Rentman mit Nummern, PayPal-Bericht, Portalbelege mit Lieferant und Betrag, Kartenbons mit Datum und Betrag), (b) was zu klaeren ist, (c) Hinweise fuer den Steuerberater (privat/nicht abziehbar, Reverse-Charge, Vorauszahlungen fuer Folgemonate, Bewirtung/Betriebsveranstaltung, falsche Rechnungsadressen), (d) Stichtag: 15. des Folgemonats.
 
+## Abgeschlossene Monate
+Ein Monat, den der Nutzer an den Steuerberater uebergeben hat, wird **nicht nachtraeglich ergaenzt** (keine Nachreichung). Belege mit altem Rechnungsdatum, die danach eintreffen (Rechnung vom 30.09., Zahlung im Oktober), werden im laufenden Monat abgelegt und dort mit verbucht. Im Bericht als Hinweis vermerken (Rechnungsdatum, Monat abgeschlossen), nicht als "nachreichen". Ohne ausdrueckliche Anweisung nichts in einen abgeschlossenen Monatsordner kopieren.
+
 ## Statuswerte
 OK, FEHLT, PORTAL (manuell nachliefern), PRUEFEN (Vorschlag), KLAEREN, LOHN (Abrechnung pruefen), OFFEN (Beleg ohne Zahlung), OFFEN (Forderung), EINNAHME (Ausgangsrechnung), EINNAHME (Kartenumsatz), KEIN BELEG NOETIG, PRIVAT / nicht Betriebsausgabe, INTERN (Umbuchung).
 
