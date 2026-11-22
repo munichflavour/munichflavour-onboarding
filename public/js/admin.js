@@ -130,9 +130,9 @@ async function loadEmployees() {
         <div class="employee-overtime">${icon('clock',12)} ${overtimeText}</div>
       </div>
       <div style="display:flex;gap:8px;flex-shrink:0;">
-        <button class="btn btn-secondary btn-sm" title="Überstunden bearbeiten" onclick="openOvertimeModal(${emp.id},'${escHtml(emp.full_name)}',${hasOvertime ? emp.overtime_hours : 0})">${icon('clock',16)}</button>
-        <button class="btn btn-secondary btn-sm" title="Mitarbeiter bearbeiten" onclick="openEditEmpModal(${emp.id},'${escHtml(emp.full_name)}')">${icon('edit',16)}</button>
-        <button class="btn btn-danger btn-sm" title="Mitarbeiter löschen" onclick="deleteEmployee(${emp.id},'${escHtml(emp.full_name)}')">${icon('trash',16)}</button>
+        <button class="btn btn-secondary btn-sm" title="Überstunden bearbeiten" onclick="openOvertimeModal(${emp.id},${escHtml(JSON.stringify(emp.full_name))},${hasOvertime ? emp.overtime_hours : 0})">${icon('clock',16)}</button>
+        <button class="btn btn-secondary btn-sm" title="Mitarbeiter bearbeiten" onclick="openEditEmpModal(${emp.id},${escHtml(JSON.stringify(emp.full_name))})">${icon('edit',16)}</button>
+        <button class="btn btn-danger btn-sm" title="Mitarbeiter löschen" onclick="deleteEmployee(${emp.id},${escHtml(JSON.stringify(emp.full_name))})">${icon('trash',16)}</button>
       </div>
     </div>`;
   }).join('');
@@ -249,7 +249,7 @@ function renderFolder(folder) {
       <button class="btn btn-secondary btn-sm" title="Ordner umbenennen" onclick="openFolderModal(${folder.parent_id||'null'},${folder.id})">${icon('edit',16)}</button>
       <button class="btn btn-secondary btn-sm" title="Unterordner hinzufügen" onclick="openFolderModal(${folder.id})">${icon('folderPlus',16)}</button>
       <button class="btn btn-primary btn-sm" title="Datei hochladen" onclick="openUploadModal(${folder.id})">${icon('filePlus',16)}</button>
-      <button class="btn btn-danger btn-sm" title="Ordner löschen" onclick="deleteFolder(${folder.id},'${escHtml(folder.name)}')">${icon('trash',16)}</button>
+      <button class="btn btn-danger btn-sm" title="Ordner löschen" onclick="deleteFolder(${folder.id},${escHtml(JSON.stringify(folder.name))})">${icon('trash',16)}</button>
     </div>`;
   const childrenEl = document.createElement('div'); childrenEl.className='folder-children';
   children.forEach(c=>childrenEl.appendChild(renderFolder(c)));
@@ -276,7 +276,7 @@ function renderDocItem(doc) {
         <span class="doc-date">${date}</span>
       </span>
     </a>
-    <button class="btn btn-danger btn-sm doc-delete" title="Löschen" onclick="deleteDocument(${doc.id},'${escHtml(doc.original_name)}')">${icon('trash',16)}</button>`;
+    <button class="btn btn-danger btn-sm doc-delete" title="Löschen" onclick="deleteDocument(${doc.id},${escHtml(JSON.stringify(doc.original_name))})">${icon('trash',16)}</button>`;
   return row;
 }
 
@@ -469,7 +469,7 @@ function renderAccessCodeAdminList(list) {
         ${c.note ? `<div style="font-size:13px;color:var(--text-secondary);margin-top:2px;">${escHtml(c.note)}</div>` : ''}
       </div>
       <div style="display:flex;gap:8px;flex-shrink:0;">
-        <button class="btn btn-secondary btn-sm" title="Bearbeiten" onclick='openEditCodeModal(${c.id},${JSON.stringify(c.label)},${JSON.stringify(c.code)},${JSON.stringify(c.note||"")})'>${icon('edit',16)}</button>
+        <button class="btn btn-secondary btn-sm" title="Bearbeiten" onclick="openEditCodeModal(${c.id},${escHtml(JSON.stringify(c.label))},${escHtml(JSON.stringify(c.code))},${escHtml(JSON.stringify(c.note||''))})">${icon('edit',16)}</button>
         <button class="btn btn-danger btn-sm" title="Löschen" onclick="deleteAccessCode(${c.id})">${icon('trash',16)}</button>
       </div>
     </div>`).join('')}</div>`;
