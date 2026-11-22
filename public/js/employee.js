@@ -67,7 +67,7 @@ function toggleOvertimeHistory() {
   document.getElementById('overtimeHistoryList').classList.toggle('hidden');
 }
 
-// ===== TÜR-/SCHLIESS-CODES =====
+// ===== CODES (Türen, WLAN, Schlösser, usw.) =====
 async function loadAccessCodes() {
   const data = await apiFetch('/api/access-codes');
   const card = document.getElementById('accessCodesCard');
