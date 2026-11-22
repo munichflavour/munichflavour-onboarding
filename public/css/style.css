@@ -774,6 +774,30 @@ canvas.sig-pad {
 .announcement-admin-content { flex: 1; min-width: 0; }
 .announcement-admin-stats { font-size: 12px; color: var(--gray-dark); margin-top: 6px; }
 
+/* ===== Tür-/Schließ-Codes ===== */
+.code-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border);
+}
+.code-row:last-child { border-bottom: none; padding-bottom: 0; }
+.code-row:first-child { padding-top: 0; }
+.code-row-info { flex: 1; min-width: 0; }
+.code-row-label { font-size: 14px; font-weight: 600; }
+.code-row-note { font-size: 12px; color: var(--text-tertiary); margin-top: 1px; }
+.code-reveal-btn { flex-shrink: 0; min-width: 88px; }
+.code-reveal-btn.code-reveal-btn-active {
+  font-family: ui-monospace, 'SF Mono', monospace;
+  font-size: 15px;
+  letter-spacing: 0.5px;
+  background: var(--white);
+  color: var(--black);
+  border-color: var(--white);
+}
+
 /* ===== Icon-Badge & Zeilenliste (Ordner/Dateien) ===== */
 .icon-badge {
   width: 38px;
