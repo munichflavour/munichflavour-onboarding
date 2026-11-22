@@ -570,7 +570,7 @@ app.delete('/api/admin/announcements/:id', requireAdmin, (req, res) => {
   res.json({ ok: true });
 });
 
-// ===== TÜR-/SCHLIESS-CODES =====
+// ===== CODES (Türen, WLAN, Schlösser, usw.) =====
 app.get('/api/access-codes', requireAuth, (req, res) => {
   const rows = db.prepare('SELECT id, label, code, note FROM access_codes ORDER BY label COLLATE NOCASE ASC').all();
   res.json(rows);

@@ -774,28 +774,40 @@ canvas.sig-pad {
 .announcement-admin-content { flex: 1; min-width: 0; }
 .announcement-admin-stats { font-size: 12px; color: var(--gray-dark); margin-top: 6px; }
 
-/* ===== Tür-/Schließ-Codes ===== */
+/* ===== Codes (Türen, WLAN, Schlösser, usw.) ===== */
 .code-row {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   justify-content: space-between;
-  gap: 12px;
+  gap: 8px 12px;
   padding: 10px 0;
   border-bottom: 1px solid var(--border);
 }
 .code-row:last-child { border-bottom: none; padding-bottom: 0; }
 .code-row:first-child { padding-top: 0; }
-.code-row-info { flex: 1; min-width: 0; }
+.code-row-info { flex: 1; min-width: 120px; }
 .code-row-label { font-size: 14px; font-weight: 600; }
 .code-row-note { font-size: 12px; color: var(--text-tertiary); margin-top: 1px; }
 .code-reveal-btn { flex-shrink: 0; min-width: 88px; }
+/* !important nötig: auf iOS bleibt ein Button nach dem Antippen im
+   :hover-Zustand "hängen" (bekannte Mobile-Safari-Eigenart) – die
+   Hover-Regel von .btn-secondary hat durch :hover+:not() höhere
+   Spezifität als eine reine Klassenkombination und würde sonst den
+   dunklen Hover-Hintergrund über das weiße Aufdecken-Feld legen
+   (unlesbarer schwarzer Text auf dunklem statt weißem Grund). */
 .code-reveal-btn.code-reveal-btn-active {
   font-family: ui-monospace, 'SF Mono', monospace;
   font-size: 15px;
+  font-weight: 700;
   letter-spacing: 0.5px;
-  background: var(--white);
-  color: var(--black);
-  border-color: var(--white);
+  max-width: 100%;
+  white-space: normal;
+  word-break: break-word;
+  text-align: center;
+  background: var(--white) !important;
+  color: var(--black) !important;
+  border-color: var(--white) !important;
 }
 
 /* ===== Icon-Badge & Zeilenliste (Ordner/Dateien) ===== */

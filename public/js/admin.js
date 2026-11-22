@@ -447,7 +447,7 @@ async function deleteAnnouncement(id) {
   loadAnnouncementsAdmin();
 }
 
-// ===== TÜR-/SCHLIESS-CODES =====
+// ===== CODES (Türen, WLAN, Schlösser, usw.) =====
 let editingCodeId = null;
 async function loadAccessCodes() {
   const r = await apiFetch('/api/admin/access-codes');
