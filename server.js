@@ -94,6 +94,15 @@ db.exec(`
     FOREIGN KEY (announcement_id) REFERENCES announcements(id),
     FOREIGN KEY (user_id) REFERENCES users(id)
   );
+
+  CREATE TABLE IF NOT EXISTS access_codes (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    label TEXT NOT NULL,
+    code TEXT NOT NULL,
+    note TEXT,
+    created_at TEXT DEFAULT (datetime('now')),
+    updated_at TEXT DEFAULT (datetime('now'))
+  );
 `);
 
 // Schema-Ergänzungen an bestehenden Tabellen (idempotent, sicher für vorhandene Daten).
@@ -558,6 +567,32 @@ app.post('/api/admin/announcements', requireAdmin, (req, res) => {
 app.delete('/api/admin/announcements/:id', requireAdmin, (req, res) => {
   db.prepare('DELETE FROM announcement_reads WHERE announcement_id = ?').run(req.params.id);
   db.prepare('DELETE FROM announcements WHERE id = ?').run(req.params.id);
+  res.json({ ok: true });
+});
+
+// ===== TÜR-/SCHLIESS-CODES =====
+app.get('/api/access-codes', requireAuth, (req, res) => {
+  const rows = db.prepare('SELECT id, label, code, note FROM access_codes ORDER BY label COLLATE NOCASE ASC').all();
+  res.json(rows);
+});
+app.get('/api/admin/access-codes', requireAdmin, (req, res) => {
+  const rows = db.prepare('SELECT * FROM access_codes ORDER BY label COLLATE NOCASE ASC').all();
+  res.json(rows);
+});
+app.post('/api/admin/access-codes', requireAdmin, (req, res) => {
+  const { label, code, note } = req.body;
+  if (!label || !label.trim() || !code || !code.trim()) return res.status(400).json({ error: 'Bezeichnung und Code erforderlich' });
+  const result = db.prepare('INSERT INTO access_codes (label, code, note) VALUES (?, ?, ?)').run(label.trim(), code.trim(), (note||'').trim() || null);
+  res.json({ id: result.lastInsertRowid });
+});
+app.put('/api/admin/access-codes/:id', requireAdmin, (req, res) => {
+  const { label, code, note } = req.body;
+  if (!label || !label.trim() || !code || !code.trim()) return res.status(400).json({ error: 'Bezeichnung und Code erforderlich' });
+  db.prepare("UPDATE access_codes SET label=?, code=?, note=?, updated_at=datetime('now') WHERE id=?").run(label.trim(), code.trim(), (note||'').trim() || null, req.params.id);
+  res.json({ ok: true });
+});
+app.delete('/api/admin/access-codes/:id', requireAdmin, (req, res) => {
+  db.prepare('DELETE FROM access_codes WHERE id = ?').run(req.params.id);
   res.json({ ok: true });
 });
 

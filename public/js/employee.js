@@ -17,6 +17,7 @@ async function init() {
   await loadDocuments();
   await loadAnnouncements();
   await loadOvertime();
+  await loadAccessCodes();
   renderVisitSummary();
   initPushButton();
   initOfflineBanner();
@@ -64,6 +65,33 @@ async function loadOvertime() {
 }
 function toggleOvertimeHistory() {
   document.getElementById('overtimeHistoryList').classList.toggle('hidden');
+}
+
+// ===== TÜR-/SCHLIESS-CODES =====
+async function loadAccessCodes() {
+  const data = await apiFetch('/api/access-codes');
+  const card = document.getElementById('accessCodesCard');
+  if (!data || !data.length) { card.classList.add('hidden'); return; }
+  document.getElementById('accessCodesList').innerHTML = data.map(c => `
+    <div class="code-row">
+      <div class="code-row-info">
+        <div class="code-row-label">${escHtml(c.label)}</div>
+        ${c.note ? `<div class="code-row-note">${escHtml(c.note)}</div>` : ''}
+      </div>
+      <button class="btn btn-secondary btn-sm code-reveal-btn" data-code="${escHtml(c.code)}" onclick="toggleCodeReveal(this)">Anzeigen</button>
+    </div>`).join('');
+  card.classList.remove('hidden');
+}
+function toggleCodeReveal(btn) {
+  if (btn.dataset.revealed === '1') {
+    btn.textContent = 'Anzeigen';
+    btn.dataset.revealed = '';
+    btn.classList.remove('code-reveal-btn-active');
+  } else {
+    btn.textContent = btn.dataset.code;
+    btn.dataset.revealed = '1';
+    btn.classList.add('code-reveal-btn-active');
+  }
 }
 
 async function loadDocuments() {

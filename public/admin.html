@@ -153,6 +153,7 @@
       <button class="tab-btn active" onclick="showTab('documents')" id="tab-documents"><span class="tab-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2h8l5 5v14a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1z"/><path d="M14 2v5h5"/></svg></span>Dokumente</button>
       <button class="tab-btn" onclick="showTab('employees')" id="tab-employees"><span class="tab-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.2"/><path d="M3 20c0-3.5 2.7-6 6-6s6 2.5 6 6"/><circle cx="17.5" cy="9" r="2.6"/><path d="M15.5 14.3c2.6.4 4.5 2.5 4.5 5.7"/></svg></span>Mitarbeiter</button>
       <button class="tab-btn" onclick="showTab('announcements')" id="tab-announcements"><span class="tab-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10v4a1 1 0 0 0 1 1h2l10 4V5L6 9H4a1 1 0 0 0-1 1z"/><path d="M17 9.5a3 3 0 0 1 0 5"/></svg></span>Ankündigungen</button>
+      <button class="tab-btn" onclick="showTab('codes')" id="tab-codes"><span class="tab-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="7.5" cy="15.5" r="4.5"/><path d="M10.8 12.2L20 3"/><path d="M16.5 6.5l3 3"/><path d="M14 9l2 2"/></svg></span>Codes</button>
       <button class="tab-btn" onclick="showTab('programs')" id="tab-programs"><span class="tab-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg></span>Programme</button>
     </nav>
 
@@ -202,6 +203,21 @@
         <button class="btn btn-primary btn-full" onclick="createAnnouncement()">Veröffentlichen</button>
       </div>
       <div id="announcementAdminList"></div>
+    </div>
+
+    <!-- CODES -->
+    <div id="view-codes" class="hidden">
+      <div class="card-header" style="margin-bottom:12px;">
+        <span class="section-title" style="margin:0;">Codes</span>
+      </div>
+      <div class="card">
+        <div class="form-group"><label>Bezeichnung</label><input type="text" id="codeLabel" autocomplete="off" placeholder="z.B. Hintereingang Lager"></div>
+        <div class="form-group"><label>Code</label><input type="text" id="codeValue" autocomplete="off"></div>
+        <div class="form-group"><label>Notiz (optional)</label><input type="text" id="codeNote" autocomplete="off" placeholder="z.B. nur für Spätschicht"></div>
+        <div id="codeError" class="alert alert-error hidden"></div>
+        <button class="btn btn-primary btn-full" onclick="createAccessCode()">Hinzufügen</button>
+      </div>
+      <div id="accessCodeAdminList"></div>
     </div>
 
     <!-- PROGRAMME -->
@@ -260,6 +276,21 @@
       <div class="modal-actions">
         <button class="btn btn-secondary" style="flex:1" onclick="closeOvertimeModal()">Abbrechen</button>
         <button class="btn btn-primary" style="flex:1" onclick="saveOvertime()">Speichern</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Edit Access Code Modal -->
+  <div id="editCodeModal" class="modal-overlay hidden">
+    <div class="modal">
+      <div class="modal-title">Code bearbeiten</div>
+      <div class="form-group"><label>Bezeichnung</label><input type="text" id="editCodeLabel" autocomplete="off"></div>
+      <div class="form-group"><label>Code</label><input type="text" id="editCodeValue" autocomplete="off"></div>
+      <div class="form-group"><label>Notiz (optional)</label><input type="text" id="editCodeNote" autocomplete="off"></div>
+      <div id="editCodeError" class="alert alert-error hidden"></div>
+      <div class="modal-actions">
+        <button class="btn btn-secondary" style="flex:1" onclick="closeEditCodeModal()">Abbrechen</button>
+        <button class="btn btn-primary" style="flex:1" onclick="saveAccessCode()">Speichern</button>
       </div>
     </div>
   </div>

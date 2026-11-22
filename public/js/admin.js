@@ -28,6 +28,7 @@ const ICON_PATHS = {
   layout: '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18"/><path d="M8 13h8M8 16h5"/>',
   chevronDown: '<path d="M6 9l6 6 6-6"/>',
   upload: '<path d="M12 16V4"/><path d="M7 9l5-5 5 5"/><path d="M4 16v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3"/>',
+  key: '<circle cx="7.5" cy="15.5" r="4.5"/><path d="M10.8 12.2L20 3"/><path d="M16.5 6.5l3 3"/><path d="M14 9l2 2"/>',
 };
 function icon(name, size) {
   size = size || 18;
@@ -50,13 +51,14 @@ function renderPrograms() {
 }
 
 function showTab(tab) {
-  ['documents','employees','announcements','programs'].forEach(t => {
+  ['documents','employees','announcements','codes','programs'].forEach(t => {
     document.getElementById(`view-${t}`).classList.toggle('hidden', t !== tab);
     document.getElementById(`tab-${t}`).classList.toggle('active', t === tab);
   });
   if (tab === 'documents') loadDocuments();
   if (tab === 'employees') loadEmployees();
   if (tab === 'announcements') loadAnnouncementsAdmin();
+  if (tab === 'codes') loadAccessCodes();
   if (tab === 'programs') renderPrograms();
   // Adresse merken, damit die Programme-Seite direkt erreichbar ist (z. B. "zurück" aus einem Programm)
   history.replaceState(null, '', tab === 'programs' ? '#programme' : location.pathname + location.search);
@@ -388,12 +390,13 @@ if (uploadZone) {
 }
 
 // Modal backdrop close
-['newEmpModal','editEmpModal','folderModal','uploadModal'].forEach(id=>{
+['newEmpModal','editEmpModal','folderModal','uploadModal','editCodeModal'].forEach(id=>{
   document.getElementById(id)?.addEventListener('click',e=>{if(e.target.id===id){
     if(id==='newEmpModal') closeNewEmpModal();
     else if(id==='editEmpModal') closeEditEmpModal();
     else if(id==='folderModal') closeFolderModal();
     else if(id==='uploadModal') closeUploadModal();
+    else if(id==='editCodeModal') closeEditCodeModal();
   }});
 });
 
@@ -442,6 +445,72 @@ async function deleteAnnouncement(id) {
   if (!confirm('Ankündigung löschen?')) return;
   await apiFetch(`/api/admin/announcements/${id}`, { method:'DELETE' });
   loadAnnouncementsAdmin();
+}
+
+// ===== TÜR-/SCHLIESS-CODES =====
+let editingCodeId = null;
+async function loadAccessCodes() {
+  const r = await apiFetch('/api/admin/access-codes');
+  if (!r) return;
+  renderAccessCodeAdminList(r.data);
+}
+function renderAccessCodeAdminList(list) {
+  const container = document.getElementById('accessCodeAdminList');
+  if (!list.length) {
+    container.innerHTML = `<div class="card" style="text-align:center;padding:24px;color:var(--text-tertiary);font-size:14px;">Noch keine Codes angelegt.</div>`;
+    return;
+  }
+  container.innerHTML = `<div class="card" style="padding:0;overflow:hidden;">${list.map(c => `
+    <div class="announcement-admin-row">
+      <span class="doc-icon" style="margin-right:12px;">${icon('key')}</span>
+      <div class="announcement-admin-content">
+        <div style="font-weight:700;font-size:15px;">${escHtml(c.label)}</div>
+        <div style="font-family:ui-monospace,monospace;font-size:15px;margin-top:2px;letter-spacing:0.5px;">${escHtml(c.code)}</div>
+        ${c.note ? `<div style="font-size:13px;color:var(--text-secondary);margin-top:2px;">${escHtml(c.note)}</div>` : ''}
+      </div>
+      <div style="display:flex;gap:8px;flex-shrink:0;">
+        <button class="btn btn-secondary btn-sm" title="Bearbeiten" onclick='openEditCodeModal(${c.id},${JSON.stringify(c.label)},${JSON.stringify(c.code)},${JSON.stringify(c.note||"")})'>${icon('edit',16)}</button>
+        <button class="btn btn-danger btn-sm" title="Löschen" onclick="deleteAccessCode(${c.id})">${icon('trash',16)}</button>
+      </div>
+    </div>`).join('')}</div>`;
+}
+async function createAccessCode() {
+  const errEl = document.getElementById('codeError'); errEl.classList.add('hidden');
+  const label = document.getElementById('codeLabel').value.trim();
+  const code = document.getElementById('codeValue').value.trim();
+  const note = document.getElementById('codeNote').value.trim();
+  if (!label || !code) { errEl.textContent = 'Bezeichnung und Code erforderlich.'; errEl.classList.remove('hidden'); return; }
+  const r = await apiFetch('/api/admin/access-codes', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ label, code, note }) });
+  if (!r?.ok) { errEl.textContent = r?.data?.error || 'Fehler'; errEl.classList.remove('hidden'); return; }
+  document.getElementById('codeLabel').value = '';
+  document.getElementById('codeValue').value = '';
+  document.getElementById('codeNote').value = '';
+  loadAccessCodes();
+}
+function openEditCodeModal(id, label, code, note) {
+  editingCodeId = id;
+  document.getElementById('editCodeLabel').value = label;
+  document.getElementById('editCodeValue').value = code;
+  document.getElementById('editCodeNote').value = note || '';
+  document.getElementById('editCodeError').classList.add('hidden');
+  document.getElementById('editCodeModal').classList.remove('hidden');
+  document.body.style.overflow = 'hidden';
+}
+function closeEditCodeModal() { document.getElementById('editCodeModal').classList.add('hidden'); document.body.style.overflow = ''; editingCodeId = null; }
+async function saveAccessCode() {
+  const errEl = document.getElementById('editCodeError'); errEl.classList.add('hidden');
+  const label = document.getElementById('editCodeLabel').value.trim();
+  const code = document.getElementById('editCodeValue').value.trim();
+  const note = document.getElementById('editCodeNote').value.trim();
+  if (!label || !code) { errEl.textContent = 'Bezeichnung und Code erforderlich.'; errEl.classList.remove('hidden'); return; }
+  const r = await apiFetch(`/api/admin/access-codes/${editingCodeId}`, { method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ label, code, note }) });
+  if (!r?.ok) { errEl.textContent = r?.data?.error || 'Fehler'; errEl.classList.remove('hidden'); return; }
+  closeEditCodeModal(); loadAccessCodes();
+}
+async function deleteAccessCode(id) {
+  if (!confirm('Code löschen?')) return;
+  await apiFetch(`/api/admin/access-codes/${id}`, { method:'DELETE' });
+  loadAccessCodes();
 }
 
 // ===== PUSH =====
